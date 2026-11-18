@@ -58,7 +58,7 @@ unconditionally overwritten.
 import dataclasses
 import re
 from collections.abc import Mapping, Sequence
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field
 
@@ -69,12 +69,19 @@ from cva.calibration import (
     anchor_line,
 )
 from cva.claimsdb import ClaimsDB
+from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, FamilyRegistry
 from cva.llm import LlmClient, LlmResponseError
 from cva.match.persona import JudgePersona
 from cva.match.persona_defaults import OWNER_JUDGE_PERSONA
 
 Verdict = Literal["apply", "apply_with_caveats", "discard"]
-CvBase = Literal["AI_ES", "AI_EN", "DS_ES", "DS_EN"]
+# Any ``<ROLE>_<LANG>`` base CV key (role-families T4): ROLE is a family id
+# upper-cased, LANG a CV language; the same shape as the base CV manifest
+# keys (legacy DS_* included).
+CV_BASE_PATTERN: Final[str] = (
+    "^[A-Z][A-Z0-9_]*_(?:" + "|".join(code.upper() for code in CV_LANGUAGES) + ")$"
+)
+CvBase = Annotated[str, Field(pattern=CV_BASE_PATTERN)]
 
 _DEFAULT_THRESHOLD: Final[int] = 65
 _MID_BAND_FLOOR: Final[int] = 45
@@ -244,6 +251,7 @@ def build_system_prompt(
     extra_anchors: Sequence[CalibrationExample] = (),
     anchor_thresholds: Mapping[str, int] | None = None,
     persona: JudgePersona = OWNER_JUDGE_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> str:
     """Rubric + calibration + candidate facts + claims digest + output shape.
 
@@ -257,6 +265,8 @@ def build_system_prompt(
     byte-identical to what it was before the feature. ``anchor_thresholds``
     (profile -> notify threshold) lets each line be judged against its own
     profile's threshold; a profile missing from it uses ``threshold``.
+    ``families`` (the profile's role families) normalizes each example's
+    profile and names it in the line.
     """
     digest = build_claims_digest(claims)
     calibration = "\n".join(
@@ -277,8 +287,9 @@ def build_system_prompt(
             anchor_line(
                 example,
                 threshold=(anchor_thresholds or {}).get(
-                    "backend" if example.profile == "backend" else "ai", threshold
+                    families.normalize(example.profile), threshold
                 ),
+                families=families,
             )
             for example in extra_anchors[-MAX_ANCHORS:]
         ]
@@ -394,6 +405,7 @@ async def judge_offer(
     extra_anchors: Sequence[CalibrationExample] = (),
     anchor_thresholds: Mapping[str, int] | None = None,
     persona: JudgePersona = OWNER_JUDGE_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> OfferJudgment:
     """Holistic judgment of one offer against the claims DB.
 
@@ -410,6 +422,7 @@ async def judge_offer(
         extra_anchors=extra_anchors,
         anchor_thresholds=anchor_thresholds,
         persona=persona,
+        families=families,
     )
     user = _wrap_offer_as_data(text)
     judgment = await llm.json_completion(system, user, OfferJudgment, model=model)

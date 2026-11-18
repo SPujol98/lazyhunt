@@ -196,6 +196,64 @@ const BACKEND_TITLE_FILTER = {
 // Named profiles. A beacon picks one via `filterProfile`; missing/unknown -> 'ai'.
 const DEFAULT_TITLE_FILTERS = { ai: DEFAULT_TITLE_FILTER, backend: BACKEND_TITLE_FILTER };
 
+// Role families (role-families T6, odd/tasks/role-families.md). The bot serves
+// the profile's families with the suggested searches (`families`); the options
+// page stores them as `profileFamilies` ([{id, label, default}], declared
+// order). Without a stored list the built-in two apply, exactly as before.
+// Ids mirror cva/families.py FAMILY_ID_RE + FAMILY_ID_MAX_LEN.
+const FAMILY_ID_RE = /^[a-z][a-z0-9_]{0,31}$/;
+const BUILTIN_FAMILIES = [
+  { id: 'ai', label: 'AI', default: true },
+  { id: 'backend', label: 'Backend', default: false },
+];
+// A declared family the bot sent no filter for: the bot's own default for a
+// new family (no include group, the company blocklist excluded).
+const FAMILY_TITLE_FILTER = { enabled: true, includeGroups: [], excludeTerms: COMPANY_BLOCKLIST.slice() };
+
+const isBuiltinFamily = (id) => id === 'ai' || id === 'backend';
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * A clean family list from untrusted data (a bridge response or storage):
+ * valid unique ids only, a string label (the id when missing), exactly one
+ * default (the first flagged one, else the first family). Null when nothing
+ * usable is left.
+ * @param {unknown} raw
+ * @returns {{id: string, label: string, default: boolean}[]|null}
+ */
+function cleanFamilies(raw) {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    if (!isTitleFilterLike(item)) continue;
+    const id = item.id;
+    if (typeof id !== 'string' || !FAMILY_ID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    const label = typeof item.label === 'string' && item.label.trim() ? item.label.trim() : id;
+    out.push({ id, label, default: item.default === true });
+  }
+  if (!out.length) return null;
+  const first = out.findIndex((f) => f.default);
+  return out.map((f, i) => ({ ...f, default: i === (first < 0 ? 0 : first) }));
+}
+
+/**
+ * The family list of a `chrome.storage.local.get()` result (`profileFamilies`),
+ * or a fresh copy of the built-in two.
+ * @param {{profileFamilies?: unknown}} data
+ */
+function resolveFamilies(data) {
+  return cleanFamilies(data && data.profileFamilies) || BUILTIN_FAMILIES.map((f) => ({ ...f }));
+}
+
+/** Id of the default family of a list (the built-in 'ai' for no list). */
+function defaultFamilyId(families) {
+  const list = Array.isArray(families) && families.length ? families : BUILTIN_FAMILIES;
+  const found = list.find((f) => f && f.default);
+  return (found || list[0]).id;
+}
+
 /**
  * Deep-copy a title filter. Mutating the returned object, or one of its
  * includeGroups sub-arrays, must never mutate `filter` itself — the single
@@ -285,12 +343,13 @@ function resolveTitleFilter(data) {
  * búsquedas desde mi perfil") when present and object-shaped, else the
  * built-in. Always usable as `defaults` for cleanTitleFilter().
  * @param {{profileTitleFilters?: unknown}} data
- * @param {'ai'|'backend'} name
+ * @param {string} name a family id ('ai', 'backend' or a declared one)
  */
 function profileDefaults(data, name) {
-  const builtin = name === 'backend' ? BACKEND_TITLE_FILTER : DEFAULT_TITLE_FILTER;
+  const builtin = name === 'backend' ? BACKEND_TITLE_FILTER
+    : name === 'ai' ? DEFAULT_TITLE_FILTER : FAMILY_TITLE_FILTER;
   const served = data && data.profileTitleFilters;
-  const raw = isTitleFilterLike(served) ? served[name] : null;
+  const raw = isTitleFilterLike(served) && hasOwn(served, name) ? served[name] : null;
   return isTitleFilterLike(raw) ? cleanTitleFilter(raw, builtin) : builtin;
 }
 
@@ -298,22 +357,32 @@ function profileDefaults(data, name) {
  * The title filters a bridge response carries (`titleFilters`, served only
  * when the profile defines its own), cleaned and ready to store as
  * `profileTitleFilters`; null when the response carries none.
+ * Each served family's own `titleFilter` (role families) is added under its
+ * id and wins over `titleFilters` for that id.
  * @param {unknown} payload parsed JSON body of GET /searches/suggested
- * @returns {{ai?: object, backend?: object}|null}
+ * @returns {Object<string, object>|null}
  */
 function parseProfileTitleFilters(payload) {
   const raw = payload && payload.titleFilters;
-  if (!isTitleFilterLike(raw)) return null;
   const out = {};
-  if (isTitleFilterLike(raw.ai)) out.ai = cleanTitleFilter(raw.ai);
-  if (isTitleFilterLike(raw.backend)) {
-    out.backend = cleanTitleFilter(raw.backend, BACKEND_TITLE_FILTER);
+  if (isTitleFilterLike(raw)) {
+    if (isTitleFilterLike(raw.ai)) out.ai = cleanTitleFilter(raw.ai);
+    if (isTitleFilterLike(raw.backend)) {
+      out.backend = cleanTitleFilter(raw.backend, BACKEND_TITLE_FILTER);
+    }
+  }
+  const families = payload && Array.isArray(payload.families) ? payload.families : [];
+  const ids = new Set((cleanFamilies(families) || []).map((f) => f.id));
+  for (const item of families) {
+    if (!isTitleFilterLike(item) || !ids.has(item.id) || !isTitleFilterLike(item.titleFilter)) continue;
+    out[item.id] = cleanTitleFilter(item.titleFilter, profileDefaults({}, item.id));
   }
   return Object.keys(out).length ? out : null;
 }
 
 const PROFILE_FILTER_KEYS = [
   'settings', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters',
+  'profileFamilies', 'familyTitleFilters',
 ];
 
 /**
@@ -329,47 +398,93 @@ async function adoptProfileTitleFilters(area, payload) {
   const served = parseProfileTitleFilters(payload);
   if (served) await area.set({ profileTitleFilters: served });
   else await area.remove('profileTitleFilters');
+  // The family list rides on the same response (role families): stored when
+  // the bot sends one, removed (built-ins again) when it does not.
+  const families = cleanFamilies(payload && payload.families);
+  if (families) await area.set({ profileFamilies: families });
+  else await area.remove('profileFamilies');
   return area.get(PROFILE_FILTER_KEYS);
 }
 
 /**
- * Profile name for a beacon-ish value: 'backend' only when explicitly so;
- * everything else (missing, null, unknown) is 'ai' so beacons stored before
- * profiles existed keep today's behavior.
- * @param {unknown} value
- * @returns {'ai'|'backend'}
+ * Sync the stored family list with a GET /config response (read by every
+ * round): store `profileFamilies` and add each family's served filter to the
+ * `profileTitleFilters` defaults, or REMOVE `profileFamilies` (built-ins
+ * again) when the response carries none. Other `profileTitleFilters` entries
+ * (the suggested-searches `titleFilters`) and `familyTitleFilters` (the
+ * owner's edits) are never touched.
+ * @param {{set: Function, remove: Function, get: Function}} area chrome.storage.local
+ * @param {unknown} payload parsed JSON body of GET /config
  */
-function normalizeProfile(value) {
-  return value === 'backend' ? 'backend' : 'ai';
+async function adoptProfileFamilies(area, payload) {
+  const families = cleanFamilies(payload && payload.families);
+  if (!families) {
+    const { profileFamilies } = await area.get('profileFamilies');
+    if (profileFamilies !== undefined) await area.remove('profileFamilies');
+    return;
+  }
+  const served = parseProfileTitleFilters({ families: payload.families }) || {};
+  const { profileTitleFilters } = await area.get('profileTitleFilters');
+  const defaults = isTitleFilterLike(profileTitleFilters) ? profileTitleFilters : {};
+  await area.set({ profileFamilies: families, profileTitleFilters: { ...defaults, ...served } });
 }
 
 /**
- * Resolve both profiles from a `chrome.storage.local.get()` result. Storage
- * shape: the existing top-level `titleFilter` key IS the `ai` profile (so the
- * owner's stored filter is never lost); the backend profile lives under its
- * own top-level `titleFilterBackend` key. Each is repaired independently
- * from its own defaults.
- * @param {{titleFilter?: unknown, titleFilterBackend?: unknown, settings?: object}} data
- * @returns {{ai: object, backend: object}}
+ * Family id for a beacon-ish value. `families` is the profile's family list
+ * (resolveFamilies()); without one the built-in two apply. A declared id is
+ * kept; anything else (missing, null, unknown) is the default family, so
+ * beacons stored before profiles existed keep today's behavior ('backend'
+ * only when explicitly so, else 'ai').
+ * @param {unknown} value
+ * @param {{id: string, default?: boolean}[]} [families]
+ * @returns {string}
+ */
+function normalizeProfile(value, families = BUILTIN_FAMILIES) {
+  const list = Array.isArray(families) && families.length ? families : BUILTIN_FAMILIES;
+  return list.some((f) => f && f.id === value) ? value : defaultFamilyId(list);
+}
+
+/**
+ * Resolve every profile's filter from a `chrome.storage.local.get()` result.
+ * Storage shape: the existing top-level `titleFilter` key IS the `ai` profile
+ * (so the owner's stored filter is never lost); the backend profile lives
+ * under its own top-level `titleFilterBackend` key; any other declared family
+ * (`profileFamilies`) under `familyTitleFilters[<id>]`. Each is repaired
+ * independently from its own defaults. `ai` and `backend` are always present.
+ * @param {{titleFilter?: unknown, titleFilterBackend?: unknown, familyTitleFilters?: unknown,
+ *   profileFamilies?: unknown, settings?: object}} data
+ * @returns {Object<string, object>} {ai, backend, ...declared families}
  */
 function resolveTitleFilters(data) {
   const backendRaw = data && data.titleFilterBackend;
   const backendDefaults = profileDefaults(data, 'backend');
-  return {
+  const out = {
     ai: resolveTitleFilter(data),
     backend: isTitleFilterLike(backendRaw)
       ? cleanTitleFilter(backendRaw, backendDefaults)
       : cloneTitleFilter(backendDefaults),
   };
+  const stored = data && isTitleFilterLike(data.familyTitleFilters) ? data.familyTitleFilters : {};
+  for (const { id } of cleanFamilies(data && data.profileFamilies) || []) {
+    if (isBuiltinFamily(id)) continue;
+    const defaults = profileDefaults(data, id);
+    const raw = hasOwn(stored, id) ? stored[id] : null;
+    out[id] = isTitleFilterLike(raw) ? cleanTitleFilter(raw, defaults) : cloneTitleFilter(defaults);
+  }
+  return out;
 }
 
 /**
- * The filter a beacon must be checked against.
- * @param {{ai: object, backend: object}} filters resolveTitleFilters() result
+ * The filter a beacon must be checked against: its family's when the family
+ * is one of `filters` (resolveTitleFilters()), else the built-in rule
+ * ('backend' or 'ai').
+ * @param {Object<string, object>} filters resolveTitleFilters() result
  * @param {{filterProfile?: unknown}|null|undefined} beacon
  */
 function filterForBeacon(filters, beacon) {
-  return filters[normalizeProfile(beacon && beacon.filterProfile)];
+  const id = beacon && beacon.filterProfile;
+  if (typeof id === 'string' && FAMILY_ID_RE.test(id) && hasOwn(filters, id)) return filters[id];
+  return filters[normalizeProfile(id)];
 }
 
 export {
@@ -388,7 +503,14 @@ export {
   resolveTitleFilter,
   parseProfileTitleFilters,
   adoptProfileTitleFilters,
+  adoptProfileFamilies,
   normalizeProfile,
   resolveTitleFilters,
   filterForBeacon,
+  FAMILY_ID_RE,
+  BUILTIN_FAMILIES,
+  cleanFamilies,
+  resolveFamilies,
+  defaultFamilyId,
+  isBuiltinFamily,
 };

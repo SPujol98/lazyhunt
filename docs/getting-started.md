@@ -83,6 +83,8 @@ Open `profiles/me/README.md` and work through its checklist. The essentials
 are `claims.json` (your verified facts: only these can appear in a CV or a
 letter), `profile.toml`, `preferences.toml` and your base CVs. The fictional
 `profiles/demo` is the reference for every file's format.
+To search for kinds of job other than the built-in AI and backend ones, add
+your own role families: [role-families.md](role-families.md).
 
 To try the bot before writing anything, choose the demo profile in the
 wizard (or set `profile_dir = "profiles/demo"`).

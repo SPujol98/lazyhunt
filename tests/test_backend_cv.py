@@ -91,14 +91,15 @@ def test_migration_v7_widens_cv_base_check_and_keeps_every_column(tmp_path: Path
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert SCHEMA_VERSION == 22
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert SCHEMA_VERSION == 23
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     row = repo.get_offer(1)
     assert row.cv_base == "DS_EN" and row.perfil is None
     repo.record_cv(1, cv_base="BACKEND_EN", cv_path="x.pdf", cambios="c")
     assert repo.get_offer(1).cv_base == "BACKEND_EN"
+    # Since v23 the CHECK is a shape rule (<ROLE>_<LANG>); per-family languages are enforced in code.
     with pytest.raises(sqlite3.IntegrityError):
-        repo._conn.execute("INSERT INTO offers (source_data, cv_base) VALUES ('t', 'BACKEND_CA')")
+        repo._conn.execute("INSERT INTO offers (source_data, cv_base) VALUES ('t', 'backend_ca')")
     columns = [r[1] for r in repo._conn.execute("PRAGMA table_info(offers)")]
     for name in ("analyze_attempts", "next_analyze_at", "perfil"):
         assert columns.count(name) == 1
@@ -125,7 +126,7 @@ def test_migration_v7_keeps_dependent_rows(tmp_path: Path) -> None:
     path = tmp_path / "v6.db"
     oid = _v6_db_with_dependents(path)
     repo = OfferRepository(sqlite3.connect(path))  # runs the v7 rebuild
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     assert repo.get_offer(oid).url_oferta == URL
     assert repo.latest_match(oid) is not None
     assert repo._conn.execute("PRAGMA foreign_key_check").fetchall() == []

@@ -53,8 +53,9 @@ from cva.calibration_ui import (
 from cva.calibration_ui import (
     reason_message as calibration_reason_message,
 )
-from cva.commands import menu_commands
+from cva.commands import cv_usage, menu_commands
 from cva.config import Settings
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.gmail.client import GoogleGmailClient
 from cva.gmail.sync import GmailSync, should_propose
 from cva.ingest import NotFoundError, OfferParseError
@@ -114,9 +115,9 @@ from cva.notifier import (
     sent_keyboard,
     sent_message,
     sent_outcome_keyboard,
+    unknown_role_message,
     with_no_cv_line,
 )
-from cva.profile import role_for_profile
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
@@ -148,7 +149,6 @@ _STAR_KEY = "star_pending"  # {"id": story id, "queue": [fields still to ask]}
 _STAR_AT_KEY = "star_pending_at"
 _STAR_TTL_SECONDS = 30 * 60  # same expiry as the outcome note
 _SERVICE_KEY = "service"
-_CV_ROLES = frozenset({"AI", "BACKEND"})
 _OWNER_KEY = "owner_id"
 # Path of the profile's cover_letter_base.toml (set by build_app from the same
 # profile the service loads; unset -> the default profile resolution).
@@ -173,11 +173,20 @@ async def gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def start_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(help_message())
+    await update.message.reply_text(help_message(_families(context)))
 
 
 def _service(context: ContextTypes.DEFAULT_TYPE) -> JobService:
     return context.bot_data[_SERVICE_KEY]
+
+
+def _families(context: ContextTypes.DEFAULT_TYPE | None) -> FamilyRegistry:
+    """The profile's role families (role-families T5); the built-ins when no
+    service is wired (e.g. /help before start-up)."""
+    service = context.bot_data.get(_SERVICE_KEY) if context is not None else None
+    prefs = getattr(service, "preferences", None)
+    families = getattr(prefs, "families", None)
+    return families if isinstance(families, FamilyRegistry) else BUILTIN_REGISTRY
 
 
 def _apply_findings(service: JobService, offer_id: int) -> list[ApplyInstruction]:
@@ -194,7 +203,7 @@ async def _analyze_and_reply(
         result = await service.analyze(offer_id)
         offer = service.offer(offer_id)
         lang = infer_language(offer.source_data)
-        role = role_for_profile(offer.perfil)
+        role = _families(context).role_for(offer.perfil)
     except OfferClosedError:
         await reply.reply_text(offer_closed_message())
         return
@@ -219,6 +228,7 @@ async def _analyze_and_reply(
             lang=lang,
             cover_letter_asked=_cover_letter_asked(service, offer_id),
             cv_needed=cv_needed,
+            families=_families(context),
         ),
     )
 
@@ -724,14 +734,17 @@ def _parse_id(raw: str) -> int | None:
 
 async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
+    families = _families(context)
+    usage = f"Uso: {cv_usage(families)}"
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
-        await update.message.reply_text("Uso: /cv <id> [AI|BACKEND] [es|en|ca]")
+        await update.message.reply_text(usage)
         return
-    role = args[1].upper() if len(args) > 1 else None
-    if role is not None and role not in _CV_ROLES:
-        await update.message.reply_text("Uso: /cv <id> [AI|BACKEND] [es|en|ca]")
+    family = families.by_role(args[1]) if len(args) > 1 else None
+    if len(args) > 1 and family is None:
+        await update.message.reply_text(usage)
         return
+    role = family.role if family is not None else None
     lang = args[2].lower() if len(args) > 2 else None
     service = _service(context)
     pdf_path = await service.generate_cv(offer_id, role, lang)  # type: ignore[arg-type]
@@ -747,6 +760,7 @@ async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             offer_id,
             cv_base=service.offer(offer_id).cv_base,
             cover_letter_asked=_cover_letter_asked(service, offer_id),
+            families=families,
         ),
     )
 
@@ -757,7 +771,9 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if args and (offer_id := _parse_id(args[0])) is not None:
         await update.message.reply_text(
             offer_status_line(
-                service.offer(offer_id), also_on=service.also_on(offer_id)
+                service.offer(offer_id),
+                also_on=service.also_on(offer_id),
+                families=_families(context),
             )
         )
         return
@@ -765,7 +781,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Uso: /status [id]")
         return
     rows = service.recent_offers()
-    listing = "\n".join(offer_status_line(row) for row in rows)
+    families = _families(context)
+    listing = "\n".join(offer_status_line(row, families=families) for row in rows)
     await update.message.reply_text(listing or "Todavía no hay ofertas registradas.")
 
 
@@ -1085,6 +1102,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     service = _service(context)
+    families = _families(context)
     kind, parts = (query.data or "").split(":", 1)[0], (query.data or "").split(":")[1:]
     if query.message is not None and kind not in ("cv", CL):
         # The handlers below rewrite this card: stop tracking it so a later
@@ -1098,11 +1116,18 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if offer_id is not None:
             await _analyze_and_reply(service, query.message, context, offer_id)
     elif kind == "cv" and parts and (offer_id := _parse_id(parts[0])) is not None:
-        role = normalize_role(parts[1]) if len(parts) > 1 else None
+        role = normalize_role(parts[1], families=families) if len(parts) > 1 else None
         lang = parts[2] if len(parts) > 2 else None
         if (no_cv := service.no_cv_label(offer_id)) is not None:  # stale button
             await query.message.reply_text(no_cv_reply(no_cv))
             return
+        if len(parts) > 1 and families.get(parts[1]) is None:
+            # An old button of a family the profile no longer declares.
+            await query.message.reply_text(
+                unknown_role_message(parts[1], families.default.label)
+            )
+            if lang not in families.default.languages:
+                lang = families.default.languages[0]
         card = await _resend_card_below(service, query.message, offer_id)
         pdf_path = await service.generate_cv(offer_id, role, lang)  # type: ignore[arg-type]
         await _send_pdf(card, pdf_path)
@@ -1120,20 +1145,23 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 offer_id,
                 cv_base=service.offer(offer_id).cv_base,
                 cover_letter_asked=_cover_letter_asked(service, offer_id),
+                families=families,
             ),
         )
     elif kind in ("lang", "variant") and len(parts) == 3:
-        offer_id, role, lang = int(parts[0]), normalize_role(parts[1]), parts[2]
+        offer_id = int(parts[0])
+        role, lang = normalize_role(parts[1], families=families), parts[2]
         if kind == "lang":
-            lang = next_lang(role, lang)
+            lang = next_lang(role, lang, families=families)
         else:
-            role = next_role(role)
+            role = next_role(role, families=families)
         await query.edit_message_reply_markup(
             reply_markup=cv_keyboard(
                 offer_id,
                 role=role,
                 lang=lang,
                 cover_letter_asked=_cover_letter_asked(service, offer_id),
+                families=families,
             )
         )
     elif kind == "discard" and len(parts) == 1:

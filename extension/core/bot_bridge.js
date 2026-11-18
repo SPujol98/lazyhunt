@@ -2,7 +2,7 @@
 // its config, the per-scan health report and the offers themselves. The
 // secret travels in the `X-CVA-Bridge-Secret` header.
 
-import { normalizeProfile } from '../filter.js';
+import { FAMILY_ID_RE, adoptProfileFamilies, normalizeProfile } from '../filter.js';
 import { configUrl, parseBotConfig } from '../searches.js';
 import { buildScanReport, scanReportUrl } from '../scan_report.js';
 import { BOT_REQUEST_TIMEOUT_MS } from './constants.js';
@@ -24,7 +24,8 @@ async function fetchBounded(url, init) {
 }
 
 // The bot's {paused, enabledPortals} when it answers, stored as `botConfig`
-// for the pages; null (local rules apply) for any other outcome.
+// for the pages; null (local rules apply) for any other outcome. The profile's
+// role families on the same answer are adopted as `profileFamilies`.
 export async function fetchBotConfig(settings) {
   const url = configUrl(settings.bridgeUrl);
   const secret = bridgeSecret(settings);
@@ -32,9 +33,15 @@ export async function fetchBotConfig(settings) {
   try {
     const response = await fetchBounded(url, { method: 'GET', headers: { [SECRET_HEADER]: secret } });
     if (!response.ok) return null;
-    const config = parseBotConfig(await response.json());
+    const payload = await response.json();
+    const config = parseBotConfig(payload);
     if (!config) return null;
     await writeKeys({ botConfig: { ...config, at: Date.now() } });
+    try {
+      await adoptProfileFamilies(chrome.storage.local, payload);
+    } catch (error) {
+      warn('could not store the bot\'s role families:', String(error));
+    }
     return config;
   } catch {
     return null;
@@ -61,6 +68,11 @@ export const BRIDGE_ACCEPTED = 'accepted';
 export const BRIDGE_OUTAGE = 'outage';
 export const BRIDGE_REJECTED = 'rejected';
 
+// The family the bot receives as `profile`: the round already normalized it
+// against the profile's family list, so a declared id (role families) is sent
+// as is; anything malformed falls back to the built-in rule.
+const payloadProfile = (value) => (typeof value === 'string' && FAMILY_ID_RE.test(value) ? value : normalizeProfile(value));
+
 const orNull = (value) => (value === undefined || value === null || value === '' ? null : value);
 
 // `offers` are [{card, text}]. Answers BRIDGE_ACCEPTED (2xx), BRIDGE_REJECTED
@@ -70,7 +82,7 @@ export async function postOffers(settings, beacon, offers) {
   if (!bridgeConfigured(settings)) throw new Error('bridge not configured');
   const body = JSON.stringify({
     beacon: beacon.name,
-    profile: normalizeProfile(beacon.filterProfile),
+    profile: payloadProfile(beacon.filterProfile),
     jobs: offers.map(({ card, text }) => ({
       title: orNull(card.title),
       company: orNull(card.company),

@@ -36,7 +36,7 @@ def repo_at(tmp_path: Path, name: str = "a.db") -> OfferRepository:
 
 def test_schema_version_and_star_table(tmp_path: Path) -> None:
     repo = repo_at(tmp_path)
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(star_stories)")]
     assert cols == [
         "id",
@@ -60,14 +60,14 @@ def test_v16_database_migrates_to_v17_idempotently(tmp_path: Path) -> None:
     first._conn.commit()
     first._conn.close()
     again = repo_at(tmp_path)
-    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     assert again.get_star(story).title == "Historia"  # data kept
     again._conn.execute("DROP TABLE star_stories")
     again._conn.execute("PRAGMA user_version = 16")
     again._conn.commit()
     again._conn.close()
     third = repo_at(tmp_path)
-    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     assert third.list_stars() == []
 
 

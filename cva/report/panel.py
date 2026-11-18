@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Final, Literal
 
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.tracker.repo import OfferRow
 from cva.tracker.xlsx import ESTADO_FILLS
 from cva.tracker.xlsx import _is_sent as is_sent
@@ -57,6 +58,7 @@ _MATCH_BUCKETS: Final[tuple[tuple[str, int, int], ...]] = (
     ("80-100", 80, 100),
 )
 _NO_VALUE: Final[str] = "—"
+_SPANISH_LABELS: Final[dict[str, str]] = {"AI": "IA"}
 DISCARDED_DAYS: Final[int] = 7
 NEAR_THRESHOLD_POINTS: Final[int] = 10
 REASON_MAX: Final[int] = 120
@@ -203,13 +205,22 @@ def _alert_items(pairs: list[tuple[int, OfferRow]], template: str) -> str:
     return "".join(items)
 
 
-def _json_blob(rows: list[OfferRow]) -> str:
+def _family_tag(profile: str, families: FamilyRegistry) -> str:
+    """The family label shown on the panel (unknown: the default family).
+
+    The panel is in Spanish: the label ``AI`` (the built-in ``ai``) reads "IA".
+    """
+    family = families.get(families.normalize(profile)) or families.default
+    return _SPANISH_LABELS.get(family.label, family.label)
+
+
+def _json_blob(rows: list[OfferRow], default_profile: str = "ai") -> str:
     data = [
         {
             "id": r.id,
             "empresa": r.empresa or "",
             "posicion": r.posicion or "",
-            "perfil": r.perfil or "ai",
+            "perfil": r.perfil or default_profile,
             "portal": (r.origen or "").strip() or _NO_VALUE,
             "estado": r.estado,
             "match": r.match,
@@ -306,8 +317,13 @@ def render_panel(
     rows: list[OfferRow],
     now: datetime,
     discarded: Sequence[DiscardedOffer] = (),
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> str:
-    """The whole dashboard as one HTML document (no I/O, deterministic)."""
+    """The whole dashboard as one HTML document (no I/O, deterministic).
+
+    ``families`` (the profile's role families) label the discarded offers and
+    give legacy NULL profiles their default family.
+    """
     stats = compute_stats(rows, now)
     sent = int(stats["sent"])  # type: ignore[call-overload]
     analyzed = int(stats["analyzed"])  # type: ignore[call-overload]
@@ -384,7 +400,7 @@ def render_panel(
         f'<div class="card"><h2>Match</h2>'
         f"{_bar_chart([(k, v, None) for k, v in by_match.items()], 'Por match')}</div>"
         "</div>"
-        f"{_discarded_html(discarded)}"
+        f"{_discarded_html(discarded, families)}"
         '<div class="card"><h2>Ofertas <span id="count" class="muted"></span></h2>'
         '<div class="filters">'
         '<input id="q" type="search" placeholder="Buscar empresa, puesto…">'
@@ -395,7 +411,7 @@ def render_panel(
         "<th>Puesto</th><th>Perfil</th><th>Portal</th><th>Estado</th><th>Match</th>"
         "<th>Envío</th><th>Update</th></tr></thead>"
         '<tbody id="rows"></tbody></table></div></div>'
-        f'<script id="panel-data" type="application/json">{_json_blob(rows)}</script>'
+        f'<script id="panel-data" type="application/json">{_json_blob(rows, families.default.id)}</script>'
         f"<script>{_JS}</script></body></html>"
     )
 
@@ -433,7 +449,9 @@ def _discarded_cells(item: DiscardedOffer) -> tuple[str, str]:
     return head, tail
 
 
-def _discarded_html(items: Sequence[DiscardedOffer]) -> str:
+def _discarded_html(
+    items: Sequence[DiscardedOffer], families: FamilyRegistry = BUILTIN_REGISTRY
+) -> str:
     """Two cards: discarded by score (open) and by wall (collapsed)."""
     below = sorted(
         (i for i in items if i.kind == "below"),
@@ -445,7 +463,7 @@ def _discarded_html(items: Sequence[DiscardedOffer]) -> str:
         rows = ""
         for item in below:
             head, tail = _discarded_cells(item)
-            tag = "Backend" if item.profile == "backend" else "IA"
+            tag = html.escape(_family_tag(item.profile, families))
             rows += (
                 f"<tr>{head}<td>{item.score} / {item.threshold} ({tag})</td>{tail}</tr>"
             )

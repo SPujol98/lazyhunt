@@ -185,7 +185,7 @@ def tailored_output_path(
     return out_dir / f"{owner_slug}_{slug}.pdf"
 
 
-_DELIVERY_NAMES: dict[CvVariant, str] = {
+_DELIVERY_NAMES: dict[str, str] = {
     CvVariant.AI_ES: "Ingeniero_IA",
     CvVariant.AI_EN: "AI_Engineer",
     CvVariant.AI_CA: "Enginyer_IA",
@@ -204,28 +204,48 @@ def company_slug(company: str | None) -> str:
     return re.sub(r"[^0-9A-Za-z]+", "_", stripped).strip("_") or "oferta"
 
 
+def _name_slug(variant: str, name: str) -> str:
+    """``name`` as an ASCII file-name part (diacritics stripped, the rest ``_``)."""
+    stripped = "".join(
+        ch for ch in unicodedata.normalize("NFD", name) if not unicodedata.combining(ch)
+    )
+    slug = re.sub(r"[^0-9A-Za-z]+", "_", stripped).strip("_")
+    if not slug:
+        raise CvgenError(f"delivery_name inválido para {variant}: {name!r}")
+    return slug
+
+
 def generic_output_path(
-    variant: CvVariant,
+    variant: str,
     offer_id: int,
     company: str | None,
     out_dir: Path = OUTPUT_DIR,
     owner_slug: str = DEFAULT_IDENTITY.file_slug,
+    delivery_name: str | None = None,
+    fallback_name: str | None = None,
 ) -> Path:
     """Delivery path ``<out_dir>/<id>_<company>/<file_slug>_<Role>.pdf``.
 
-    ``<Role>`` is the role title in the delivered CV's own language, with no
-    language suffix (``AI_ES`` -> ``Ingeniero_IA``, ``AI_EN`` ->
-    ``AI_Engineer``, ``AI_CA`` -> ``Enginyer_IA``, ``BACKEND_ES`` ->
-    ``Desarrollador_Backend``, ``BACKEND_EN`` -> ``Backend_Developer``). DS
-    variants are manual-only and are refused. The offer title never reaches
-    the file name. The per-offer folder keeps same-variant offers from
-    overwriting each other while re-generating one offer rewrites only its
-    own file.
+    ``<Role>`` is, in order (role-families T3): ``delivery_name`` (a base CV
+    manifest entry's ``delivery_name``), the built-in role title in the
+    delivered CV's own language with no language suffix (``AI_ES`` ->
+    ``Ingeniero_IA``, ``AI_EN`` -> ``AI_Engineer``, ``AI_CA`` ->
+    ``Enginyer_IA``, ``BACKEND_ES`` -> ``Desarrollador_Backend``,
+    ``BACKEND_EN`` -> ``Backend_Developer``), then ``fallback_name`` (the
+    service passes ``<family label>_<LANG>``). Given names are slugged to
+    ASCII. A variant with none of them (the manual-only DS ones) is refused.
+    The offer title never reaches the file name. The per-offer folder keeps
+    same-variant offers from overwriting each other while re-generating one
+    offer rewrites only its own file.
     """
-    try:
+    if delivery_name is not None:
+        role = _name_slug(variant, delivery_name)
+    elif variant in _DELIVERY_NAMES:
         role = _DELIVERY_NAMES[variant]
-    except KeyError as exc:
-        raise CvgenError(f"variant not delivered by the bot: {variant!r}") from exc
+    elif fallback_name is not None:
+        role = _name_slug(variant, fallback_name)
+    else:
+        raise CvgenError(f"variant not delivered by the bot: {variant!r}")
     folder = f"{offer_id}_{company_slug(company)}"
     return out_dir / folder / f"{owner_slug}_{role}.pdf"
 

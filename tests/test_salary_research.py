@@ -163,8 +163,8 @@ def test_migration_v8_adds_nullable_column_to_old_db(tmp_path: Path) -> None:
     path = tmp_path / "old.db"
     _old_db(path)
     repo = OfferRepository(sqlite3.connect(path))
-    assert SCHEMA_VERSION == 22
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert SCHEMA_VERSION == 23
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     assert repo.get_offer(1).salario_investigado is None
     repo.set_salary_research(1, '{"status": "ok"}')
     assert repo.get_offer(1).salario_investigado == '{"status": "ok"}'

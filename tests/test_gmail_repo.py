@@ -37,9 +37,9 @@ def _add(repo: OfferRepository, offer_id: int, message_id: str = "m1") -> bool:
     )
 
 
-def test_schema_version_is_22_and_table_has_no_body_column(tmp_path: Path) -> None:
+def test_schema_version_is_23_and_table_has_no_body_column(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     columns = [r[1] for r in repo._conn.execute("PRAGMA table_info(gmail_messages)")]
     assert columns == [
         "message_id",
@@ -65,7 +65,7 @@ def test_v21_database_migrates_to_v22_keeping_data(tmp_path: Path) -> None:
 
     migrated = sqlite3.connect(path)
     again = OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
     assert again.get_offer(offer_id).empresa == "Acme"
     assert _add(again, offer_id) is True
 
@@ -81,7 +81,7 @@ def test_migration_is_idempotent_when_the_table_already_exists(
     first.close()
     migrated = sqlite3.connect(path)
     OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
 
 
 def test_add_is_idempotent_per_message(tmp_path: Path) -> None:

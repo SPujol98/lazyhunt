@@ -14,6 +14,8 @@ from typing import Final, Literal
 
 from pydantic import BaseModel
 
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+
 Polarity = Literal["positive", "negative"]
 ExampleStatus = Literal["pending", "active", "declined", "inactive"]
 
@@ -106,13 +108,20 @@ class CalibrationSummary(BaseModel):
     negatives_above: int = 0  # fit-related rejections the judge scored over it
 
 
-def anchor_line(example: CalibrationExample, *, threshold: int) -> str:
+def anchor_line(
+    example: CalibrationExample,
+    *,
+    threshold: int,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> str:
     """One English judge-prompt line built only from structured fields.
 
     Never the posting text or the owner's notes; ``core_role`` is sanitized
-    again here even though it was sanitized when stored.
+    again here even though it was sanitized when stored. The role is the
+    label of the example's family (unknown/NULL: the default family).
     """
-    role = "Backend" if example.profile == "backend" else "AI"
+    family = families.get(families.normalize(example.profile))
+    role = family.label if family is not None else families.default.label
     core = sanitize_core_role(example.core_role or "")
     subject = f"{role} role (core: {core})" if core else f"{role} role"
     scored = f"you scored {example.score_at_send}"

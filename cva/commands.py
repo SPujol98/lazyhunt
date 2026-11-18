@@ -5,8 +5,10 @@ example) and :func:`menu_commands` (``set_my_commands``); a test fails when a
 ``CommandHandler`` in ``bot.py`` is missing here. User-facing text is Spanish.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
+
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 
 SECTION_ANALYZE: Final[str] = "🔎 Analizar"
 SECTION_CV: Final[str] = "📄 CVs y cartas"
@@ -283,12 +285,69 @@ def menu_commands() -> tuple[tuple[str, str], ...]:
     return tuple((c.name, c.menu) for c in COMMANDS)
 
 
-def help_text() -> str:
-    """Grouped ``/help`` text: usage, explanation and example per command."""
+def cv_usage(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+    """``/cv`` usage naming the profile's roles and CV languages."""
+    roles = "|".join(f.role for f in families.families)
+    return f"/cv <id> [{roles}] [{'|'.join(families.languages)}]"
+
+
+def _join_es(items: list[str]) -> str:
+    """Spanish list: "a", "a y b", "a, b y c"."""
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} y {items[-1]}"
+
+
+def commands_for(families: FamilyRegistry = BUILTIN_REGISTRY) -> tuple[Command, ...]:
+    """``COMMANDS`` with ``/cv`` and ``/keywords`` naming the profile's role
+    families (role-families T5; the built-ins give ``COMMANDS`` unchanged)."""
+    last = families.families[-1]
+    examples = {
+        "cv": f"/cv 42 {last.role} {last.languages[-1]}",
+        "keywords": f"/keywords {last.id}",
+    }
+    out: list[Command] = []
+    for command in COMMANDS:
+        if command.name == "cv":
+            command = replace(command, usage=cv_usage(families))
+        if command.name in examples:
+            command = replace(command, example=examples[command.name])
+        out.append(command)
+    return tuple(out)
+
+
+def buttons_for(
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> tuple[tuple[str, str], ...]:
+    """``BUTTONS`` with the language and variant toggles naming the profile's
+    families and their CV languages (the built-ins give ``BUTTONS``)."""
+    langs = families.languages
+    limits = [
+        f"{f.label} solo {'/'.join(code.upper() for code in f.languages)}"
+        for f in families.families
+        if f.languages != langs
+    ]
+    lang_note = f" ({'; '.join(limits)})" if limits else ""
+    labels = [f.label for f in families.families]
+    toggles = {
+        "Idioma: ES/EN/CA": (
+            f"Idioma: {'/'.join(code.upper() for code in langs)}",
+            f"cambia el idioma del CV{lang_note}.",
+        ),
+        "Variante: AI/Backend": (
+            f"Variante: {'/'.join(labels)}",
+            f"alterna el perfil del CV entre {_join_es(labels)}.",
+        ),
+    }
+    return tuple(toggles.get(label, (label, what)) for label, what in BUTTONS)
+
+
+def help_text(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+    """Grouped ``/help`` text: usage, explanation and example per command;
+    ``/cv``, ``/keywords`` and the card toggles name the profile's families."""
     lines = ["Asistente de seguimiento de ofertas."]
+    commands = commands_for(families)
     for section in SECTIONS:
         lines.extend(["", section])
-        for command in COMMANDS:
+        for command in commands:
             if command.section == section:
                 lines.extend(
                     [
@@ -298,5 +357,5 @@ def help_text() -> str:
                     ]
                 )
     lines.extend(["", BUTTONS_SECTION_TITLE])
-    lines.extend(f"{label} — {what}" for label, what in BUTTONS)
+    lines.extend(f"{label} — {what}" for label, what in buttons_for(families))
     return "\n".join(lines)

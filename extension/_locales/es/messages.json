@@ -240,6 +240,17 @@
   "importInvalidJson": {
     "message": "Este archivo no es un JSON válido."
   },
+  "importUnknownFamilies": {
+    "message": "Los perfiles que este bot no declara ($p1$) pasan a usar $p2$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
   "importWrongFormat": {
     "message": "Este archivo no es una configuración de lazyhunt."
   },

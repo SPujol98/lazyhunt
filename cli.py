@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TextIO
 
 from cva.config import Settings
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.gmail.client import (
     DEFAULT_CREDENTIALS_PATH,
     DEFAULT_TOKEN_PATH,
@@ -273,8 +274,17 @@ def _cmd_gmail_auth(args: argparse.Namespace, settings: Settings | None) -> str:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Argparse surface (Spanish help, same verbs as design D12)."""
+def _families(service: object) -> FamilyRegistry:
+    """The profile's role families (built-ins for a service double)."""
+    families = getattr(getattr(service, "preferences", None), "families", None)
+    return families if isinstance(families, FamilyRegistry) else BUILTIN_REGISTRY
+
+
+def build_parser(
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> argparse.ArgumentParser:
+    """Argparse surface (Spanish help, same verbs as design D12); ``cv``'s
+    role choices are the profile's role families (role-families T5)."""
     parser = argparse.ArgumentParser(
         prog="cli.py",
         description="Asistente de seguimiento de ofertas (mismo JobService que el bot).",
@@ -300,7 +310,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_cv = sub.add_parser("cv", help="genera el CV adaptado (PDF)")
     p_cv.add_argument("offer_id", type=int)
     p_cv.add_argument(
-        "role", nargs="?", default=None, choices=["AI", "BACKEND"]
+        "role",
+        nargs="?",
+        default=None,
+        choices=[family.role for family in families.families],
     )
     p_cv.add_argument("lang", nargs="?", default=None, choices=["es", "en", "ca"])
 
@@ -415,7 +428,7 @@ def run(
     ``service`` double directly and pass no ``settings`` keep their existing
     output unchanged.
     """
-    args = build_parser().parse_args(argv)
+    args = build_parser(_families(service)).parse_args(argv)
     handlers = {
         "check": lambda: _cmd_check(service),
         "ingest": lambda: _cmd_ingest(service, args),

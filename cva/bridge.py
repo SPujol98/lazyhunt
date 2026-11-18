@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, get_args
 
 from cva.beacons.health import AlertClaims, Claim
 from cva.config import Settings
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.ingest import canonical_url, job_id_from_url, source_from_url
 from cva.ingest.closed import closed_marker
 from cva.ingest.dates import extract_dates
@@ -66,11 +67,11 @@ from cva.notifier import (
     round_summary_message,
     with_also_on,
 )
-from cva.profile import has_ai_title, normalize_profile
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_prefs import ProfilePrefs, TitleFilterPrefs, load_preferences
 from cva.service import DEFAULT_DB_PATH, BridgeJobOutcome, BridgeZone
 from cva.suggest import suggested_searches_payload
+from cva.title_filter import TitleFilter
 from cva.tracker import OfferInput, OfferRepository, RepositoryError, duplicate_note
 from cva.tracker.repo import OfferRow, ScanStatus
 
@@ -225,6 +226,8 @@ def _validated(
     payload: Any,
     dropped: list[str] | None = None,
     enabled_portals: frozenset[str] | None = None,
+    *,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Validate the whole payload up front; every job must be processable.
 
@@ -246,11 +249,12 @@ def _validated(
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
         raise _BadRequest("'jobs' must be a list")
-    # backend-profile: the beacon's filter profile applies to every job in the
-    # payload (unless its title is an AI one); unknown/missing -> 'ai'.
-    # Stamped on each job so the 2-tuple
-    # return shape (and its callers) stays unchanged.
-    profile = normalize_profile(payload.get("profile"))
+    # backend-profile / role-families T5: the beacon's filter profile (a
+    # family id of the profile's families) applies to every job in the payload
+    # unless its title matches a family's title terms; unknown/missing -> the
+    # default family. Stamped on each job so the 2-tuple return shape (and its
+    # callers) stays unchanged.
+    profile = payload.get("profile")
     kept: list[dict[str, Any]] = []
     for job in jobs:
         if not isinstance(job, dict):
@@ -259,11 +263,12 @@ def _validated(
             value = job.get(field)
             if value is not None and not isinstance(value, str):
                 raise _BadRequest(f"'{field}' must be a string or null")
-        # An AI title wins over a backend beacon (its title filter passes any
+        # A title matching a family's title terms wins over the beacon (built-
+        # ins: an AI title beats a backend beacon, whose filter passes any
         # "Engineer"); otherwise the beacon's profile applies. An 'ai' beacon
         # already requires an AI term in the extension filter, so its payload
         # profile is kept even when the title shows none.
-        job["profile"] = "ai" if has_ai_title(job.get("title")) else profile
+        job["profile"] = families.route(profile, job.get("title"))
         url = job.get("url")
         if not isinstance(url, str) or source_from_url(url) is None:
             raise _BadRequest(f"'url' must be a {_portal_label()} job URL")
@@ -494,6 +499,7 @@ def _process_payload(
     auto_jobs: list[tuple[int, str, dict[str, Any]]] | None = None,
     duplicates: list[DuplicateOffer] | None = None,
     editor: Any = None,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> dict[str, int]:
     """Dedupe + upsert + notify per job (D3/D4); returns the 200 counters.
 
@@ -549,7 +555,7 @@ def _process_payload(
                     else f"bridge: {beacon}\n{canonical}"
                 ),
                 source="bridge-inline" if inline_text is not None else "link",
-                profile=normalize_profile(job.get("profile")),
+                profile=families.normalize(job.get("profile")),
                 fecha_publicacion=dates.publicacion,
                 fecha_limite=dates.limite,
                 location=_clean_location(job.get("location")),
@@ -601,6 +607,52 @@ def _process_payload(
     return {"received": received, "new": new, "skipped": skipped}
 
 
+def _title_filter_json(filt: TitleFilter) -> dict[str, Any]:
+    """A title filter in the extension's shape (``TitleFilterPrefs.to_json``)."""
+    return {
+        "enabled": filt.enabled,
+        "includeGroups": [list(g) for g in filt.include_groups],
+        "excludeTerms": list(filt.exclude_terms),
+    }
+
+
+def families_payload(
+    families: FamilyRegistry, title_filters: TitleFilterPrefs | None = None
+) -> list[dict[str, Any]] | None:
+    """The profile's role families for the extension (role-families T6).
+
+    ``[{id, label, default, titleFilter}]`` in declared order, served with the
+    suggested searches next to ``titleFilters``. ``None`` when the list is the
+    built-in ``ai``/``backend`` pair (same ids, labels and default) whose title
+    filters are the ones ``[title_filters]`` already serves: the extension falls
+    back to it, so a default profile's response stays byte-identical. A built-in
+    family with its own ``title_filter`` is served (T6 verifier advisory 3).
+    """
+
+    def head(registry: FamilyRegistry) -> list[tuple[str, str, bool]]:
+        default = registry.default.id
+        return [(f.id, f.label, f.id == default) for f in registry.families]
+
+    expected = title_filters if title_filters is not None else TitleFilterPrefs()
+    filters_as_served = all(
+        f.title_filter == (expected.ai if f.id == "ai" else expected.backend)
+        for f in families.families
+    )
+    if head(families) == head(BUILTIN_REGISTRY) and filters_as_served:
+        return None
+    return [
+        {
+            "id": fid,
+            "label": label,
+            "default": is_default,
+            "titleFilter": _title_filter_json(family.title_filter),
+        }
+        for (fid, label, is_default), family in zip(
+            head(families), families.families, strict=True
+        )
+    ]
+
+
 def _make_handler(
     *,
     secret: str,
@@ -619,6 +671,10 @@ def _make_handler(
 ) -> type[BaseHTTPRequestHandler]:
     """Handler class closed over the bridge collaborators (no globals)."""
     claims = AlertClaims(repo)  # health alerts in flight (guarded by ``lock``)
+    # The profile's role families route beacon offers (role-families T5).
+    families = (
+        preferences.families if preferences is not None else BUILTIN_REGISTRY
+    )
 
     def _suggested_body() -> dict[str, Any]:
         """Suggested searches; plus the profile's title filters when it has its own."""
@@ -630,16 +686,27 @@ def _make_handler(
         }
         if prefs.title_filters != TitleFilterPrefs():
             body["titleFilters"] = prefs.title_filters.to_json()
+        served = families_payload(prefs.families, prefs.title_filters)
+        if served is not None:
+            body["families"] = served
         return body
 
     def _config_body() -> dict[str, Any]:
-        """What the extension syncs: the pause and the resolved enabled portals."""
-        return {
+        """What the extension syncs every round: the pause, the resolved enabled
+        portals and, when the profile declares its own, the role families."""
+        body: dict[str, Any] = {
             "paused": is_paused(),
             "enabledPortals": [
                 p for p in SOURCES if enabled_portals is None or p in enabled_portals
             ],
         }
+        served = families_payload(
+            families,
+            preferences.title_filters if preferences is not None else None,
+        )
+        if served is not None:
+            body["families"] = served
+        return body
 
     class _Handler(BaseHTTPRequestHandler):
         def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -755,7 +822,9 @@ def _make_handler(
                 return
             dropped: list[str] = []
             try:
-                beacon, jobs = _validated(json.loads(body), dropped, enabled_portals)
+                beacon, jobs = _validated(
+                    json.loads(body), dropped, enabled_portals, families=families
+                )
             except _BadRequest as exc:
                 self._send_json(400, {"error": str(exc)})
                 return
@@ -775,6 +844,7 @@ def _make_handler(
                     auto_jobs=auto_jobs if schedule_auto is not None else None,
                     duplicates=dupes,
                     editor=editor,
+                    families=families,
                 )
             if dropped:
                 result["dropped"] = len(dropped)

@@ -27,3 +27,22 @@ career_change = "The move from systems administration to data and AI takes ONE s
 [cover_letter.branch_emphasis]
 AI = "AI branch: emphasise applied AI work (LLM systems, RAG, retrieval evaluation, going from prototype to a working service), taking only the matching claims."
 BACKEND = "BACKEND branch: emphasise backend engineering (Python, FastAPI, PostgreSQL, REST APIs, real client delivery), mentioning LLM work only as a plus, taking only the matching claims."
+
+# Role families (docs/role-families.md). With no [families] table the built-in
+# `ai` and `backend` families apply. Uncomment to declare your own: a declared
+# family list REPLACES the built-ins (declare [families.ai] / [families.backend]
+# too if you still want them). Each family also needs `<ID>_<LANG>` entries in
+# cv_base_pdfs/manifest.json, e.g. FRONTEND_EN.
+#
+# [families.frontend]
+# label = "Frontend"                      # default: the id
+# languages = ["es", "en"]                # es / en / ca; default es + en
+# title_terms = ["Frontend", "React"]     # titles with these words route here
+# threshold = 55                          # 0-100; default: the global threshold
+# search_roles = ["Frontend Developer"]
+# cover_letter_emphasis = "FRONTEND branch: emphasise UI work, taking only the matching claims."
+# default = true                          # at most one; default: the first family
+#
+# [families.frontend.title_filter]
+# include_groups = [["Frontend", "React"], ["Developer", "Engineer"]]
+# exclude_terms = ["Senior"]

@@ -4,7 +4,7 @@
 // (odd/tasks/extension-rewrite.md T4, docs/extension-spec.md 6.1-6.3, D2, D4).
 //
 //   node extension_pages_harness.js <area>
-//   areas: i18n, portals, save, interval, suggest, maintenance, popup, nobridge
+//   areas: i18n, portals, save, interval, suggest, maintenance, popup, nobridge, families
 //
 // Unlike the id-free characterization harness, this one builds the DOM from
 // the page's own HTML (minidom.parseHtml), so getElementById returns null for
@@ -731,6 +731,116 @@ async function areaNoBridge() {
   check('the error is shown as is', [$('resultLine').textContent, $('resultLine').classList.contains('is-error')], [answer.error, true]);
 }
 
+
+// --- role families (role-families T6, S3/S5) ----------------------------------------
+
+const FAMILIES3 = [
+  { id: 'ai', label: 'AI', default: true },
+  { id: 'backend', label: 'Backend', default: false },
+  { id: 'frontend', label: 'Frontend', default: false },
+];
+const FE_FILTER = { enabled: true, includeGroups: [['React', 'Vue']], excludeTerms: ['Senior'] };
+
+const segmentButtons = () => $('profileSegment').querySelectorAll('button');
+const selectOptions = (select) => select.querySelectorAll('option').map((o) => [o.value, o.textContent]);
+
+async function areaFamilies() {
+  const settings = { intervalMinutes: 60, paused: false, bridgeUrl: BRIDGE, bridgeSecret: 'sec' };
+
+  setScenario('families: without a list the built-in two keep today\'s UI');
+  await loadPage(OPTIONS, { settings, searches: [{ id: 's1', name: 'A', keywords: 'a', filterProfile: 'backend', portals: [] }] });
+  check('segment = AI, Backend', segmentButtons().map((n) => [n.id, n.textContent]), [['profileAiBtn', 'AI'], ['profileBackendBtn', 'Backend']]);
+  const builtinSelect = $('searchList').querySelector('select');
+  check('search select = AI, Backend', selectOptions(builtinSelect), [['ai', 'AI'], ['backend', 'Backend']]);
+  check('search select keeps backend', builtinSelect.value, 'backend');
+
+  setScenario('families: the built-in labels follow the locale');
+  await loadPage(OPTIONS, { settings, profileFamilies: FAMILIES3 }, { lang: 'es' });
+  const es = i18nFrom(catalogue('es'));
+  check('segment labels', segmentButtons().map((n) => n.textContent), [es('profileAi'), es('profileBackend'), 'Frontend']);
+
+  setScenario('families: a 3-family list builds the select and the segment');
+  const store = {
+    settings,
+    profileFamilies: FAMILIES3,
+    familyTitleFilters: { frontend: FE_FILTER },
+    titleFilter: { enabled: true, includeGroups: [['AI']], excludeTerms: [] },
+    titleFilterBackend: { enabled: true, includeGroups: [['Python']], excludeTerms: [] },
+    searches: [{ id: 's_fe', name: 'FE', keywords: 'react', location: 'Barcelona', filterProfile: 'frontend', portals: ['linkedin'], titleFilter: 'on' }],
+    beacons: [{ id: 'b1', name: 'Manual', url: 'https://www.linkedin.com/jobs/search/?keywords=x', enabled: true, filterProfile: 'frontend' }],
+    enabledPortals: ['linkedin'],
+  };
+  await loadPage(OPTIONS, store);
+  check('segment = AI, Backend, Frontend', segmentButtons().map((n) => n.textContent), ['AI', 'Backend', 'Frontend']);
+  const select = $('searchList').querySelector('select');
+  check('search select options', selectOptions(select), [['ai', 'AI'], ['backend', 'Backend'], ['frontend', 'Frontend']]);
+  check('the frontend search keeps its family', select.value, 'frontend');
+  check('the frontend beacon keeps its family', $('watchList').querySelector('select').value, 'frontend');
+  const feBtn = segmentButtons()[2];
+  await click(feBtn);
+  check('the frontend segment is pressed', segmentButtons().map((n) => n.getAttribute('aria-pressed')), ['false', 'false', 'true']);
+  check('the editor shows the frontend filter', [$('filterInclude').value, $('filterExclude').value], ['React, Vue', 'Senior']);
+  await type($('filterInclude'), 'Angular');
+  await click(segmentButtons()[0]);
+  check('switching back shows the ai filter', $('filterInclude').value, 'AI');
+  await click($('saveBtn'));
+  check('the search is saved with frontend', (b.store.searches || []).map((s) => s.filterProfile), ['frontend']);
+  check('the beacon is saved with frontend', (b.store.beacons || []).map((x) => x.filterProfile), ['frontend']);
+  check('the frontend filter persists', b.store.familyTitleFilters, { frontend: { enabled: true, includeGroups: [['Angular']], excludeTerms: ['Senior'] } });
+  check('titleFilter and titleFilterBackend keep their keys', [b.store.titleFilter.includeGroups, b.store.titleFilterBackend.includeGroups], [[['AI']], [['Python']]]);
+  const saved = clone(b.store);
+
+  setScenario('families: reload shows the saved frontend filter');
+  await loadPage(OPTIONS, saved);
+  await click(segmentButtons()[2]);
+  check('reloaded frontend filter', $('filterInclude').value, 'Angular');
+  check('reloaded search family', $('searchList').querySelector('select').value, 'frontend');
+
+  setScenario('families: old storage (titleFilter/titleFilterBackend only) saves unchanged');
+  const old = {
+    settings,
+    titleFilter: { enabled: true, includeGroups: [['Old']], excludeTerms: [] },
+    titleFilterBackend: { enabled: false, includeGroups: [['OldBackend']], excludeTerms: ['x'] },
+    searches: [{ id: 's1', name: 'A', keywords: 'a', location: '', filterProfile: 'ai', portals: [], titleFilter: 'on' }],
+    beacons: [],
+  };
+  await loadPage(OPTIONS, old);
+  await click($('saveBtn'));
+  check('stored filters unchanged', [b.store.titleFilter, b.store.titleFilterBackend], [old.titleFilter, old.titleFilterBackend]);
+  check('no family map written', 'familyTitleFilters' in b.store, false);
+  check('searches unchanged', b.store.searches, old.searches);
+
+  setScenario('families: suggest adopts the bot\'s family list');
+  const suggested = {
+    searches: [],
+    families: [
+      { id: 'ai', label: 'AI', default: true, titleFilter: { enabled: true, includeGroups: [['AI']], excludeTerms: [] } },
+      { id: 'frontend', label: 'Frontend', default: false, titleFilter: FE_FILTER },
+      { id: 'BAD id', label: 'x' },
+    ],
+  };
+  await loadPage(OPTIONS, { settings, searches: [] }, { suggested });
+  await click($('suggestBtn'));
+  check('profileFamilies stored (invalid ids dropped)', b.store.profileFamilies, [
+    { id: 'ai', label: 'AI', default: true }, { id: 'frontend', label: 'Frontend', default: false },
+  ]);
+  check('the family filter becomes the frontend default', b.store.profileTitleFilters && b.store.profileTitleFilters.frontend, FE_FILTER);
+  check('segment rebuilt from the list', segmentButtons().map((n) => n.textContent), ['AI', 'Frontend']);
+  await click(segmentButtons()[1]);
+  check('the editor shows the served frontend default', $('filterInclude').value, 'React, Vue');
+
+  setScenario('families: the options page adopts the /config family list');
+  await loadPage(OPTIONS, { settings, searches: [] }, { config: { paused: false, enabledPortals: ['linkedin'], families: FAMILIES3 } });
+  check('profileFamilies stored from /config', b.store.profileFamilies, FAMILIES3);
+  check('segment rebuilt from /config', segmentButtons().map((n) => n.textContent), ['AI', 'Backend', 'Frontend']);
+
+  setScenario('families: a bot without families brings the built-ins back');
+  await loadPage(OPTIONS, { settings, searches: [], profileFamilies: FAMILIES3 }, { suggested: { searches: [] } });
+  await click($('suggestBtn'));
+  check('profileFamilies removed', 'profileFamilies' in b.store, false);
+  check('segment = AI, Backend', segmentButtons().map((n) => n.textContent), ['AI', 'Backend']);
+}
+
 const AREAS = {
   nobridge: areaNoBridge,
   i18n: areaI18n,
@@ -740,6 +850,7 @@ const AREAS = {
   suggest: areaSuggest,
   maintenance: areaMaintenance,
   popup: areaPopup,
+  families: areaFamilies,
 };
 
 async function main() {

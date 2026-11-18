@@ -236,7 +236,7 @@ def _repo(tmp_path: Path, name: str = "h.db") -> OfferRepository:
 
 def test_fresh_db_is_v12_with_beacon_scans_table_and_index(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(beacon_scans)")]
     assert cols == [
         "id",
@@ -262,7 +262,7 @@ def test_v11_db_migrates_to_v12(tmp_path: Path) -> None:
     repo._conn.commit()
     repo._conn.close()
     migrated = OfferRepository(sqlite3.connect(path))
-    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     assert migrated.recent_beacon_scans("b1") == []
 
 

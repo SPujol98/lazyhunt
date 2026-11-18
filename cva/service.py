@@ -38,9 +38,13 @@ from cva.calibration import (
 )
 from cva.claimsdb import ClaimsDB, load_claims
 from cva.config import DEFAULT_BACKEND_THRESHOLD, Settings
-from cva.cvgen import CvVariant
 from cva.cvgen import engine as _cvgen_engine
-from cva.cvgen.base_pdfs import base_cambios, deliver_base_pdf
+from cva.cvgen.base_pdfs import (
+    base_cambios,
+    deliver_base_pdf,
+    manifest_entry,
+    variant_key,
+)
 from cva.cvgen.engine import generic_output_path
 from cva.fetch import Fetcher, HttpxFetcher
 from cva.ingest import (
@@ -114,7 +118,6 @@ from cva.notifier import (
     with_also_on,
     with_no_cv_line,
 )
-from cva.profile import Profile, infer_profile, normalize_profile, role_for_profile
 from cva.profile_identity import load_identity, require_identity_claim
 from cva.profile_paths import ProfilePaths, resolve_profile_paths
 from cva.profile_persona import load_judge_persona, load_letter_bases
@@ -152,7 +155,9 @@ from cva.tracker.history import PRE_SEND_ESTADOS
 from cva.tracker.repo import DUPLICATE_NOTE_PREFIX, _is_stored_duplicate
 from cva.tracker.xlsx import write_tracker_xlsx
 
-Role = Literal["AI", "BACKEND"]
+# A CV role: a role family's ``id.upper()`` (``ProfilePrefs.families``; the
+# built-ins AI/BACKEND), validated against the profile at run time.
+Role = str
 Language = Literal["es", "en", "ca"]
 MatchMode = Literal["keyword", "hybrid"]
 
@@ -228,10 +233,6 @@ DEFAULT_DB_PATH: Final[Path] = Path("data/app.db")
 _DEFAULT_EXPORT_PATH: Final[Path] = Path("data/export.xlsx")
 # Default rejudge report directory; resolved at call time (tests redirect it).
 DEFAULT_REPORT_DIR: Final[Path] = Path("data")
-_ROLE_LABEL: Final[dict[str, str]] = {
-    "AI": "AI Engineer",
-    "BACKEND": "Backend Developer",
-}
 
 # rejudge-backlog (odd/tasks/rejudge-backlog.md): re-run the LLM judge over
 # offers already stored from before the judge existed, without touching
@@ -638,13 +639,6 @@ def _guard_offer(fetched: FetchedOffer) -> tuple[FetchedOffer, GuardReport]:
     return cleaned, report
 
 
-def _variant(role: str, lang: str) -> CvVariant:
-    try:
-        return CvVariant[f"{role}_{lang.upper()}"]
-    except KeyError as exc:
-        raise ServiceError(f"invalid role/language combination: {role}_{lang}") from exc
-
-
 def _due(beacon: BeaconRow, now: datetime) -> bool:
     """Due rule (design D11) over the STORED due time (interval + jitter already
     baked into ``next_check_after`` at each completion; ``None`` = never checked
@@ -837,6 +831,7 @@ class JobService:
             text=offer.source_data,
             perfil=offer.perfil,
             table=self._salary_table,
+            families=self._prefs.families,
         )
 
     def _note_guard(self, offer_id: int, report: GuardReport) -> None:
@@ -1311,7 +1306,7 @@ class JobService:
                 title=offer.posicion or "(unknown position)",
                 company=offer.empresa or "(unknown company)",
                 language=language,
-                branch=role_for_profile(offer.perfil),
+                branch=self._prefs.families.role_for(offer.perfil),
                 claims_digest=build_claims_digest(self._db),
                 apply_findings=detect_apply_instructions(text),
                 voice_sample=self._voice_sample(),
@@ -1319,6 +1314,7 @@ class JobService:
                 facts=facts,
                 review=self._cover_letter_review,
                 persona=self._prefs.cover_letter,
+                families=self._prefs.families,
             )
             result = replace(result, generation=self._letter_gen.get(offer_id, 0) + 1)
             self._letter_gen[offer_id] = result.generation
@@ -1538,21 +1534,40 @@ class JobService:
             if not claimed:
                 self.release_prep(offer_id, stage)
 
-    def _profile_of(self, offer_id: int) -> Profile:
-        """The offer's profile; NULL (legacy) is 'ai'."""
-        return normalize_profile(self._repo.get_offer(offer_id).perfil)
+    def _normalize_profile(self, value: object) -> str:
+        """The offer profile (a family id of the profile's families) stored
+        for ``value``; NULL (legacy) or unknown is the default family."""
+        return self._prefs.families.normalize(value)
 
-    def _gate_for(self, profile: Profile) -> tuple[int, int]:
-        """(notify threshold, gray zone) of a profile."""
-        if profile == "backend":
-            return self._backend_threshold, self._backend_gray_zone
-        return self._threshold, self._gray_zone
+    def _profile_of(self, offer_id: int) -> str:
+        """The offer's profile; NULL (legacy) is the default family ('ai')."""
+        return self._normalize_profile(self._repo.get_offer(offer_id).perfil)
+
+    def _gate_for(self, profile: str) -> tuple[int, int]:
+        """(notify threshold, gray zone) of a profile.
+
+        A family's own ``threshold`` (``[families.<id>] threshold``) wins;
+        otherwise ``backend`` keeps ``backend_threshold`` and every other
+        family the ``threshold`` setting. The gray zone stays the setting's
+        (``backend_gray_zone`` for ``backend``).
+        """
+        fid = self._normalize_profile(profile)
+        family = self._prefs.families.get(fid)
+        if fid == "backend":
+            threshold, gray = self._backend_threshold, self._backend_gray_zone
+        else:
+            threshold, gray = self._threshold, self._gray_zone
+        if family is not None and family.threshold is not None:
+            threshold = family.threshold
+        return threshold, gray
 
     def _ensure_profile(self, offer_id: int) -> None:
         """Stamp the profile inferred from the title when none is stored yet."""
         row = self._repo.get_offer(offer_id)
         if row.perfil is None:
-            self._repo.set_profile_if_unset(offer_id, infer_profile(row.posicion))
+            self._repo.set_profile_if_unset(
+                offer_id, self._prefs.families.infer(row.posicion)
+            )
 
     def _refresh_tracker(self) -> None:
         """Rewrite the synced full-tracker xlsx AFTER a committed state change
@@ -1741,7 +1756,7 @@ class JobService:
             return BridgeJobOutcome(zone="pending", score=None)
         profile = self._profile_of(offer_id)
         profile_gate, gray_zone = self._gate_for(profile)
-        card_role = role_for_profile(profile)
+        card_role = self._prefs.families.role_for(profile)
         gate = min_score if min_score is not None else profile_gate
         # [Generar CV] carries an explicit language, so the default "es" would
         # override inference: arm the keyboard with the offer's own language.
@@ -1788,6 +1803,7 @@ class JobService:
                     lang=lang,
                     cover_letter_asked=asks_cover_letter(apply_findings),
                     cv_needed=self.cv_needed(offer_id),
+                    families=self._prefs.families,
                 ),
             )
             return BridgeJobOutcome(zone="gray", score=result.score)
@@ -1860,10 +1876,11 @@ class JobService:
             ),
             cv_keyboard(
                 offer_id,
-                role=role_for_profile(profile),
+                role=self._prefs.families.role_for(profile),
                 lang=infer_language(source_data),
                 cover_letter_asked=asks_cover_letter(apply_findings),
                 cv_needed=self.cv_needed(offer_id),
+                families=self._prefs.families,
             ),
         )
 
@@ -1989,10 +2006,11 @@ class JobService:
             cache=self._cache,
             model=self._extraction_model,
         )
-        profile = normalize_profile(offer.perfil)
+        profile = self._normalize_profile(offer.perfil)
         threshold, _ = self._gate_for(profile)
         result = score(extraction, self._db, self._syn, threshold=threshold)
-        # Backend wall: only evaluated for backend-profile offers.
+        # Backend wall: only evaluated for backend-profile offers (other role
+        # families have no stack wall yet; role-families follow-up).
         wall = (
             stack_wall_reason(extraction, offer.source_data, self._prefs.stack_wall)
             if profile == "backend"
@@ -2022,6 +2040,7 @@ class JobService:
                     threshold=threshold,
                     extra_anchors=self._judge_anchors(),
                     anchor_thresholds=self._anchor_thresholds(),
+                    families=self._prefs.families,
                     persona=self._judge_persona,
                 )
             except LlmResponseError as exc:
@@ -2341,6 +2360,7 @@ class JobService:
                     threshold=self._threshold,
                     extra_anchors=anchors,
                     anchor_thresholds=self._anchor_thresholds(),
+                    families=self._prefs.families,
                     persona=self._judge_persona,
                 )
             except KeyboardInterrupt:
@@ -2406,41 +2426,60 @@ class JobService:
     async def generate_cv(
         self,
         offer_id: int,
-        role: Role | None = None,
+        role: str | None = None,
         lang: Language | None = None,
     ) -> Path:
         """Deliver one fixed base CV; explicit lang beats ``infer_language`` (D10).
 
-        ``role=None`` follows the offer profile: backend offers get the Backend
-        CV, everything else (ai / legacy NULL) the AI one. Backend has no
-        Catalan CV, so an INFERRED Catalan offer gets the Spanish Backend
-        CV; an explicit Backend + ``ca`` request is rejected.
+        The role is a role family of the profile (``ProfilePrefs.families``;
+        the built-in ``ai``/``backend`` without a ``[families]`` table) named
+        by its CV role (``id.upper()``). ``role=None`` follows the offer
+        profile: an offer of a declared family gets that family's CV, anything
+        else (legacy NULL, an undeclared family) the default family's.
+
+        The CV language must be one the family declares (role-families T3;
+        the DB only checks the ``<ROLE>_<LANG>`` shape since v23): an INFERRED
+        language the family lacks becomes its first language (built-in
+        Backend: Catalan -> Spanish); an EXPLICIT one is rejected and nothing
+        is recorded.
 
         fixed-base-cvs: nothing is rendered. The owner's hand-reviewed base
-        PDF for the variant is verified against ``cv_base_pdfs/manifest.json``
-        (sha256) and copied byte-for-byte to the tailored name. A missing file
-        or hash mismatch blocks delivery with ``CvgenError``.
+        PDF for the variant ``<ROLE>_<LANG>`` is verified against
+        ``cv_base_pdfs/manifest.json`` (sha256) and copied byte-for-byte to the
+        tailored name (the entry's ``delivery_name`` when it has one). A
+        missing entry or file, or a hash mismatch, blocks delivery with
+        ``CvgenError``.
         """
         offer = self._repo.get_offer(offer_id)
+        families = self._prefs.families
         if role is None:
-            role = role_for_profile(offer.perfil)  # type: ignore[assignment]
-        if role not in _ROLE_LABEL:
+            role = families.role_for(offer.perfil)
+        family = next((f for f in families.families if f.role == role), None)
+        if family is None:
             raise ServiceError(f"unknown variant role: {role}")
-        resolved = lang if lang is not None else infer_language(offer.source_data)
-        if role == "BACKEND" and lang is None and resolved == "ca":
-            resolved = "es"
-        variant = _variant(role, resolved)
+        resolved: str = lang if lang is not None else infer_language(offer.source_data)
+        if resolved not in family.languages:
+            if lang is not None:
+                raise ServiceError(
+                    f"invalid role/language combination: {role}_{lang} (the "
+                    f"{family.id} family has CVs in {', '.join(family.languages)})"
+                )
+            resolved = family.languages[0]
+        variant = variant_key(family.role, resolved)
+        entry = manifest_entry(variant, self._base_pdfs_dir)
         out = generic_output_path(
             variant,
             offer_id,
             offer.empresa,
             self._output_dir,
             self._identity.file_slug,
+            delivery_name=entry.delivery_name,
+            fallback_name=f"{family.label}_{resolved.upper()}",
         )
         pdf_path = deliver_base_pdf(variant, out, self._base_pdfs_dir)
         self._repo.record_cv(
             offer_id,
-            cv_base=variant.value,
+            cv_base=variant,
             cv_path=str(pdf_path),
             cambios=base_cambios(variant, self._base_pdfs_dir),
         )
@@ -2596,8 +2635,8 @@ class JobService:
         return self._repo.transition_calibration(example_id, "active", "inactive")
 
     def _anchor_thresholds(self) -> dict[str, int]:
-        """Each profile's notify threshold, for rendering its own anchors."""
-        return {"ai": self._threshold, "backend": self._backend_threshold}
+        """Each family's notify threshold, for rendering its own anchors."""
+        return {fid: self._gate_for(fid)[0] for fid in self._prefs.families.ids}
 
     def _judge_anchors(self) -> list[CalibrationExample]:
         """The owner-approved examples handed to the judge prompt (most recent 8)."""
@@ -2614,7 +2653,7 @@ class JobService:
         examples = self._repo.list_calibrations("active")
         below = above = 0
         for example in examples:
-            threshold = self._gate_for(normalize_profile(example.profile))[0]
+            threshold = self._gate_for(self._normalize_profile(example.profile))[0]
             if example.polarity == "positive" and example.score_at_send < threshold:
                 below += 1
             elif example.polarity == "negative" and example.score_at_send >= threshold:
@@ -2806,7 +2845,7 @@ class JobService:
         analysed = _parse_stamp(match.created_at)
         if analysed is None or analysed.date() < cutoff:
             return None
-        profile = normalize_profile(offer.perfil)
+        profile = self._normalize_profile(offer.perfil)
         gate, gray = self._gate_for(profile)
         zone = score_zone(match.score, gate, gray)
         try:
@@ -2877,6 +2916,7 @@ class JobService:
             self._repo.tracker_offers() if rows is None else rows,
             self._now(),
             discarded,
+            families=self._prefs.families,
         )
         if self._tracker_xlsx is not None:
             copy = self._tracker_xlsx.parent / PANEL_FILENAME

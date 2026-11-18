@@ -11,8 +11,9 @@ import { t } from './i18n.js';
 import { PORTALS, portalFor } from './portals/registry.js';
 import { portalOrigin, termsMessageKey, termsWarning } from './portals/terms.js';
 import {
-  adoptProfileTitleFilters, cleanTitleFilter, formatExcludeTerms, formatIncludeGroups,
-  normalizeProfile, parseExcludeTerms, parseIncludeGroups, resolveTitleFilters,
+  adoptProfileFamilies, adoptProfileTitleFilters, cleanTitleFilter, defaultFamilyId, formatExcludeTerms, formatIncludeGroups,
+  isBuiltinFamily, normalizeProfile, parseExcludeTerms, parseIncludeGroups, resolveFamilies,
+  resolveTitleFilters,
 } from './filter.js';
 import {
   configUrl, dedupeSearchIds, expandSearches, mergeSuggestedSearches, normalizeSearches,
@@ -29,7 +30,7 @@ const FETCH_TIMEOUT_MS = 5000;
 const SECRET_HEADER = 'X-CVA-Bridge-Secret';
 const LOAD_KEYS = [
   'settings', 'beacons', 'searches', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters',
-  'enabledPortals', 'botConfig', 'lastCheck',
+  'profileFamilies', 'familyTitleFilters', 'enabledPortals', 'botConfig', 'lastCheck',
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -78,14 +79,16 @@ function randomId(prefix) {
 const newBeaconId = () => randomId('bcn_');
 const newSearchId = () => randomId('s_');
 
-function cleanBeacon(raw) {
+// `families`: the profile's family list (role families); a declared
+// filterProfile is kept, an unknown one becomes the default family.
+function cleanBeacon(raw, families = state.families) {
   const b = asObject(raw);
   return {
     id: typeof b.id === 'string' && b.id ? b.id : newBeaconId(),
     name: b.name === undefined || b.name === null ? '' : String(b.name),
     url: b.url === undefined || b.url === null ? '' : String(b.url),
     enabled: b.enabled !== false,
-    filterProfile: normalizeProfile(b.filterProfile),
+    filterProfile: normalizeProfile(b.filterProfile, families),
   };
 }
 
@@ -143,6 +146,7 @@ const state = {
   botConfig: null,
   lastCheck: {},
   draft: null,
+  families: resolveFamilies({}), // the bot's role families; the built-in two until it sends some
   profile: 'ai',
   suggestions: [],
   lastScanCells: new Map(), // beacon id -> element showing its last scan
@@ -166,14 +170,16 @@ async function load() {
   state.enabledPortals = resolveEnabledPortals(data.enabledPortals, data.searches, data.beacons, portalFor, PORTALS);
   state.botConfig = isObject(data.botConfig) ? data.botConfig : null;
   state.lastCheck = asObject(data.lastCheck);
+  state.families = resolveFamilies(data);
+  state.profile = normalizeProfile(state.profile, state.families);
   const filters = resolveTitleFilters(data);
   state.draft = {
     interval: String(readInterval(settings.intervalMinutes)),
     bridgeUrl: String(settings.bridgeUrl || ''),
     bridgeSecret: String(settings.bridgeSecret || ''),
-    beacons: (Array.isArray(data.beacons) ? data.beacons : []).filter(isObject).map(cleanBeacon),
-    searches: dedupeSearchIds(normalizeSearches(data.searches), newSearchId),
-    filters: { ai: filterDraft(filters.ai), backend: filterDraft(filters.backend) },
+    beacons: (Array.isArray(data.beacons) ? data.beacons : []).filter(isObject).map((b) => cleanBeacon(b)),
+    searches: dedupeSearchIds(normalizeSearches(data.searches, state.families), newSearchId),
+    filters: Object.fromEntries(Object.entries(filters).map(([id, filter]) => [id, filterDraft(filter)])),
   };
   await refreshGrants();
   drawEverything();
@@ -224,7 +230,7 @@ function drawEverything() {
 function scannableCount() {
   const enabled = new Set(state.enabledPortals);
   const manual = state.draft.beacons.filter((b) => b.enabled && b.url.trim() && enabled.has(portalFor(b.url).id));
-  return manual.length + expandSearches(state.draft.searches, PORTALS, state.enabledPortals).length;
+  return manual.length + expandSearches(state.draft.searches, PORTALS, state.enabledPortals, state.families).length;
 }
 
 function renderStatus() {
@@ -356,11 +362,18 @@ async function togglePortal(portal, input) {
   }
 }
 
+// The built-in families keep their translated labels unless the profile
+// renames them; a declared family shows the label the bot sent.
+const BUILTIN_LABEL_KEYS = { ai: ['profileAi', 'AI'], backend: ['profileBackend', 'Backend'] };
+function familyLabel(family) {
+  const builtin = BUILTIN_LABEL_KEYS[family.id];
+  return builtin && family.label === builtin[1] ? tr(builtin[0], null, builtin[1]) : family.label;
+}
+
 function profileSelect(value, onchange, label) {
   const select = el('select', { class: 'select', 'aria-label': label, onchange },
-    el('option', { value: 'ai', text: tr('profileAi', null, 'AI') }),
-    el('option', { value: 'backend', text: tr('profileBackend', null, 'Backend') }));
-  select.value = normalizeProfile(value);
+    ...state.families.map((family) => el('option', { value: family.id, text: familyLabel(family) })));
+  select.value = normalizeProfile(value, state.families);
   return select;
 }
 
@@ -396,7 +409,7 @@ function renderSearches() {
       el('div', { class: 'row-options' },
         el('label', { class: 'field field-inline' },
           el('span', { class: 'field-label', text: tr('profileLabel', null, 'Filter profile') }),
-          profileSelect(search.filterProfile, (e) => { search.filterProfile = normalizeProfile(e.currentTarget.value); edited(); }, tr('profileLabel', null, 'Filter profile'))),
+          profileSelect(search.filterProfile, (e) => { search.filterProfile = normalizeProfile(e.currentTarget.value, state.families); edited(); }, tr('profileLabel', null, 'Filter profile'))),
         el('label', { class: 'inline-field' },
           el('input', {
             type: 'checkbox', class: 'switch', checked: search.titleFilter !== 'off',
@@ -446,7 +459,7 @@ function refreshLastScan() {
 }
 
 function renderPreview() {
-  const auto = expandSearches(state.draft.searches, PORTALS, state.enabledPortals);
+  const auto = expandSearches(state.draft.searches, PORTALS, state.enabledPortals, state.families);
   $('previewCount').textContent = String(auto.length);
   $('previewList').replaceChildren(...(auto.length
     ? auto.map((beacon) => el('li', { class: 'preview-item' },
@@ -473,7 +486,7 @@ function drawManualRows() {
         textField(tr('beaconUrl', null, 'Results page URL'), beacon.url, (e) => { beacon.url = e.currentTarget.value; edited(); }, { type: 'url' }),
         el('label', { class: 'field field-narrow' },
           el('span', { class: 'field-label', text: tr('profileLabel', null, 'Filter profile') }),
-          profileSelect(beacon.filterProfile, (e) => { beacon.filterProfile = normalizeProfile(e.currentTarget.value); markDirty(); }, tr('profileLabel', null, 'Filter profile')))),
+          profileSelect(beacon.filterProfile, (e) => { beacon.filterProfile = normalizeProfile(e.currentTarget.value, state.families); markDirty(); }, tr('profileLabel', null, 'Filter profile')))),
       el('div', { class: 'row-options' },
         el('span', { class: 'hint' }, tr('lastScan', null, 'Last scan'), ' ', lastScanCell(beacon.id)),
         el('button', {
@@ -523,10 +536,31 @@ async function testBeacon(beacon, out) {
   }
 }
 
+// Segment button id: profileAiBtn / profileBackendBtn for the built-ins (as
+// in the HTML), profile<Id>Btn for a declared family.
+function segmentId(id) {
+  return `profile${id.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('')}Btn`;
+}
+
+function renderSegment() {
+  $('profileSegment').replaceChildren(...state.families.map((family) => {
+    const builtin = BUILTIN_LABEL_KEYS[family.id];
+    return el('button', {
+      id: segmentId(family.id),
+      type: 'button',
+      class: 'segment',
+      'aria-pressed': state.profile === family.id ? 'true' : 'false',
+      'data-i18n': builtin && family.label === builtin[1] ? builtin[0] : undefined,
+      'data-family': family.id,
+      text: familyLabel(family),
+      onclick: () => selectProfile(family.id),
+    });
+  }));
+}
+
 function renderFilter() {
   const current = state.draft.filters[state.profile];
-  $('profileAiBtn').setAttribute('aria-pressed', state.profile === 'ai' ? 'true' : 'false');
-  $('profileBackendBtn').setAttribute('aria-pressed', state.profile === 'backend' ? 'true' : 'false');
+  renderSegment();
   $('filterEnabled').checked = current.enabled;
   $('filterInclude').value = current.include;
   $('filterExclude').value = current.exclude;
@@ -592,14 +626,26 @@ async function suggestSearches() {
     } catch (_) {
       payload = null;
     }
-    const rows = parseSuggestions(payload);
     const data = await adoptProfileTitleFilters(chrome.storage.local, payload);
-    state.stored = { ...state.stored, profileTitleFilters: data.profileTitleFilters };
+    state.stored = {
+      ...state.stored, profileTitleFilters: data.profileTitleFilters, profileFamilies: data.profileFamilies,
+    };
+    // The bot's family list (role families) rebuilds the selects and the segment.
+    state.families = resolveFamilies(data);
+    state.profile = normalizeProfile(state.profile, state.families);
+    const rows = parseSuggestions(payload, state.families);
     const resolved = resolveTitleFilters(data);
     // Without saved filters the editor shows the profile's new defaults now.
-    if (!isObject(data.titleFilter)) state.draft.filters.ai = filterDraft(resolved.ai);
-    if (!isObject(data.titleFilterBackend)) state.draft.filters.backend = filterDraft(resolved.backend);
+    const saved = asObject(data.familyTitleFilters);
+    for (const [id, filter] of Object.entries(resolved)) {
+      const kept = id === 'ai' ? isObject(data.titleFilter)
+        : id === 'backend' ? isObject(data.titleFilterBackend)
+          : isObject(saved[id]) || Boolean(state.draft.filters[id]);
+      if (!kept) state.draft.filters[id] = filterDraft(filter);
+    }
     renderFilter();
+    renderSearches();
+    drawManualRows();
     state.suggestions = rows.map((search) => ({ search, selected: true }));
     renderSuggestions();
     toast(rows.length
@@ -633,7 +679,7 @@ function addSuggested() {
     toast(tr('suggestNothingSelected', null, 'Select at least one suggestion.'), 'error');
     return;
   }
-  const { searches, added, skipped } = mergeSuggestedSearches(state.draft.searches, picked, newSearchId);
+  const { searches, added, skipped } = mergeSuggestedSearches(state.draft.searches, picked, newSearchId, state.families);
   state.draft.searches = searches;
   state.suggestions = [];
   renderSuggestions();
@@ -671,6 +717,16 @@ function currentFilters() {
   };
 }
 
+// The filters of the declared (non built-in) families, stored under
+// `familyTitleFilters`; null when the profile has none (built-ins only).
+function currentFamilyFilters() {
+  const out = {};
+  for (const { id } of state.families) {
+    if (!isBuiltinFamily(id) && state.draft.filters[id]) out[id] = parseFilterDraft(state.draft.filters[id]);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 let saving = false;
 async function save() {
   if (saving) return;
@@ -692,13 +748,20 @@ async function save() {
       bridgeSecret: draft.bridgeSecret.trim(),
     };
     const beacons = draft.beacons.map((b) => ({
-      id: b.id, name: b.name.trim(), url: b.url.trim(), enabled: b.enabled, filterProfile: normalizeProfile(b.filterProfile),
+      id: b.id, name: b.name.trim(), url: b.url.trim(), enabled: b.enabled,
+      filterProfile: normalizeProfile(b.filterProfile, state.families),
     }));
-    const searches = dedupeSearchIds(normalizeSearches(draft.searches), newSearchId);
+    const searches = dedupeSearchIds(normalizeSearches(draft.searches, state.families), newSearchId);
     const filters = currentFilters();
-    await chrome.storage.local.set({
-      settings, beacons, searches, titleFilter: filters.ai, titleFilterBackend: filters.backend,
-    });
+    const values = { settings, beacons, searches, titleFilter: filters.ai, titleFilterBackend: filters.backend };
+    // Declared families' filters join the ones stored for families the bot no
+    // longer declares, so switching profiles never loses an edit.
+    const familyFilters = currentFamilyFilters();
+    if (familyFilters) {
+      const stored = asObject((await chrome.storage.local.get('familyTitleFilters')).familyTitleFilters);
+      values.familyTitleFilters = { ...stored, ...familyFilters };
+    }
+    await chrome.storage.local.set(values);
     draft.interval = String(settings.intervalMinutes);
     draft.searches = searches;
     renderConnection();
@@ -725,11 +788,15 @@ function exportConfig() {
     format: CONFIG_FORMAT,
     exportedAt: new Date().toISOString(),
     settings: { intervalMinutes: readInterval(draft.interval), bridgeUrl: draft.bridgeUrl.trim() },
-    beacons: draft.beacons.map(cleanBeacon),
-    searches: normalizeSearches(draft.searches),
+    beacons: draft.beacons.map((beacon) => cleanBeacon(beacon)),
+    searches: normalizeSearches(draft.searches, state.families),
     titleFilter: filters.ai,
     titleFilterBackend: filters.backend,
   };
+  // Declared families' filters (role families); absent for the built-ins, so
+  // such a file is the same as before. Older versions ignore the key.
+  const familyFilters = currentFamilyFilters();
+  if (familyFilters) config.familyTitleFilters = familyFilters;
   const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
   const href = URL.createObjectURL(blob);
   const now = new Date();
@@ -770,10 +837,23 @@ async function importConfig(text) {
     toast(tr('importWrongFormat', null, 'This is not an lazyhunt configuration file.'), 'error');
     return;
   }
-  const beacons = (Array.isArray(config.beacons) ? config.beacons : []).filter(isObject).map(cleanBeacon);
+  const current = await chrome.storage.local.get([
+    'settings', 'profileTitleFilters', 'profileFamilies', 'familyTitleFilters',
+  ]);
+  // Families a file names that this profile does not declare become the
+  // default family (role families S5), and the page says so.
+  const families = resolveFamilies(current);
+  const known = new Set(families.map((f) => f.id));
+  const unknown = new Set();
+  const noteUnknown = (raw) => {
+    const id = isObject(raw) ? raw.filterProfile : undefined;
+    if (typeof id === 'string' && id && !known.has(id)) unknown.add(id);
+  };
+  const rawBeacons = (Array.isArray(config.beacons) ? config.beacons : []).filter(isObject);
+  rawBeacons.forEach(noteUnknown);
+  const beacons = rawBeacons.map((b) => cleanBeacon(b, families));
   if (!confirm(tr('importConfirm', beacons.length, 'Replace the current configuration with the $1 beacons of this file?'))) return;
 
-  const current = await chrome.storage.local.get(['settings', 'profileTitleFilters']);
   const here = asObject(current.settings);
   const fileSettings = asObject(config.settings);
   const values = {
@@ -787,18 +867,37 @@ async function importConfig(text) {
   };
   // An old export without searches or filters keeps the stored ones.
   if (Array.isArray(config.searches)) {
-    values.searches = dedupeSearchIds(normalizeSearches(config.searches), newSearchId);
+    config.searches.forEach(noteUnknown);
+    values.searches = dedupeSearchIds(normalizeSearches(config.searches, families), newSearchId);
   }
-  const defaults = resolveTitleFilters({ profileTitleFilters: current.profileTitleFilters });
+  const defaults = resolveTitleFilters({
+    profileTitleFilters: current.profileTitleFilters, profileFamilies: current.profileFamilies,
+  });
   if (isObject(config.titleFilter)) values.titleFilter = cleanTitleFilter(config.titleFilter, defaults.ai);
   if (isObject(config.titleFilterBackend)) {
     values.titleFilterBackend = cleanTitleFilter(config.titleFilterBackend, defaults.backend);
+  }
+  // Declared families' filters: only those of a family this profile declares.
+  const fileFamilies = asObject(config.familyTitleFilters);
+  const imported = {};
+  for (const { id } of families) {
+    if (!isBuiltinFamily(id) && isObject(fileFamilies[id])) imported[id] = cleanTitleFilter(fileFamilies[id], defaults[id]);
+  }
+  if (Object.keys(imported).length) {
+    values.familyTitleFilters = { ...asObject(current.familyTitleFilters), ...imported };
   }
   await chrome.storage.local.set(values);
   await notifyWorker();
   await load();
   setSaveState('');
-  toast(tr('importDone', beacons.length, 'Imported $1 beacons.'), 'ok');
+  const done = tr('importDone', beacons.length, 'Imported $1 beacons.');
+  if (!unknown.size) {
+    toast(done, 'ok');
+    return;
+  }
+  const fallback = families.find((f) => f.id === defaultFamilyId(families));
+  toast(`${done} ${tr('importUnknownFamilies', [[...unknown].join(', '), familyLabel(fallback)],
+    'Profiles this bot does not declare ($1) now use $2.')}`, 'info');
 }
 
 // --- maintenance -----------------------------------------------------------------
@@ -814,6 +913,27 @@ async function clearHistory() {
   }
 }
 
+// The role families on the bot's /config answer (also adopted by every
+// round): a changed list rebuilds the selects and the segment; filters the
+// owner is editing are kept, new families start from their defaults.
+async function adoptConfigFamilies(payload) {
+  await adoptProfileFamilies(chrome.storage.local, payload);
+  const data = await chrome.storage.local.get([
+    'settings', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters', 'profileFamilies', 'familyTitleFilters',
+  ]);
+  const families = resolveFamilies(data);
+  if (JSON.stringify(families) === JSON.stringify(state.families)) return;
+  state.stored = { ...state.stored, profileTitleFilters: data.profileTitleFilters, profileFamilies: data.profileFamilies };
+  state.families = families;
+  state.profile = normalizeProfile(state.profile, families);
+  for (const [id, filter] of Object.entries(resolveTitleFilters(data))) {
+    if (!state.draft.filters[id]) state.draft.filters[id] = filterDraft(filter);
+  }
+  renderFilter();
+  renderSearches();
+  drawManualRows();
+}
+
 async function fetchBotConfig() {
   const settings = asObject(state.stored.settings);
   const url = configUrl(settings.bridgeUrl);
@@ -822,11 +942,13 @@ async function fetchBotConfig() {
   try {
     const response = await fetchWithTimeout(url, { headers: { [SECRET_HEADER]: secret } });
     if (!response.ok) return;
-    const parsed = parseBotConfig(await response.json());
+    const payload = await response.json();
+    const parsed = parseBotConfig(payload);
     if (!parsed) return;
     const botConfig = { ...parsed, at: Date.now() };
     state.botConfig = botConfig;
     await chrome.storage.local.set({ botConfig });
+    await adoptConfigFamilies(payload);
     renderPortals();
     renderStatus();
     renderBotInfo();
@@ -838,14 +960,14 @@ async function fetchBotConfig() {
 // --- wiring ----------------------------------------------------------------------
 
 function addBeacon() {
-  state.draft.beacons.push({ id: newBeaconId(), name: '', url: '', enabled: true, filterProfile: 'ai' });
+  state.draft.beacons.push({ id: newBeaconId(), name: '', url: '', enabled: true, filterProfile: defaultFamilyId(state.families) });
   markDirty();
   drawManualRows();
 }
 
 function addSearch() {
   state.draft.searches.push({
-    id: newSearchId(), name: '', keywords: '', location: '', filterProfile: 'ai',
+    id: newSearchId(), name: '', keywords: '', location: '', filterProfile: defaultFamilyId(state.families),
     portals: state.enabledPortals.includes('linkedin') ? ['linkedin'] : [], titleFilter: 'on',
   });
   markDirty();
@@ -901,8 +1023,6 @@ function wire() {
   $('suggestBtn').addEventListener('click', suggestSearches);
   $('addSuggestedBtn').addEventListener('click', addSuggested);
   $('addBeaconBtn').addEventListener('click', addBeacon);
-  $('profileAiBtn').addEventListener('click', () => selectProfile('ai'));
-  $('profileBackendBtn').addEventListener('click', () => selectProfile('backend'));
   $('filterEnabled').addEventListener('change', (e) => {
     draft().filters[state.profile].enabled = Boolean(e.currentTarget.checked);
     markDirty();

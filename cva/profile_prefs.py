@@ -37,6 +37,28 @@ exactly as before. Unknown tables/keys and wrongly typed values raise
     include_groups = [["AI", "LLM"], ["Engineer", "Developer"]]
     exclude_terms = ["Senior", "Lead"] # the blocklist is appended
 
+    [families.frontend]                # cva/families.py; role families
+    label = "Frontend"                 # default: the id
+    languages = ["es", "en"]           # CV languages (es/en/ca); default es+en
+    title_terms = ["Frontend", "React"]  # titles with them route here
+    threshold = 55                     # 0-100; default: the Settings gate
+    search_roles = ["Frontend Developer"]
+    cover_letter_emphasis = "Frontend branch: emphasise ..."
+    default = true                     # at most one; default: the first family
+    [families.frontend.title_filter]   # same keys as [title_filters.ai]
+    include_groups = [["Frontend", "React"]]
+    exclude_terms = ["Senior"]         # the blocklist is appended
+
+Family ids are ``[a-z][a-z0-9_]*`` (the CV role key is ``id.upper()``). With no
+``[families]`` table the built-in ``ai`` and ``backend`` families apply, filled
+from ``[title_filters.ai|backend]``, ``[search_targets] ai_roles|backend_roles``
+and ``[cover_letter.branch_emphasis] AI|BACKEND`` (that table also takes the
+role of any declared family, e.g. ``FRONTEND``; a family's own
+``cover_letter_emphasis`` wins over it). Declared families replace
+the built-ins; a declared ``ai`` or ``backend`` starts from its built-in values.
+An offer title goes to the first family whose ``title_terms`` match, else to
+the first family without ``title_terms``, else to the default family.
+
 Thresholds (match score, gray zone, ...) are NOT here on purpose: they are
 operational knobs that ``Settings`` (``config.toml`` -> ``config.local.toml``
 -> ``CVA_*`` env) already layers per machine, and the bot's cards, daily caps
@@ -44,10 +66,18 @@ and tests read them from there.
 """
 
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
 
+from cva.families import (
+    BUILTIN_REGISTRY,
+    CV_LANGUAGES,
+    FAMILY_ID_MAX_LEN,
+    FAMILY_ID_RE,
+    Family,
+    FamilyRegistry,
+)
 from cva.match.gates import DEFAULT_GATE_PREFS, LANGUAGE_CODES, GatePrefs
 from cva.match.locations import UnknownRegionError, get_region
 from cva.match.persona import CoverLetterPersona
@@ -98,7 +128,36 @@ class ProfilePrefs:
     title_filters: TitleFilterPrefs = field(default_factory=TitleFilterPrefs)
     # Persona text: its defaults are the owner's, so a public profile sets them.
     cover_letter: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA
+    # Role families ([families.<id>]); the built-ins when none are declared.
+    families: FamilyRegistry = field(default_factory=lambda: _BUILTINS)
 
+
+def _with_builtin_values(
+    filters: TitleFilterPrefs, targets: ProfileTargets, persona: CoverLetterPersona
+) -> dict[str, Family]:
+    """The built-in families filled from the profile's other tables."""
+    emphasis = persona.branch_emphasis
+    values = {
+        "ai": (filters.ai, targets.ai_roles),
+        "backend": (filters.backend, targets.backend_roles),
+    }
+    return {
+        fam.id: replace(
+            fam,
+            title_filter=values[fam.id][0],
+            search_roles=values[fam.id][1],
+            cover_letter_emphasis=emphasis.get(fam.role),
+        )
+        for fam in BUILTIN_REGISTRY.families
+    }
+
+
+_BUILTINS: Final[FamilyRegistry] = FamilyRegistry(
+    _with_builtin_values(
+        TitleFilterPrefs(), DEFAULT_PROFILE_TARGETS, OWNER_COVER_LETTER_PERSONA
+    ).values(),
+    BUILTIN_REGISTRY.default.id,
+)
 
 DEFAULT_PREFS: Final[ProfilePrefs] = ProfilePrefs()
 
@@ -110,8 +169,20 @@ _TABLES: Final[frozenset[str]] = frozenset(
         "search_targets",
         "title_filters",
         "cover_letter",
+        "families",
     }
 )
+
+_FAMILY_KEYS: Final[set[str]] = {
+    "label",
+    "languages",
+    "title_terms",
+    "title_filter",
+    "threshold",
+    "search_roles",
+    "cover_letter_emphasis",
+    "default",
+}
 
 
 def _table(data: dict[str, Any], name: str) -> dict[str, Any]:
@@ -297,16 +368,126 @@ def _cover_letter(data: dict[str, Any]) -> CoverLetterPersona:
             "preferences.toml [cover_letter.branch_emphasis] must be a table"
         )
     where = "cover_letter.branch_emphasis"
-    _only(given, set(default.branch_emphasis), where)
+    # The built-in roles, plus the role (id upper-cased) of every declared
+    # family (role-families T4).
+    declared = data.get("families")
+    roles = set(default.branch_emphasis)
+    if isinstance(declared, dict):
+        roles |= {str(fid).upper() for fid in declared}
+    _only(given, roles, where)
     for branch in given:
         # _string rejects an empty value, so a set key never falls back to the
         # owner's text.
-        emphasis[branch] = _string(given, branch, where) or emphasis[branch]
+        text = _string(given, branch, where)
+        if text is not None:
+            emphasis[branch] = text
     career = _string(table, "career_change", "cover_letter")
     return CoverLetterPersona(
         branch_emphasis=emphasis,
         career_change=career if career is not None else default.career_change,
     )
+
+
+def _family(
+    fid: str,
+    table: dict[str, Any],
+    builtin: Family | None,
+    blocklist: tuple[str, ...],
+) -> tuple[Family, bool]:
+    where = f"families.{fid}"
+    _only(table, _FAMILY_KEYS, where)
+    base = builtin or Family(
+        id=fid,
+        label=fid,
+        languages=("es", "en"),
+        title_filter=TitleFilter(enabled=True, exclude_terms=list(blocklist)),
+    )
+    languages = _strings(table, "languages", where)
+    if languages is not None:
+        languages = tuple(dict.fromkeys(code.lower() for code in languages))
+        unknown = [c for c in languages if c not in CV_LANGUAGES]
+        if not languages or unknown:
+            raise ProfileError(
+                f"preferences.toml [{where}] languages must be a non-empty list "
+                f"of {', '.join(CV_LANGUAGES)} (unknown: {unknown})"
+            )
+    threshold = table.get("threshold", base.threshold)
+    if threshold is not None and (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, int)
+        or not 0 <= threshold <= 100
+    ):
+        raise ProfileError(
+            f"preferences.toml [{where}] threshold must be an integer 0-100"
+        )
+    sub = table.get("title_filter")
+    if sub is not None and not isinstance(sub, dict):
+        raise ProfileError(f"preferences.toml [{where}.title_filter] must be a table")
+    title_filter = (
+        base.title_filter
+        if sub is None
+        else _profile_filter(sub, base.title_filter, blocklist, f"{where}.title_filter")
+    )
+    label = _string(table, "label", where)
+    terms = _strings(table, "title_terms", where)
+    roles = _strings(table, "search_roles", where)
+    emphasis = _string(table, "cover_letter_emphasis", where)
+    family = Family(
+        id=fid,
+        label=base.label if label is None else label,
+        languages=base.languages if languages is None else languages,
+        title_terms=base.title_terms if terms is None else terms,
+        title_filter=title_filter,
+        threshold=threshold,
+        search_roles=base.search_roles if roles is None else roles,
+        cover_letter_emphasis=base.cover_letter_emphasis
+        if emphasis is None
+        else emphasis,
+    )
+    return family, bool(_flag(table, "default", where))
+
+
+def _families(
+    data: dict[str, Any],
+    filters: TitleFilterPrefs,
+    targets: ProfileTargets,
+    persona: CoverLetterPersona,
+) -> FamilyRegistry:
+    builtins = _with_builtin_values(filters, targets, persona)
+    if "families" not in data:
+        return FamilyRegistry(builtins.values(), BUILTIN_REGISTRY.default.id)
+    table = _table(data, "families")
+    if not table:
+        raise ProfileError(
+            "preferences.toml [families] must declare at least one family"
+        )
+    families: list[Family] = []
+    defaults: list[str] = []
+    for fid, sub in table.items():
+        if not FAMILY_ID_RE.fullmatch(fid):
+            raise ProfileError(
+                f"preferences.toml [families.{fid}] invalid id: use lowercase "
+                "letters, digits and _, starting with a letter"
+            )
+        if len(fid) > FAMILY_ID_MAX_LEN:
+            raise ProfileError(
+                f"preferences.toml [families.{fid}] id too long: use at most "
+                f"{FAMILY_ID_MAX_LEN} characters (it rides in Telegram buttons)"
+            )
+        if not isinstance(sub, dict):
+            raise ProfileError(f"preferences.toml [families.{fid}] must be a table")
+        family, is_default = _family(
+            fid, sub, builtins.get(fid), filters.company_blocklist
+        )
+        families.append(family)
+        if is_default:
+            defaults.append(fid)
+    if len(defaults) > 1:
+        raise ProfileError(
+            "preferences.toml [families] only one default family is allowed "
+            f"(default = true in: {', '.join(defaults)})"
+        )
+    return FamilyRegistry(families, defaults[0] if defaults else None)
 
 
 def load_preferences(preferences_toml: Path | None) -> ProfilePrefs:
@@ -322,10 +503,18 @@ def load_preferences(preferences_toml: Path | None) -> ProfilePrefs:
     unknown = sorted(set(data) - _TABLES)
     if unknown:
         raise ProfileError(f"preferences.toml unknown table(s): {', '.join(unknown)}")
+    targets = _search_targets(data)
+    filters = _title_filters(data)
+    persona = _cover_letter(data)
+    families = _families(data, filters, targets, persona)
+    if "families" in data:
+        # Search suggestions follow the declared families (cva/suggest.py).
+        targets = replace(targets, families=families)
     return ProfilePrefs(
         stack_wall=_stack_wall(data),
         gates=_gates(data),
-        search_targets=_search_targets(data),
-        title_filters=_title_filters(data),
-        cover_letter=_cover_letter(data),
+        search_targets=targets,
+        title_filters=filters,
+        cover_letter=persona,
+        families=families,
     )

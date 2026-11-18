@@ -1,8 +1,8 @@
 """Deterministic search suggestions from the owner's profile (no LLM).
 
 ``suggest_searches`` turns the target roles and the most-used skills of the
-claims DB into 6-8 ready-to-edit auto searches, split into the ``ai`` and
-``backend`` profiles. The bridge serves them (``GET /searches/suggested``) to
+claims DB into 6-8 ready-to-edit auto searches, one group per role family
+(the built-in ``ai`` and ``backend``, or the profile's declared families). The bridge serves them (``GET /searches/suggested``) to
 the extension options page, where the owner picks the ones to add. Pure and
 stable: the same inputs always give the same list in the same order.
 """
@@ -13,21 +13,26 @@ from pathlib import Path
 from typing import Any, Final, Literal
 
 from cva.claimsdb import ClaimsDB, load_claims
+from cva.families import FamilyRegistry
 from cva.ingest.sources import SOURCES
-from cva.profile import Profile
 from cva.profile_paths import resolve_profile_paths
 
 MAX_SUGGESTIONS: Final[int] = 8
 _SKILLS_PER_SEARCH: Final[int] = 2
 
 # Primary claim tag (first entry of a skill claim's ``tags``) -> profile.
-# Skills outside both sets (C, Bash, Pygame, ...) are never searched for.
+# Skills outside both sets (C, Bash, Pygame, ...) are never searched for;
+# families other than ai/backend get role searches only.
 _AI_SKILL_TAGS: Final[frozenset[str]] = frozenset(
     {"llm", "rag", "nlp", "pytorch", "transformers", "sentence-transformers", "ir"}
 )
 _BACKEND_SKILL_TAGS: Final[frozenset[str]] = frozenset(
     {"python", "django", "fastapi", "sql", "rest", "docker", "pydantic"}
 )
+_SKILL_TAGS: Final[dict[str, frozenset[str]]] = {
+    "ai": _AI_SKILL_TAGS,
+    "backend": _BACKEND_SKILL_TAGS,
+}
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,11 @@ class ProfileTargets:
     ai_roles: tuple[str, ...]
     backend_roles: tuple[str, ...]
     locations: tuple[str, ...] = ("Barcelona", "remoto")
+    # The profile's declared role families (``[families]`` in
+    # preferences.toml); ``None`` = the built-in ai/backend from the roles
+    # above. Set by cva/profile_prefs.py so every caller of the targets
+    # (the bridge included) follows the profile's families.
+    families: FamilyRegistry | None = None
 
 
 DEFAULT_PROFILE_TARGETS: Final[ProfileTargets] = ProfileTargets(
@@ -52,7 +62,7 @@ class Search:
     name: str
     keywords: str
     location: str
-    filter_profile: Profile
+    filter_profile: str  # a role family id
     portals: tuple[str, ...]
     title_filter: Literal["on", "off"]
 
@@ -110,7 +120,7 @@ def _ranked_skills(claims: ClaimsDB, allowed: frozenset[str]) -> list[str]:
 
 
 def _profile_searches(
-    profile: Profile,
+    profile: str,
     roles: Sequence[str],
     skills: Sequence[str],
     locations: Sequence[str],
@@ -146,22 +156,28 @@ def suggest_searches(
     profile_targets: ProfileTargets,
     *,
     portals: Sequence[str] | None = None,
+    families: FamilyRegistry | None = None,
 ) -> list[Search]:
-    """6-8 deterministic searches for the AI and Backend profiles."""
+    """Up to MAX_SUGGESTIONS deterministic searches, one group per family.
+
+    ``families`` (else ``profile_targets.families``) are the profile's role
+    families, in declared order, each with its ``search_roles``; with neither,
+    the built-in ai and backend groups from ``profile_targets``' roles.
+    """
     chosen = tuple(portals) if portals is not None else default_portals()
-    suggestions = _profile_searches(
-        "ai",
-        profile_targets.ai_roles,
-        _ranked_skills(claims, _AI_SKILL_TAGS),
-        profile_targets.locations,
-        chosen,
-    ) + _profile_searches(
-        "backend",
-        profile_targets.backend_roles,
-        _ranked_skills(claims, _BACKEND_SKILL_TAGS),
-        profile_targets.locations,
-        chosen,
+    registry = families if families is not None else profile_targets.families
+    groups: list[tuple[str, Sequence[str]]] = (
+        [("ai", profile_targets.ai_roles), ("backend", profile_targets.backend_roles)]
+        if registry is None
+        else [(f.id, f.search_roles) for f in registry.families]
     )
+    suggestions: list[Search] = []
+    for profile, roles in groups:
+        tags = _SKILL_TAGS.get(profile)
+        skills = _ranked_skills(claims, tags) if tags is not None else []
+        suggestions += _profile_searches(
+            profile, roles, skills, profile_targets.locations, chosen
+        )
     seen: set[tuple[str, str]] = set()
     unique: list[Search] = []
     for search in suggestions:

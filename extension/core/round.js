@@ -3,7 +3,8 @@
 // round's state. Only one round runs at a time per service worker instance.
 
 import { t } from '../i18n.js';
-import { resolveTitleFilters } from '../filter.js';
+import { normalizeProfile, resolveFamilies, resolveTitleFilters } from '../filter.js';
+import { autoBeaconId, normalizeSearches } from '../searches.js';
 import { reportScan, fetchBotConfig } from './bot_bridge.js';
 import { planBeacons, portalOfBeacon, noPermissionEntry } from './beacon_plan.js';
 import { scanPage, SessionExpiredError } from './page_scan.js';
@@ -67,13 +68,39 @@ async function recoverPortalSeenStateOnce() {
 
 const ROUND_KEYS = [
   'settings', 'beacons', 'searches', 'enabledPortals', 'titleFilter', 'titleFilterBackend',
-  'profileTitleFilters', 'seenJobs', 'detailAttempts', 'recoveringBeacons', 'lastCheck', 'stats',
+  'profileTitleFilters', 'profileFamilies', 'familyTitleFilters',
+  'seenJobs', 'detailAttempts', 'recoveringBeacons', 'lastCheck', 'stats',
 ];
+
+// Auto beacon id -> the family of its search, normalized against the
+// profile's family list (role families: a declared id such as 'frontend' is
+// kept, an unknown one becomes the default family).
+function searchFamilies(searches, families) {
+  const out = new Map();
+  for (const search of normalizeSearches(searches, families)) {
+    for (const portalId of search.portals) {
+      const id = autoBeaconId(search, portalId);
+      if (!out.has(id)) out.set(id, search.filterProfile); // first wins, like expandSearches
+    }
+  }
+  return out;
+}
+
+// The beacon as delivered: its `filterProfile` is the family whose title
+// filter applies and that the bot receives as the payload `profile`.
+function withFamily(beacon, state) {
+  const fromSearch = beacon.auto ? state.searchFamilies.get(beacon.id) : undefined;
+  const filterProfile = fromSearch || normalizeProfile(beacon.filterProfile, state.families);
+  return { ...beacon, filterProfile };
+}
 
 async function loadRoundState() {
   const data = await readKeys(ROUND_KEYS);
+  const families = resolveFamilies(data);
   return {
     ...data,
+    families,
+    searchFamilies: searchFamilies(data.searches, families),
     filters: resolveTitleFilters(data),
     seenJobs: { ...asObject(data.seenJobs) },
     detailAttempts: { ...asObject(data.detailAttempts) },
@@ -122,7 +149,7 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
     reported = true;
     const seenList = Array.isArray(state.seenJobs[beacon.id]) ? state.seenJobs[beacon.id].map(String) : [];
     const result = await deliver({
-      tab, portal, beacon, cards, settings,
+      tab, portal, beacon: withFamily(beacon, state), cards, settings,
       filters: state.filters,
       seenList,
       attempts: asObject(state.detailAttempts[beacon.id]),

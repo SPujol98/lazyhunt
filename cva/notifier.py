@@ -6,10 +6,11 @@ no network, table-testable. Callback payloads are stateless strings (design
 no bot-side session state is needed):
 
 - ``an:{job_id}``                        analyze a beacon-reported job id
-- ``cv:{offer_id}:{AI|BACKEND}:{es|en|ca}``  generate the CV (2-part ``cv:{id}``
-  tolerated by the bot parser, defaults AI/es)
+- ``cv:{offer_id}:{ROLE}:{es|en|ca}``     generate the CV (ROLE: a family's
+  ``id.upper()``, e.g. AI|BACKEND; 2-part ``cv:{id}`` tolerated by the bot
+  parser, defaults to the offer's family)
 - ``lang:{offer_id}:{role}:{lang}``      flip the language toggle
-- ``variant:{offer_id}:{role}:{lang}``   flip the AI/BACKEND toggle
+- ``variant:{offer_id}:{role}:{lang}``   flip the role-family toggle
 - ``discard:{offer_id}``                 discard without generating a PDF
 - ``disc:{offer_id}``                    post-generation discard (no send recorded)
 - ``sent:{offer_id}``                    mark the offer as sent
@@ -35,6 +36,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from cva.beacons import BeaconPausedAlert
 from cva.commands import help_text
+from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, Family, FamilyRegistry
 from cva.llm import LlmResponseError
 from cva.match import MatchResult
 from cva.match.apply_instructions import KIND_EMOJI, ApplyInstruction
@@ -72,17 +74,12 @@ PREP = "prep"  # interview prep: prep:<id> (stage choice) | prep:<id>:<stage>
 BEACON_RESUME = "beacon_resume"
 BEACON_DISABLE = "beacon_disable"
 
-# Language toggle cycle: AI offers the full ES→EN→CA loop; Backend has no
-# Catalan CV, so its cycle is the ES↔EN pair only. Unknown values reset to "es".
-_AI_LANG_CYCLE: dict[str, str] = {"es": "en", "en": "ca", "ca": "es"}
-
-# Role toggle cycle (fixed-base-cvs): the bot offers AI and Backend only.
-_ROLE_CYCLE: dict[str, str] = {"AI": "BACKEND", "BACKEND": "AI"}
-_NO_CATALAN_ROLES: Final[frozenset[str]] = frozenset({"BACKEND"})
-# Data Scientist CVs are manual-only now; cards sent earlier still carry DS in
-# their callback data, so DS is mapped to AI instead of crashing.
-_LEGACY_ROLES: Final[dict[str, str]] = {"DS": "AI"}
-_ROLE_BUTTON_LABEL: Final[dict[str, str]] = {"BACKEND": "Backend"}
+# Role and language toggles follow the profile's role families (role-families
+# T5): the role cycle is the declared order, each family's language cycle its
+# declared CV languages (built-ins: AI ES→EN→CA, Backend ES↔EN), the Variante
+# label its ``label``. Unknown values reset to the default family / the
+# family's first language; legacy ``DS`` (Data Scientist CVs, manual-only now,
+# still in old cards' callback data) maps to AI.
 
 # Round-summary amendment: max discard lines listed before the "… y N más".
 _ROUND_DISCARD_LINES: Final[int] = 25
@@ -91,21 +88,41 @@ _ROUND_DISCARD_LINES: Final[int] = 25
 _ROUND_BLOCK_LINES: Final[int] = 5
 
 
-def next_lang(role: str, lang: str) -> str:
+def next_lang(
+    role: str, lang: str, *, families: FamilyRegistry = BUILTIN_REGISTRY
+) -> str:
     """Next language of the toggle cycle for ``role`` (pure, table-tested)."""
-    if normalize_role(role) in _NO_CATALAN_ROLES:
-        return "en" if lang == "es" else "es"
-    return _AI_LANG_CYCLE.get(lang, "es")
+    languages = families.resolve(role).languages
+    if lang not in languages:
+        return languages[0]
+    return languages[(languages.index(lang) + 1) % len(languages)]
 
 
-def normalize_role(role: str) -> str:
-    """Map a role from (possibly old) callback data onto the bot's roles."""
-    return _LEGACY_ROLES.get(role, role)
+def normalize_role(role: str, *, families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+    """Map a role from (possibly old) callback data onto the profile's roles:
+    ``DS`` -> ``AI``, any spelling of a declared role -> its role, anything
+    else -> the default family's role."""
+    return families.resolve(role).role
 
 
-def next_role(role: str) -> str:
-    """Next role of the variant toggle (unknown values reset to AI)."""
-    return _ROLE_CYCLE.get(normalize_role(role), "AI")
+def next_role(role: str, *, families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+    """Next role of the variant toggle (unknown values reset to the default)."""
+    return families.next_role(role)
+
+
+def _family_lang(family: Family, lang: str) -> str:
+    """A CV language the family has: a known language it lacks becomes its
+    first one (built-in Backend: ``ca`` -> ``es``)."""
+    if lang in CV_LANGUAGES and lang not in family.languages:
+        return family.languages[0]
+    return lang
+
+
+def unknown_role_message(role: str, default_label: str) -> str:
+    """Note on an old card button whose CV role the profile no longer has."""
+    return (
+        f"⚠️ La variante {role} ya no está en tu perfil: uso {default_label}."
+    )
 
 
 def canonical_job_url(job_id: str) -> str:
@@ -659,22 +676,25 @@ def with_no_cv_line(text: str, label: str) -> str:
 def cv_keyboard(
     offer_id: int,
     *,
-    role: str = "AI",
+    role: str | None = None,
     lang: str = "es",
     cover_letter_asked: bool = False,
     cv_needed: bool = True,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> InlineKeyboardMarkup:
     """Generate-CV keyboard: action + Lang/Variant toggles + Mark sent + Discard.
 
     ``cv_needed=False`` (portal applied to with its own profile) drops the
     Generate row and the Lang/Variant toggles; the rest stays.
 
-    Roles without a Catalan CV (Backend) never carry ``ca``: it falls
-    back to ``es`` so the Generate button can never request a missing master.
+    ``role`` ``None`` is the default family's. A family never carries a
+    language it lacks (built-in Backend: ``ca``): it falls back to the
+    family's first language so the Generate button can never request a
+    missing base CV.
     """
-    role = normalize_role(role)
-    if role in _NO_CATALAN_ROLES and lang == "ca":
-        lang = "es"
+    family = families.resolve(role) if role is not None else families.default
+    role = family.role
+    lang = _family_lang(family, lang)
     cv_rows = (
         [
             [
@@ -688,7 +708,7 @@ def cv_keyboard(
                     callback_data=f"{LANG}:{offer_id}:{role}:{lang}",
                 ),
                 InlineKeyboardButton(
-                    f"Variante: {_ROLE_BUTTON_LABEL.get(role, role)}",
+                    f"Variante: {family.label}",
                     callback_data=f"{VARIANT}:{offer_id}:{role}:{lang}",
                 ),
             ],
@@ -716,14 +736,19 @@ def cv_keyboard(
 
 
 def sent_keyboard(
-    offer_id: int, cv_base: str | None = None, *, cover_letter_asked: bool = False
+    offer_id: int,
+    cv_base: str | None = None,
+    *,
+    cover_letter_asked: bool = False,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> InlineKeyboardMarkup:
     """Post-generation keyboard: [Marcar enviada] + [🗑 Descartar].
 
     With the delivered ``cv_base`` (e.g. ``BACKEND_EN``) a second row offers
     [🔄 Rehacer CV]: it re-runs that same variant through the regular ``cv:``
     callback, so a CV made before a base-CV change can be rebuilt with the
-    new version. Legacy ``DS_*`` rows map to AI (normalize_role).
+    new version. Legacy ``DS_*`` rows map to AI; a role the profile no longer
+    declares to the default family (in a language it has).
     """
     rows = [
         [
@@ -735,11 +760,13 @@ def sent_keyboard(
     ]
     if cv_base and "_" in cv_base:
         role, lang = cv_base.rsplit("_", 1)
+        family = families.resolve(role)
+        lang = _family_lang(family, lang.lower())
         rows.append(
             [
                 InlineKeyboardButton(
                     "🔄 Rehacer CV",
-                    callback_data=f"{CV}:{offer_id}:{normalize_role(role)}:{lang.lower()}",
+                    callback_data=f"{CV}:{offer_id}:{family.role}:{lang}",
                 )
             ]
         )
@@ -1116,16 +1143,22 @@ def backstop_error_message(reason: str) -> str:
     return f"⚠️ Ha fallado el procesamiento de tu mensaje: {reason}"
 
 
-def help_message() -> str:
+def help_message(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
     """``/help`` and ``/start`` text: grouped commands and card buttons."""
-    return help_text()
+    return help_text(families)
 
 
-def offer_status_line(row: object, *, also_on: Sequence[str] = ()) -> str:
-    """One /status line: id · estado · match · posición (Spanish)."""
+def offer_status_line(
+    row: object,
+    *,
+    also_on: Sequence[str] = (),
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> str:
+    """One /status line: id · estado · match · posición (Spanish); offers of
+    a non-default family end with its label, e.g. ``[backend]``."""
     match = row.match  # type: ignore[attr-defined]
-    perfil = getattr(row, "perfil", None)
-    tag = " [backend]" if perfil == "backend" else ""
+    family = families.resolve(families.normalize(getattr(row, "perfil", None)))
+    tag = "" if family == families.default else f" [{family.label.lower()}]"
     line = (
         f"#{row.id} · {row.estado} · "  # type: ignore[attr-defined]
         f"match {match if match is not None else '—'} · "

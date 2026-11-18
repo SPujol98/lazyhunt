@@ -96,7 +96,7 @@ def test_sanitize_core_role_is_one_short_plain_line() -> None:
 
 def test_schema_version_and_tables(tmp_path: Path) -> None:
     repo = OfferRepository(sqlite3.connect(tmp_path / "a.db"))
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(calibration_examples)")]
     assert cols == [
         "id",
@@ -137,7 +137,7 @@ def test_v20_database_migrates_to_v21_idempotently(tmp_path: Path) -> None:
 
     migrated = sqlite3.connect(path)
     OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
     assert (
         migrated.execute("SELECT count(*) FROM calibration_examples").fetchone()[0] == 0
     )
@@ -147,7 +147,7 @@ def test_v20_database_migrates_to_v21_idempotently(tmp_path: Path) -> None:
 
     again = sqlite3.connect(path)
     OfferRepository(again)
-    assert again.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert again.execute("PRAGMA user_version").fetchone()[0] == 23
 
 
 # --- snapshot at send time ----------------------------------------------------

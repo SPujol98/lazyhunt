@@ -145,7 +145,7 @@ def test_v1_database_migrates_to_v2_daily_cap_columns(tmp_path: Path) -> None:
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     columns = {
         row[1] for row in repo._conn.execute("PRAGMA table_info(beacons)").fetchall()
     }

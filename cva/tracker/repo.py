@@ -13,9 +13,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from cva.calibration import CalibrationExample, SentJudgment
+from cva.families import FAMILY_ID_RE
 from cva.ingest.closed import CLOSED_NOTE
 from cva.ingest.dedup import dedup_key
 from cva.ingest.sources import (
@@ -26,7 +27,7 @@ from cva.ingest.sources import (
 )
 from cva.tracker.history import PRE_SEND_ESTADOS, HistoryRecord, log_marker
 
-SCHEMA_VERSION: Final[int] = 22
+SCHEMA_VERSION: Final[int] = 23
 NOTE_SEPARATOR: Final[str] = " · "
 # app_state key of the persistent global pause ("1"/"0"; absent = never toggled).
 PAUSED_STATE_KEY: Final[str] = "paused"
@@ -353,6 +354,50 @@ _MIGRATION_V22: Final[str] = (
     "created_at TEXT NOT NULL);"
 )
 
+# v23 (role-families): offers.perfil / offers.cv_base accept any role family
+# the profile declares (cva/families.py), not just the built-in ai/backend.
+# The closed lists become shape checks: perfil is a family id
+# (FAMILY_ID_RE, [a-z][a-z0-9_]*) and cv_base is <ROLE>_<LANG> (the role is
+# id.upper(), the language two upper-case letters). Every legacy value
+# (ai/backend, AI_*/DS_*/BACKEND_*, AI_CA) matches. Same atomic rebuild recipe
+# as v13, every other column/constraint/default and the dedup_key index kept.
+_PERFIL_CHECK_V23: Final[str] = (
+    "CHECK(perfil IS NULL OR (perfil GLOB '[a-z]*' AND perfil NOT GLOB '*[^a-z0-9_]*'))"
+)
+_CV_BASE_CHECK_V23: Final[str] = (
+    "CHECK(cv_base IS NULL OR (cv_base GLOB '[A-Z]*_[A-Z][A-Z]' "
+    "AND cv_base NOT GLOB '*[^A-Z0-9_]*'))"
+)
+_OFFERS_V23_COLUMNS: Final[str] = f"{_OFFERS_V13_COLUMNS}, ingest_source, ubicacion"
+_MIGRATION_V23: Final[str] = (
+    "BEGIN;\n"
+    "CREATE TABLE offers_v23 ("
+    "id INTEGER PRIMARY KEY, fecha_envio TEXT, empresa TEXT, posicion TEXT, "
+    f"origen TEXT {_ORIGEN_CHECK_V13}, "
+    "url_oferta TEXT, "
+    f"cv_base TEXT {_CV_BASE_CHECK_V23}, "
+    "cv_adaptado TEXT, cambios TEXT, "
+    "match INTEGER CHECK(match BETWEEN 0 AND 100), "
+    "sueldo_rango TEXT, sueldo_ofrecido TEXT, "
+    "estado TEXT NOT NULL DEFAULT 'pendiente_analisis' CHECK(estado IN ("
+    "'pendiente_analisis','analizada','preparada','descartada',"
+    "'enviada','screening','entrevista_tecnica','entrevista_final',"
+    "'oferta','aceptada','rechazada','retirada','sin_respuesta')), "
+    "fecha_update TEXT, contacto TEXT, notas TEXT, source_data TEXT NOT NULL, "
+    "analyze_attempts INTEGER NOT NULL DEFAULT 0, next_analyze_at TEXT, "
+    f"perfil TEXT {_PERFIL_CHECK_V23}, "
+    "salario_investigado TEXT, carta_presentacion TEXT, fecha_alta TEXT, "
+    "fecha_publicacion TEXT, fecha_limite TEXT, dedup_key TEXT, "
+    "ingest_source TEXT, ubicacion TEXT);\n"
+    f"INSERT INTO offers_v23 ({_OFFERS_V23_COLUMNS}) "
+    f"SELECT {_OFFERS_V23_COLUMNS} FROM offers;\n"
+    "DROP TABLE offers;\n"
+    "ALTER TABLE offers_v23 RENAME TO offers;\n"
+    "CREATE INDEX IF NOT EXISTS idx_offers_dedup_key ON offers (dedup_key);\n"
+    "PRAGMA user_version = 23;\n"
+    "COMMIT;"
+)
+
 # Ordered by provenance: "paste" rows are always 'otro'. "link" and
 # "bridge-inline" rows take the portal id from the offer URL host (the sources
 # registry), so a new portal needs no change here; without a registered host a
@@ -385,13 +430,22 @@ class OfferInput(BaseModel):
     url: str | None = None
     text: str
     source: Literal["link", "paste", "bridge-inline"]
-    # backend-profile: 'ai' | 'backend' (None = leave unset / keep the stored one).
-    profile: Literal["ai", "backend"] | None = None
+    # role-families: a family id ('ai', 'backend' or one the profile declares;
+    # FAMILY_ID_RE shape). None = leave unset / keep the stored one.
+    profile: str | None = None
     # offer-dates: ISO dates extracted from the offer (None = unknown).
     fecha_publicacion: str | None = None
     fecha_limite: str | None = None
     # v20: the portal's location field (None = unknown / keep the stored one).
     location: str | None = None
+
+    @field_validator("profile")
+    @classmethod
+    def _family_id_shape(cls, value: str | None) -> str | None:
+        """Reject a profile that is not a family id (the offers.perfil CHECK)."""
+        if value is not None and not FAMILY_ID_RE.fullmatch(value):
+            raise ValueError(f"invalid family id: {value!r}")
+        return value
 
 
 class OfferRow(BaseModel):
@@ -738,6 +792,17 @@ class OfferRepository:
         if version < 22:
             conn.commit()
             self._migrate_v22()
+        if version < 23:
+            # foreign_keys is a no-op inside the transaction: toggled outside (v7).
+            conn.commit()
+            conn.execute("PRAGMA foreign_keys=OFF")
+            try:
+                conn.executescript(_MIGRATION_V23)
+            except sqlite3.Error:
+                conn.rollback()
+                raise
+            finally:
+                conn.execute("PRAGMA foreign_keys=ON")
         if version < SCHEMA_VERSION:
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()

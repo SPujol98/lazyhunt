@@ -1,7 +1,8 @@
 """Salary reference table + lookup + card line (salary-estimate T2).
 
 The table (``data/salary_reference.toml``, tracked, no personal data) holds
-source-cited ranges keyed by branch (AI/BACKEND), level (junior/mid) and
+source-cited ranges keyed by branch (a role family's CV role: AI, BACKEND or
+any role the profile declares, role-families T4), level (junior/mid) and
 city (barcelona/madrid/spain_remote). A card shows, in order of preference:
 
 1. the salary PUBLISHED in the offer text (``cva.match.salary``), or
@@ -16,14 +17,15 @@ import re
 import tomllib
 import unicodedata
 from pathlib import Path
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.match.salary import PublishedSalary, extract_published_salary
-from cva.profile import normalize_profile
 
-Branch = Literal["AI", "BACKEND"]
+# A family's CV role (``Family.role``: the id upper-cased).
+Branch = Annotated[str, Field(pattern="^[A-Z][A-Z0-9_]*$")]
 Level = Literal["junior", "mid"]
 City = Literal["barcelona", "madrid", "spain_remote"]
 
@@ -32,7 +34,6 @@ CITY_LABEL: Final[dict[str, str]] = {
     "madrid": "Madrid",
     "spain_remote": "España remoto",
 }
-_BRANCH_LABEL: Final[dict[Branch, str]] = {"AI": "AI", "BACKEND": "Backend"}
 _SOURCE_MAX: Final[int] = 60
 
 
@@ -166,13 +167,24 @@ def published_line(found: PublishedSalary) -> str:
     return f"💶 Salario publicado: {amount} € brutos/año{note}"
 
 
-def reference_line(row: ReferenceRange, *, location_note: str = "") -> str:
-    """``💶 Referencia: 28–34k (mediana 31k) · AI junior · Barcelona · ...``"""
+def reference_line(
+    row: ReferenceRange,
+    *,
+    location_note: str = "",
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> str:
+    """``💶 Referencia: 28–34k (mediana 31k) · AI junior · Barcelona · ...``
+
+    The branch is shown with its family's label (the role itself when no
+    family of ``families`` has it).
+    """
     location = CITY_LABEL[row.city] + location_note
+    family = families.get(row.branch)
+    branch = family.label if family is not None else row.branch
     source = _short_source(row.sources[0]) if row.sources else "sin fuente"
     line = (
         f"💶 Referencia: {_k(row.low)[:-1]}–{_k(row.high)} (mediana {_k(row.median)}) · "
-        f"{_BRANCH_LABEL[row.branch]} {row.level} · {location} · "
+        f"{branch} {row.level} · {location} · "
         f"fuente: {source}, {row.as_of} · pide ~{_k(row.ask)}"
     )
     if row.confidence == "low":
@@ -186,15 +198,20 @@ def salary_line(
     text: str | None,
     perfil: object,
     table: list[ReferenceRange],
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> str:
-    """The card line for an offer, or ``""`` when there is nothing to show."""
+    """The card line for an offer, or ``""`` when there is nothing to show.
+
+    The branch is the CV role of the offer's family in ``families`` (unknown
+    or NULL: the default family); a family without rows shows no reference.
+    """
     published = extract_published_salary(text)
     if published is not None:
         return published_line(published)
     level = infer_level(title, text)
     if level is None:
         return ""
-    branch: Branch = "BACKEND" if normalize_profile(perfil) == "backend" else "AI"
+    branch = families.role_for(perfil)
     city, detected = infer_city(title, text)
     row = lookup(table, branch, level, city)
     if row is None:
@@ -204,4 +221,4 @@ def salary_line(
         note = " (ubicación no detectada)"
     elif row.city != city:  # fell back to the spain_remote row
         note = f" (sin dato de {CITY_LABEL[city]})"
-    return reference_line(row, location_note=note)
+    return reference_line(row, location_note=note, families=families)

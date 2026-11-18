@@ -572,7 +572,69 @@ async function areaImport() {
   check('storage unchanged', res.fed.length === 1 && sameJson(res.fed[0].after, STORE_B), true);
 }
 
-const AREAS = { popup: areaPopup, export: areaExport, import: areaImport };
+
+// --- options: role families in export / import (role-families T6, S3/S5) --------------------
+const FAMILIES3 = [
+  { id: 'ai', label: 'AI', default: true },
+  { id: 'backend', label: 'Backend', default: false },
+  { id: 'frontend', label: 'Frontend', default: false },
+];
+const TF_FE = { enabled: true, includeGroups: [['React']], excludeTerms: ['Senior'] };
+const FE_SEARCH = { id: 's_fe', name: 'FE', keywords: 'react', location: 'Barcelona', filterProfile: 'frontend', portals: ['linkedin'], titleFilter: 'on' };
+const STORE_FE = {
+  ...STORE_A,
+  profileFamilies: FAMILIES3,
+  familyTitleFilters: { frontend: TF_FE },
+  searches: [SEARCH, FE_SEARCH],
+  beacons: [...STORE_A.beacons, { id: 'bcn_3', name: 'FE manual', url: 'https://www.linkedin.com/jobs/search/?keywords=fe', enabled: true, filterProfile: 'frontend' }],
+};
+
+async function areaFamilies() {
+  setScenario('families: export keeps the frontend family and its filter');
+  const file = (await exportFrom(STORE_FE))[0];
+  ok('an export exists', Boolean(file));
+  const p = file ? file.parsed : {};
+  check('format and version unchanged', [p.format, p.version], [FORMAT, 1]);
+  check('searches keep frontend', (p.searches || []).map((x) => x.filterProfile), ['ai', 'frontend']);
+  check('beacons keep frontend', (p.beacons || []).map((x) => x.filterProfile), ['ai', 'backend', 'frontend']);
+  check('the frontend filter is exported', p.familyTitleFilters, { frontend: TF_FE });
+  check('built-in filters keep their keys', [p.titleFilter, p.titleFilterBackend], [TF_AI, TF_BACKEND]);
+
+  setScenario('families: a built-in-only export has no family map');
+  const plain = (await exportFrom(STORE_A))[0];
+  check('no familyTitleFilters key', plain && 'familyTitleFilters' in plain.parsed, false);
+
+  setScenario('families: importing into a profile with that family keeps it');
+  const target = { ...STORE_B, profileFamilies: FAMILIES3 };
+  let res = await importInto(target, file ? file.text : '{}');
+  let a = res.fed[0] ? res.fed[0].after : {};
+  check('searches keep frontend', (a.searches || []).map((x) => x.filterProfile), ['ai', 'frontend']);
+  check('beacons keep frontend', (a.beacons || []).map((x) => x.filterProfile), ['ai', 'backend', 'frontend']);
+  check('the frontend filter is stored', a.familyTitleFilters, { frontend: TF_FE });
+
+  setScenario('families: importing into a profile without that family degrades to the default');
+  res = await importInto(STORE_B, file ? file.text : '{}');
+  check('the import ran (no crash)', res.fed.length, 1);
+  a = res.fed[0] ? res.fed[0].after : {};
+  check('searches degrade to the default family', (a.searches || []).map((x) => x.filterProfile), ['ai', 'ai']);
+  check('beacons degrade to the default family', (a.beacons || []).map((x) => x.filterProfile), ['ai', 'backend', 'ai']);
+  check('built-in filters imported', [a.titleFilter, a.titleFilterBackend], [TF_AI, TF_BACKEND]);
+
+  setScenario('families: a v1 export of the previous version imports unchanged');
+  const v1 = {
+    version: 1, format: FORMAT, exportedAt: '2026-01-01T00:00:00.000Z',
+    settings: { intervalMinutes: 45, bridgeUrl: 'http://127.0.0.1:8765/bridge' },
+    beacons: STORE_A.beacons, searches: [SEARCH], titleFilter: TF_AI, titleFilterBackend: TF_BACKEND,
+  };
+  res = await importInto(STORE_B, JSON.stringify(v1));
+  a = res.fed[0] ? res.fed[0].after : {};
+  check('beacons', a.beacons, STORE_A.beacons);
+  check('searches', a.searches, [SEARCH]);
+  check('filters', [a.titleFilter, a.titleFilterBackend], [TF_AI, TF_BACKEND]);
+  check('no family map written', 'familyTitleFilters' in a, false);
+}
+
+const AREAS = { popup: areaPopup, export: areaExport, import: areaImport, families: areaFamilies };
 
 async function main() {
   const wanted = process.argv.slice(2);

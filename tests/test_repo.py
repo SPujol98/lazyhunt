@@ -127,7 +127,7 @@ def test_init_applies_schema_with_wal_and_user_version(
     OfferRepository(conn, clock=clock)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     # user_version tracks the ordered migrations (v6: offers.perfil).
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 23
     tables = {
         row[0]
         for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -140,7 +140,7 @@ def test_init_is_idempotent_on_second_open(
 ) -> None:
     OfferRepository(conn, clock=clock)
     OfferRepository(conn, clock=clock)  # migrations already applied: no re-run
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 23
 
 
 @pytest.mark.parametrize(("column", "sql_type"), EXPECTED_TYPES)
@@ -202,7 +202,7 @@ def test_estado_defaults_to_pendiente_analisis(
         ("origen", "Wall Apop"),
         ("origen", ""),
         ("origen", "x" * 41),
-        ("cv_base", "XX_ES"),
+        ("cv_base", "xx_es"),
         ("match", 101),
         ("match", -1),
         ("estado", "cancelada"),
@@ -251,7 +251,7 @@ def test_v2_database_migrates_to_v3_cv_base_check_preserving_rows(
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     row = repo.get_offer(1)
     assert row.cv_base == "AI_ES" and row.estado == "analizada"
     # The rebuilt CHECK accepts the new variant and still rejects junk.
@@ -259,7 +259,7 @@ def test_v2_database_migrates_to_v3_cv_base_check_preserving_rows(
     assert repo.get_offer(1).cv_base == "AI_CA"
     with pytest.raises(sqlite3.IntegrityError):
         repo._conn.execute(
-            "INSERT INTO offers (source_data, cv_base) VALUES ('t', 'XX_ES')"
+            "INSERT INTO offers (source_data, cv_base) VALUES ('t', 'xx_es')"
         )
         repo._conn.commit()
 
@@ -440,7 +440,7 @@ def test_v12_database_migrates_to_v13_loose_origen_check(tmp_path: Path) -> None
 
     migrated = sqlite3.connect(path)
     OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
     assert [r[1] for r in migrated.execute("PRAGMA table_info(offers)")] == [
         *columns,
         "ingest_source",
@@ -648,7 +648,7 @@ def test_v4_migration_adds_retry_columns_to_v3_database(tmp_path: Path) -> None:
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     columns = {row[1] for row in repo._conn.execute("PRAGMA table_info(offers)")}
     assert {"analyze_attempts", "next_analyze_at"} <= columns
     row = repo.get_offer(1)
@@ -669,7 +669,7 @@ def test_fresh_database_runs_full_chain_to_v4(
     conn: sqlite3.Connection, clock: _Clock
 ) -> None:
     OfferRepository(conn, clock=clock)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 23
     columns = {row[1] for row in conn.execute("PRAGMA table_info(offers)")}
     assert {"analyze_attempts", "next_analyze_at"} <= columns
 
@@ -704,7 +704,7 @@ def test_v5_migration_adds_judge_results_table_to_v4_database(
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     tables = {
         row[0]
         for row in repo._conn.execute(
@@ -894,7 +894,7 @@ def test_v13_database_migrates_to_v14_with_null_ingest_source(
 
     migrated = sqlite3.connect(path)
     migrated_repo = OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
     assert migrated_repo.get_offer(offer_id).ingest_source is None
 
 
@@ -916,7 +916,7 @@ def test_v13_database_with_column_already_present_migrates_to_v14(
 
     migrated = sqlite3.connect(path)
     migrated_repo = OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
     assert migrated_repo.get_offer(offer_id).ingest_source == "bridge-inline"
 
 

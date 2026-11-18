@@ -37,7 +37,7 @@ def _repo(tmp_path: Path, clock: str = "2026-10-18") -> OfferRepository:
 
 def test_fresh_db_is_v10_with_nullable_date_columns(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(offers)")]
     assert all(c in cols for c in NEW_COLUMNS)
 
@@ -53,7 +53,7 @@ def test_v9_db_migrates_leaving_old_rows_null(tmp_path: Path) -> None:
     repo._conn.commit()
     repo._conn.close()
     migrated = OfferRepository(sqlite3.connect(path))
-    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 22
+    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 23
     row = migrated.get_offer(1)
     assert (row.fecha_alta, row.fecha_publicacion, row.fecha_limite) == (None,) * 3
 

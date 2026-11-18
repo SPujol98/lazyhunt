@@ -4,7 +4,7 @@
 // (odd/tasks/extension-rewrite.md T1, spec docs/extension-spec.md).
 //
 //   node extension_characterization_harness.js <area>
-//   areas: alarm, tab, migrate, seen, msg, round
+//   areas: alarm, tab, migrate, seen, msg, round, families
 //
 // Implementation-agnostic by design: the service worker named in
 // extension/manifest.json is imported over the fake browser of
@@ -506,8 +506,79 @@ async function areaRound() {
   check('auto beacons are never written into beacons', b.store.beacons, []);
 }
 
+// ------------------------------------------------------------------------------------------
+// role-families T6 (odd/tasks/role-families.md S3, S5): a family the bot declared
+// (stored as profileFamilies) keeps its id through the round, picks its own title
+// filter (familyTitleFilters) and reaches the bot as the payload `profile`.
+const FAMILIES = [
+  { id: 'ai', label: 'AI', default: true },
+  { id: 'backend', label: 'Backend', default: false },
+  { id: 'frontend', label: 'Frontend', default: false },
+];
+
+async function areaFamilies() {
+  const cards = [{ id: '51', title: 'React Developer' }, { id: '52', title: 'AI Engineer' }];
+  const frontendFilter = { enabled: true, includeGroups: [['React']], excludeTerms: [] };
+
+  await boot('families: a frontend search keeps its family and filter', roundStore([], {
+    profileFamilies: FAMILIES,
+    familyTitleFilters: { frontend: frontendFilter },
+    titleFilter: { enabled: true, includeGroups: [['AI']], excludeTerms: [] },
+    searches: [{ id: 's1', name: 'FE', keywords: 'react', location: 'Barcelona', filterProfile: 'frontend', portals: ['linkedin'], titleFilter: 'on' }],
+  }), { pages: { 'https://www.linkedin.com/jobs/search/*': liPage(cards) } });
+  await send({ type: 'run-now' });
+  check('the frontend filter decides', bridgedIds(), ['51']);
+  check('payload profile is frontend', bridged()[0] && bridged()[0].body.profile, 'frontend');
+
+  await boot('families: a manual frontend beacon sends profile frontend', roundStore([beacon('b1', LI_A, { filterProfile: 'frontend' })], {
+    profileFamilies: FAMILIES,
+    familyTitleFilters: { frontend: frontendFilter },
+  }), { pages: { [LI_A]: liPage(cards) } });
+  await send({ type: 'run-now' });
+  check('manual beacon: the frontend filter decides', bridgedIds(), ['51']);
+  check('manual beacon: payload profile is frontend', bridged()[0] && bridged()[0].body.profile, 'frontend');
+
+  await boot('families: an undeclared family degrades to the default one', roundStore([beacon('b1', LI_A, { filterProfile: 'nursing' })], {
+    profileFamilies: FAMILIES,
+    titleFilter: { enabled: true, includeGroups: [['AI']], excludeTerms: [] },
+  }), { pages: { [LI_A]: liPage(cards) } });
+  await send({ type: 'run-now' });
+  check('unknown family: the default (ai) filter decides', bridgedIds(), ['52']);
+  check('unknown family: payload profile is the default', bridged()[0] && bridged()[0].body.profile, 'ai');
+
+  // GET /config (read by every round) keeps the family list in sync.
+  const fe = { enabled: true, includeGroups: [['React']], excludeTerms: [] };
+  const served = { ai: { enabled: true, includeGroups: [['Served']], excludeTerms: [] } };
+  await boot('families: a round adopts the /config family list', roundStore([], {
+    profileTitleFilters: served,
+    familyTitleFilters: { frontend: { enabled: false, includeGroups: [['Mine']], excludeTerms: [] } },
+  }), { config: { paused: false, enabledPortals: ['linkedin'], families: [...FAMILIES.slice(0, 2), { ...FAMILIES[2], titleFilter: fe }] } });
+  await send({ type: 'run-now' });
+  check('/config: profileFamilies stored', b.store.profileFamilies, FAMILIES);
+  check('/config: the family filter joins the served defaults', b.store.profileTitleFilters, { ...served, frontend: fe });
+  check('/config: user edits untouched', b.store.familyTitleFilters, { frontend: { enabled: false, includeGroups: [['Mine']], excludeTerms: [] } });
+
+  const builtinStore = roundStore([], { profileTitleFilters: served });
+  await boot('families: a built-in /config leaves storage unchanged', builtinStore, { config: { paused: false, enabledPortals: ['linkedin'] } });
+  await send({ type: 'run-now' });
+  const keep = (st) => Object.fromEntries(Object.entries(st).filter(([k]) => !['botConfig', 'stats', 'lastCheck', 'seenJobs', 'detailAttempts', 'recoveringBeacons', 'portalSeenRecovery'].includes(k)));
+  check('/config without families: storage unchanged', keep(b.store), keep(clone(builtinStore)));
+
+  await boot('families: /config without families removes a stale list', roundStore([], { profileFamilies: FAMILIES }), { config: { paused: false, enabledPortals: ['linkedin'] } });
+  await send({ type: 'run-now' });
+  check('/config without families: profileFamilies removed', 'profileFamilies' in b.store, false);
+
+  await boot('families: without a family list frontend is unknown (built-ins)', roundStore([beacon('b1', LI_A, { filterProfile: 'frontend' })], {
+    titleFilter: { enabled: true, includeGroups: [['AI']], excludeTerms: [] },
+  }), { pages: { [LI_A]: liPage(cards) } });
+  await send({ type: 'run-now' });
+  check('built-ins: the ai filter decides', bridgedIds(), ['52']);
+  check('built-ins: payload profile is ai', bridged()[0] && bridged()[0].body.profile, 'ai');
+}
+
 const AREAS = {
   alarm: areaAlarm, tab: areaTab, migrate: areaMigrate, seen: areaSeen, msg: areaMsg, round: areaRound,
+  families: areaFamilies,
 };
 
 async function main() {

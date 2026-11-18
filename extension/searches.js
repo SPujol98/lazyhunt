@@ -1,7 +1,8 @@
 // Profile-driven searches (portal-adapters T2). Pure helpers, no chrome.*.
 //
 // The `searches` setting is a list of
-//   { id, name, keywords, location, filterProfile: 'ai'|'backend',
+//   { id, name, keywords, location, filterProfile: <family id: 'ai', 'backend' or
+//     one the bot's profile declares (role families)>,
 //     portals: [portalId], titleFilter: 'on'|'off' }.
 // Each (search x known portal) expands into an "auto beacon" whose URL comes
 // from the portal adapter's buildSearchUrl. Auto beacons are derived on every
@@ -10,7 +11,9 @@
 import { normalizeProfile } from './filter.js';
 import { slugify } from './slug.js';
 
-export function normalizeSearch(raw) {
+// `families` is the profile's family list (filter.js resolveFamilies());
+// without it the built-in two apply.
+export function normalizeSearch(raw, families) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const portals = Array.isArray(r.portals)
     ? [...new Set(r.portals.filter((p) => typeof p === 'string' && p))]
@@ -20,14 +23,14 @@ export function normalizeSearch(raw) {
     name: String(r.name || '').trim(),
     keywords: String(r.keywords || '').trim(),
     location: String(r.location || '').trim(),
-    filterProfile: normalizeProfile(r.filterProfile),
+    filterProfile: normalizeProfile(r.filterProfile, families),
     portals,
     titleFilter: r.titleFilter === 'off' ? 'off' : 'on',
   };
 }
 
-export function normalizeSearches(list) {
-  return Array.isArray(list) ? list.map(normalizeSearch) : [];
+export function normalizeSearches(list, families) {
+  return Array.isArray(list) ? list.map((raw) => normalizeSearch(raw, families)) : [];
 }
 
 // Stable across renames when the search has an id (the options page assigns
@@ -52,7 +55,7 @@ export function dedupeSearchIds(searches, newId) {
 // adapter removed later), expand to nothing. `enabledPortals` (array or Set of
 // ids; undefined = every portal, as before the per-portal opt-in) additionally
 // drops the portals the owner has not enabled.
-export function expandSearches(searches, portals, enabledPortals) {
+export function expandSearches(searches, portals, enabledPortals, families) {
   const allowed = enabledPortals === undefined ? null : new Set(enabledPortals);
   const byId = new Map((portals || []).map((p) => [p.id, p]));
   const out = [];
@@ -60,7 +63,7 @@ export function expandSearches(searches, portals, enabledPortals) {
   // Portals that ignore keywords (Manfred) build the same URL for every search:
   // open it once per round.
   const usedUrls = new Set();
-  for (const search of normalizeSearches(searches)) {
+  for (const search of normalizeSearches(searches, families)) {
     if (!search.keywords) continue;
     for (const portalId of search.portals) {
       const portal = byId.get(portalId);
@@ -111,11 +114,11 @@ export function searchKey(search) {
 }
 
 // Rows of a bridge response that can become a search (keywords required).
-export function parseSuggestions(payload) {
+export function parseSuggestions(payload, families) {
   const rows = payload && Array.isArray(payload.searches) ? payload.searches : [];
   return rows
     .filter((r) => r && typeof r === 'object')
-    .map(normalizeSearch)
+    .map((raw) => normalizeSearch(raw, families))
     .filter((s) => s.keywords);
 }
 
@@ -123,14 +126,14 @@ export function parseSuggestions(payload) {
 // or drops an existing search; a pick already present (same normalized
 // keywords + location, also among the picks) is skipped; new ids come from
 // `newId` and never collide with an existing one.
-export function mergeSuggestedSearches(existing, picked, newId) {
+export function mergeSuggestedSearches(existing, picked, newId, families) {
   const searches = [...(existing || [])];
   const keys = new Set(searches.map(searchKey));
   const ids = new Set(searches.map((s) => s.id));
   let added = 0;
   let skipped = 0;
   for (const raw of picked || []) {
-    const search = normalizeSearch(raw);
+    const search = normalizeSearch(raw, families);
     const key = searchKey(search);
     if (!search.keywords || keys.has(key)) {
       skipped += 1;

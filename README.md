@@ -286,6 +286,7 @@ Everything that describes you or your search is yours to change, and none of it 
 | Your experience (the only source for CVs and letters) | `<profile>/claims.json`, `<profile>/masters/`, your base CVs | A claim that is not here never appears in a CV or a letter |
 | Cover-letter voice and emphasis | `<profile>/voice.md`, `<profile>/preferences.toml` `[cover_letter]` | |
 | AI provider and model | `llm_provider` in `config.local.toml`; the API key in `.env` | Your own Claude Code login (default, no key), an Anthropic API key, or any OpenAI-compatible endpoint: [docs/providers.md](docs/providers.md) |
+| Role families: your own kinds of job (CV variants, filters, thresholds) | `<profile>/preferences.toml` `[families.<id>]`, `<profile>/cv_base_pdfs/manifest.json` | Frontend, marketing, nursing... with no code: [docs/role-families.md](docs/role-families.md) |
 | Score threshold, match mode, accepted portals | `config.local.toml` | See [Configuration](#configuration) |
 | A portal that is not supported yet | Ask a coding agent | Open `claude` in the repository and say "add portal &lt;name&gt;" with a saved results page: the [`add-portal`](.claude/skills/add-portal/SKILL.md) skill scaffolds the adapter and its tests with `scripts/new_portal.py`. By hand: [docs/portals.md](docs/portals.md) |
 
@@ -310,11 +311,10 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v0.1.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v0.2.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - The Telegram interface is in Spanish today; English is planned.
 - Location rules ship for Catalonia and Spain; other regions need their own data.
-- CV variants are fixed to three role families (AI, Data Science, Backend Python; Spanish and English, plus Catalan for AI) until the next release, which plans user-defined role families.
 - Portal adapters depend on each site's page structure and can break when a site changes.
 - AI scores are not deterministic; the gates and the calibration set keep them consistent, not exact.
 - The setup wizard (`cli.py init`) covers the first configuration; finer settings are edited by hand (see [Configuration](#configuration)).

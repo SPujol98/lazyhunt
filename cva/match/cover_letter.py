@@ -25,6 +25,7 @@ from typing import Final, Literal, Protocol
 from pydantic import BaseModel
 
 from cva.claimsdb import ClaimsDB
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.match.apply_instructions import ApplyInstruction
 from cva.match.interview_prep import CompanyFact
 from cva.match.language import infer_language
@@ -232,6 +233,40 @@ def salutation_for(version: str, language: str, company: str) -> str:
     )
 
 
+def branch_emphasis_for(
+    branch: str,
+    persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+) -> str | None:
+    """The "Branch emphasis" sentence for a CV role (role-families T4).
+
+    Precedence: the family's own ``cover_letter_emphasis``; else the profile's
+    ``[cover_letter.branch_emphasis]`` entry for its role; else the owner
+    default for that role; else the default family's emphasis (same chain);
+    else ``None`` (the prompt has no emphasis line). An unknown ``branch``
+    resolves like the default family, as the old ``["AI"]`` fallback did.
+    """
+
+    def own(role: str, text: str | None) -> str | None:
+        return (
+            text
+            or persona.branch_emphasis.get(role)
+            or OWNER_COVER_LETTER_PERSONA.branch_emphasis.get(role)
+        )
+
+    family = families.get(branch)
+    if family is not None:
+        found = own(family.role, family.cover_letter_emphasis)
+        if found is not None:
+            return found
+    default = families.default
+    return own(default.role, default.cover_letter_emphasis)
+
+
+def _with_emphasis(system: str, emphasis: str | None) -> str:
+    return system if emphasis is None else f"{system}\n\nBranch emphasis: {emphasis}"
+
+
 def build_cover_letter_prompt(
     *,
     offer_text: str,
@@ -244,17 +279,16 @@ def build_cover_letter_prompt(
     voice_sample: str,
     owner_name: str,
     persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> tuple[str, str]:
     """(system, user) prompt pair for the two-version cover-letter completion.
 
     ``persona`` carries the candidate-specific text (branch emphasis, rule 7);
     the default is the owner's original text, byte for byte.
     """
-    emphasis = persona.branch_emphasis.get(
-        branch.upper(), persona.branch_emphasis["AI"]
-    )
+    emphasis = branch_emphasis_for(branch, persona, families)
     language_name = _LANGUAGE_NAME.get(language, "Spanish")
-    system = f"{_system_prompt(persona.career_change)}\n\nBranch emphasis: {emphasis}"
+    system = _with_emphasis(_system_prompt(persona.career_change), emphasis)
     user = (
         f"Candidate name (signature): {owner_name}\n"
         f"Language of both letters: {language_name}\n"
@@ -736,7 +770,7 @@ def _facts_block(facts: Sequence[CompanyFact]) -> str:
     return "\n".join(f"- {item.fact} (source: {item.source_url})" for item in facts)
 
 
-def _letter_system_prompt(career_change: str, branch_emphasis: str) -> str:
+def _letter_system_prompt(career_change: str) -> str:
     return (
         "You write ONLY the variable parts of a job-application cover letter for "
         "the candidate described by the claims below; the fixed parts (salutation, "
@@ -791,8 +825,7 @@ def _letter_system_prompt(career_change: str, branch_emphasis: str) -> str:
         "inflating a claim is not.\n"
         "12. Forward-looking: say what the candidate can contribute here; do not "
         "recap the CV line by line.\n"
-        "13. Write in the language requested by the user message.\n\n"
-        f"Branch emphasis: {branch_emphasis}"
+        "13. Write in the language requested by the user message."
     )
 
 
@@ -809,12 +842,15 @@ def build_letter_parts_prompt(
     base: LetterBase,
     facts: Sequence[CompanyFact],
     persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> tuple[str, str]:
-    """(system, user) prompt pair for the generated parts of the letter."""
-    emphasis = persona.branch_emphasis.get(
-        branch.upper(), persona.branch_emphasis["AI"]
-    )
-    system = _letter_system_prompt(persona.career_change, emphasis)
+    """(system, user) prompt pair for the generated parts of the letter.
+
+    ``branch`` is the offer's CV role; ``families`` (the profile's) decides
+    its emphasis (:func:`branch_emphasis_for`).
+    """
+    emphasis = branch_emphasis_for(branch, persona, families)
+    system = _with_emphasis(_letter_system_prompt(persona.career_change), emphasis)
     fixed = _fixed_words(base, language, company)
     low = max(LETTER_MIN_WORDS - fixed, 60)
     high = max(LETTER_MAX_WORDS - fixed, low + 20)
@@ -888,6 +924,7 @@ async def generate_cover_letter(
     facts: Sequence[CompanyFact] = (),
     review: bool = False,
     persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
 ) -> CoverLetterResult:
     """Generate the parts, assemble the letter; one validated retry, then warn.
 
@@ -907,6 +944,7 @@ async def generate_cover_letter(
         base=base,
         facts=facts,
         persona=persona,
+        families=families,
     )
 
     def _check(candidate: LetterParts) -> list[str]:

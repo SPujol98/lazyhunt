@@ -310,9 +310,9 @@ def test_panel_command_renders_off_the_event_loop(
     seen: list[int] = []
     real = service_module.render_panel
 
-    def spy(rows: object, now: object, discarded: object) -> str:
+    def spy(rows: object, now: object, discarded: object, **kw: object) -> str:
         seen.append(threading.get_ident())
-        return real(rows, now, discarded)  # type: ignore[arg-type]
+        return real(rows, now, discarded, **kw)  # type: ignore[arg-type]
 
     monkeypatch.setattr(service_module, "render_panel", spy)
     message = DocMessage()
