@@ -1,0 +1,23 @@
+Backend Developer Python (Berlin, remote possible)
+
+Rhein Mobility Systems (rhein-mobility.example.com) develops ticketing software for regional transport companies. Our development team is based in Berlin and works remotely from Germany and neighbouring countries.
+
+Your tasks
+- Develop and maintain REST APIs with Python and FastAPI.
+- Work with PostgreSQL and Redis for ticket and route data.
+- Write automated tests and participate in code reviews.
+- Talk to our customers' IT departments to clarify requirements.
+
+Your profile
+- 1-3 years of experience as a Python developer; career starters with convincing projects are welcome.
+- Good knowledge of SQL, Git and Docker.
+- Fluent German (C1) is mandatory: our customers, documentation and daily meetings are all in German. Deutsch ist Voraussetzung.
+- Basic English.
+- Training in computer science or a comparable qualification.
+
+We offer
+- Remote work with a monthly visit to the Berlin office.
+- Salary between 42,000 and 50,000 EUR gross per year.
+- 30 days of holiday and a public transport ticket.
+
+Please send your application in German together with your CV and certificates. Applications without German language skills cannot be considered.

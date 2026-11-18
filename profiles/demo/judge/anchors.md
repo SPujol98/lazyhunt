@@ -1,0 +1,5 @@
+- Globex Junior AI Engineer (example) -> score 76, apply: vocational training explicitly accepted, 1-2 years, RAG/LLM/FastAPI as the role's core.
+- Initech Machine Learning Engineer (example) -> score 30, discard: quantitative degree with no 'or equivalent', 3+ years of applied ML, classic ML frameworks and a cloud platform as hard walls.
+- Umbrella Data Platform Developer (example) -> score 12, discard: titled 'AI Developer' but the body is a Senior Full-Stack role with 7+ years, .NET/Angular as the core stack.
+- Hooli Python Developer (example) -> score 72, apply: junior welcome, Python/testing as the role's core, Catalan only a plus.
+- Stark Data Engineer (example) -> score 55, apply_with_caveats: SQL/Python pipelines fit, soft wall: asks for 2 years of cloud data tooling that is mentioned but not the daily core.

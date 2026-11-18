@@ -1,0 +1,55 @@
+# cva public example configuration. Copy to `config.toml` (shared settings)
+# or `config.local.toml` (personal, gitignored) and adjust.
+#
+# Secrets NEVER go in this file. They come from the environment only
+# (see .env.example): CVA_TELEGRAM_TOKEN, CVA_BRIDGE_SECRET, and, for the API
+# providers, ANTHROPIC_API_KEY or CVA_LLM_API_KEY. Any CVA_<FIELD> environment
+# variable overrides this file.
+
+# --- AI provider (see docs/providers.md) -----------------------------------
+# Default: your own installed Claude Code CLI, logged in with your own
+# subscription. cva runs the unmodified `claude` CLI and never reads its
+# credentials.
+llm_provider = "claude_code"
+# Other providers: "anthropic" (ANTHROPIC_API_KEY) or "openai_compatible"
+# (llm_base_url / llm_model / CVA_LLM_API_KEY). Only claude_code and anthropic
+# are tested.
+# claude_code_model = "sonnet"
+# Keep false so the CLI never silently switches to API billing because
+# ANTHROPIC_API_KEY happens to be in your environment.
+# claude_code_pass_api_key = false
+
+# --- Job portals -----------------------------------------------------------
+# A fresh install has every portal OFF: you turn each one on in the browser
+# extension, which shows the portal's terms warning and asks Chrome for
+# permission to that domain. The bot rejects offers from portals that are not
+# enabled. Leave `enabled_portals` unset to let the extension decide; set it to
+# restrict the bot explicitly. Ids: linkedin, infojobs, indeed, tecnoempleo,
+# jobfluent, manfred, adzuna, foorilla.
+# enabled_portals = ["infojobs", "tecnoempleo"]
+
+# --- Gmail (off: nothing runs and no credential is touched) -----------------
+gmail_enabled = false
+# See docs/gmail.md before enabling.
+
+# --- Pause (kill switch) ----------------------------------------------------
+# /pausa and /reanudar in Telegram (and the extension's button) pause scans,
+# automatic analysis and Gmail, and survive restarts; /analyze keeps working.
+# This value only applies until someone has used the toggle.
+paused = false
+
+# --- Pace --------------------------------------------------------------------
+# The extension scans every 60 minutes by default and warns below 30.
+auto_analyze = true          # one Claude call per new offer; false = manual
+checks_per_day = 3           # per-beacon fetch cap
+beacon_global_daily_cap = 30 # anti-ban cap across all beacons per day
+analyze_delay_seconds = 45   # pause between queued analyses
+
+# --- CV font ----------------------------------------------------------------
+# "carlito" (open, metric-compatible with Calibri, shipped). "calibri" only if
+# you own Microsoft's files and put calibri*.ttf in cvgen/fonts/.
+cv_font = "carlito"
+
+# --- Matching ---------------------------------------------------------------
+threshold = 65
+match_mode = "keyword"       # "hybrid" adds the LLM judge (spends model calls)

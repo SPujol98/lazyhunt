@@ -1,0 +1,27 @@
+Enginyer/a de PLN i Models de Llenguatge (Barcelona)
+
+Vela Llengües (vela-llengues.example.com) desenvolupa eines de traducció i de cerca semàntica per a mitjans de comunicació i administracions públiques. Busquem una persona amb experiència en processament del llenguatge natural per a l'equip de Barcelona.
+
+Funcions
+- Integrar models de llenguatge i embeddings en productes de cerca semàntica.
+- Construir i avaluar pipelines RAG sobre corpus en català i castellà.
+- Desenvolupar serveis en Python i exposar-los amb FastAPI.
+- Col·laborar amb lingüistes per revisar la qualitat dels resultats.
+
+Requisits
+- Python i experiència amb models de llenguatge (Hugging Face o APIs de LLM).
+- Dos anys d'experiència en projectes de PLN o cerca, projectes propis inclosos.
+- Nivell alt de català (C1), parlat i escrit: treballarem i redactarem documentació en català cada dia.
+- Castellà i anglès tècnic.
+- Titulació en informàtica, lingüística computacional o similar.
+
+Es valorarà
+- Experiència amb avaluació de sistemes de recuperació.
+- Coneixements de PostgreSQL.
+
+Oferim
+- Model híbrid amb tres dies a l'oficina de Barcelona.
+- Retribució de 30.000 a 37.000 euros bruts anuals.
+- Horari flexible i formació contínua.
+
+Enviï el seu currículum amb una breu carta explicant la seva experiència amb el català i la tecnologia.

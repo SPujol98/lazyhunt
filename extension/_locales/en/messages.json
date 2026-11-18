@@ -1,0 +1,739 @@
+{
+  "addBeacon": {
+    "message": "Add beacon"
+  },
+  "addSearch": {
+    "message": "Add search"
+  },
+  "backupHeading": {
+    "message": "Configuration file"
+  },
+  "backupIntro": {
+    "message": "Beacons, searches, title filters, interval and bridge URL. The secret, the pause and the seen offers stay here."
+  },
+  "beaconDisabled": {
+    "message": "Disabled"
+  },
+  "beaconEnabled": {
+    "message": "Enabled"
+  },
+  "beaconError": {
+    "message": "Error · $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconJobs": {
+    "message": "$p1$ jobs · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "beaconName": {
+    "message": "Name"
+  },
+  "beaconNewTitle": {
+    "message": "$p1$ new in the last scan",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconNoPermission": {
+    "message": "Permission missing: enable the portal in the options"
+  },
+  "beaconNotScanned": {
+    "message": "Not scanned yet"
+  },
+  "beaconPortalOff": {
+    "message": "$p1$ is not enabled",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconRemoveConfirm": {
+    "message": "Remove the beacon \"$p1$\"?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconSessionExpired": {
+    "message": "Session expired: sign in to $p1$ again",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconUnnamed": {
+    "message": "(unnamed)"
+  },
+  "beaconUrl": {
+    "message": "Results page URL"
+  },
+  "beaconsEmpty": {
+    "message": "No manual beacons."
+  },
+  "beaconsHeading": {
+    "message": "Manual beacons"
+  },
+  "beaconsIntro": {
+    "message": "A results page you pasted from a portal. Use Test to check what the extension reads from it."
+  },
+  "botAllPortals": {
+    "message": "all"
+  },
+  "botInfo": {
+    "message": "Bot settings read at $p1$. Portals enabled on the bot: $p2$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "botNoPortals": {
+    "message": "none"
+  },
+  "bridgeMissingHint": {
+    "message": "Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost."
+  },
+  "bridgeSecretHint": {
+    "message": "Never included in exported files."
+  },
+  "bridgeSecretLabel": {
+    "message": "Bridge secret"
+  },
+  "bridgeUrlLabel": {
+    "message": "Bridge URL"
+  },
+  "clearHistory": {
+    "message": "Clear history"
+  },
+  "clearHistoryConfirm": {
+    "message": "Clear the seen offers of every beacon? The next scan will send every offer it finds to the bot again."
+  },
+  "clearHistoryDone": {
+    "message": "History cleared."
+  },
+  "clearHistoryFailed": {
+    "message": "Could not clear the history: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "clearHistoryHeading": {
+    "message": "Seen offers"
+  },
+  "clearHistoryIntro": {
+    "message": "Clearing the history makes the next scan send every offer on the page to the bot again."
+  },
+  "connectionHeading": {
+    "message": "Schedule and bot"
+  },
+  "connectionIntro": {
+    "message": "New offers go to the local bot through the bridge; the bot sends the notifications."
+  },
+  "errorBeaconDuplicate": {
+    "message": "Two beacons are called \"$p1$\": names must be unique.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorBeaconIncomplete": {
+    "message": "Beacon $p1$ needs a name and a URL.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorSearchIncomplete": {
+    "message": "Search $p1$ needs a name and keywords.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportConfig": {
+    "message": "Export"
+  },
+  "exportDone": {
+    "message": "Configuration exported (without the secret)."
+  },
+  "extDescription": {
+    "message": "Watches job searches on the portals you enable and sends new offers to your local bot."
+  },
+  "extName": {
+    "message": "lazyhunt"
+  },
+  "filterEnabled": {
+    "message": "Filter enabled for this profile"
+  },
+  "filterExclude": {
+    "message": "Exclude (commas or new lines)"
+  },
+  "filterExcludeHint": {
+    "message": "Any match in the title or the company drops the offer."
+  },
+  "filterInclude": {
+    "message": "Must include (one group per line, terms separated by commas)"
+  },
+  "filterIncludeHint": {
+    "message": "Every line needs at least one matching word in the title."
+  },
+  "filtersHeading": {
+    "message": "Title filters"
+  },
+  "filtersIntro": {
+    "message": "Each search and beacon uses one profile. Offers that do not pass are skipped and never sent."
+  },
+  "htmlLang": {
+    "message": "en"
+  },
+  "importConfig": {
+    "message": "Import"
+  },
+  "importConfirm": {
+    "message": "Replace the current configuration with the $p1$ beacons of this file?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importDone": {
+    "message": "Imported $p1$ beacons.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importFailed": {
+    "message": "Import failed: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importInvalidJson": {
+    "message": "This file is not valid JSON."
+  },
+  "importWrongFormat": {
+    "message": "This is not an lazyhunt configuration file."
+  },
+  "intervalLabel": {
+    "message": "Minutes between rounds"
+  },
+  "intervalWarning": {
+    "message": "Under 30 minutes portals may throttle or block you."
+  },
+  "lastScan": {
+    "message": "Last scan"
+  },
+  "maintenanceHeading": {
+    "message": "Maintenance and backup"
+  },
+  "navBeacons": {
+    "message": "Manual beacons"
+  },
+  "navConnection": {
+    "message": "Schedule and bot"
+  },
+  "navFilters": {
+    "message": "Title filters"
+  },
+  "navLabel": {
+    "message": "Sections"
+  },
+  "navMaintenance": {
+    "message": "Maintenance"
+  },
+  "navPortals": {
+    "message": "Portals"
+  },
+  "navSearches": {
+    "message": "Searches"
+  },
+  "neverScanned": {
+    "message": "Never scanned"
+  },
+  "nextBotPaused": {
+    "message": "Paused by the bot"
+  },
+  "nextPaused": {
+    "message": "Paused"
+  },
+  "optSave": {
+    "message": "Save changes"
+  },
+  "optStatusPausedDetail": {
+    "message": "Scans are paused. Resume them from the toolbar popup."
+  },
+  "optionsTitle": {
+    "message": "lazyhunt options"
+  },
+  "popupBeaconsHeading": {
+    "message": "Searches being watched"
+  },
+  "popupCheckNow": {
+    "message": "Check now"
+  },
+  "popupChecking": {
+    "message": "Checking…"
+  },
+  "popupConnectBot": {
+    "message": "Connect to the bot"
+  },
+  "popupEmpty": {
+    "message": "Nothing to watch yet. Add a search or a beacon in the options."
+  },
+  "popupLastRound": {
+    "message": "Last round"
+  },
+  "popupNextRound": {
+    "message": "Next round"
+  },
+  "popupOpenOptionsShort": {
+    "message": "Open options"
+  },
+  "popupOptions": {
+    "message": "Options"
+  },
+  "popupPause": {
+    "message": "Pause"
+  },
+  "popupResume": {
+    "message": "Resume"
+  },
+  "portalDisabled": {
+    "message": "$p1$ disabled.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalEnabled": {
+    "message": "$p1$ enabled.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalNoPermission": {
+    "message": "Permission missing: switch it off and on again"
+  },
+  "portalNotOnBot": {
+    "message": "Not enabled on the bot"
+  },
+  "portalOffSuffix": {
+    "message": "$p1$ (off)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalRefused": {
+    "message": "The browser permission for $p1$ was not granted: it stays off.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalToggleLabel": {
+    "message": "Scan $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalsHeading": {
+    "message": "Portals"
+  },
+  "portalsIntro": {
+    "message": "Only enabled portals are scanned. Enabling one asks for the browser permission to read that site. Changes apply at once."
+  },
+  "previewEmpty": {
+    "message": "Nothing yet: a search needs keywords and an enabled portal."
+  },
+  "previewHeading": {
+    "message": "What the next round will open"
+  },
+  "profileAi": {
+    "message": "AI"
+  },
+  "profileBackend": {
+    "message": "Backend"
+  },
+  "profileLabel": {
+    "message": "Filter profile"
+  },
+  "remove": {
+    "message": "Remove"
+  },
+  "resultBotPaused": {
+    "message": "The bot is paused: nothing was scanned."
+  },
+  "resultCounts": {
+    "message": "$p1$ scanned · $p2$ new",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "resultErrors": {
+    "message": "$p1$ errors",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFailed": {
+    "message": "Failed: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFiltered": {
+    "message": "$p1$ filtered out",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFirstScans": {
+    "message": "$p1$ first scans, sent to the bot",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultNothing": {
+    "message": "Nothing to scan."
+  },
+  "resultOnlyErrors": {
+    "message": "Nothing scanned: $p1$ errors.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultPaused": {
+    "message": "Paused here: nothing was scanned."
+  },
+  "resultSkipped": {
+    "message": "Another round is already running."
+  },
+  "saveFailed": {
+    "message": "Could not save: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "saveStateDirty": {
+    "message": "Unsaved changes"
+  },
+  "saveStateSaved": {
+    "message": "Saved"
+  },
+  "searchKeywords": {
+    "message": "Keywords"
+  },
+  "searchLocation": {
+    "message": "Location (optional)"
+  },
+  "searchName": {
+    "message": "Name"
+  },
+  "searchPortals": {
+    "message": "Portals"
+  },
+  "searchRemoveConfirm": {
+    "message": "Remove the search \"$p1$\"?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "searchTitleFilter": {
+    "message": "Apply the title filter"
+  },
+  "searchesEmpty": {
+    "message": "No searches yet."
+  },
+  "searchesHeading": {
+    "message": "Searches"
+  },
+  "searchesIntro": {
+    "message": "Each search runs on every portal you tick. New offers are sent to the bot, first scans included."
+  },
+  "secretHide": {
+    "message": "Hide"
+  },
+  "secretShow": {
+    "message": "Show"
+  },
+  "statusActive": {
+    "message": "Active"
+  },
+  "statusBotPaused": {
+    "message": "Paused by the bot"
+  },
+  "statusBotPausedDetail": {
+    "message": "The bot is paused. Resume it from the bot."
+  },
+  "statusError": {
+    "message": "Needs attention"
+  },
+  "statusErrorDetail": {
+    "message": "The last scan of some searches failed."
+  },
+  "statusIdle": {
+    "message": "Idle"
+  },
+  "statusIdleNothing": {
+    "message": "Nothing to scan: enable a portal and add a search or a beacon."
+  },
+  "statusNoBeacons": {
+    "message": "Nothing to scan"
+  },
+  "statusNoBridge": {
+    "message": "Bot not connected"
+  },
+  "statusNoBridgeDetail": {
+    "message": "Connect the extension to the bot first: Options › Schedule and bot."
+  },
+  "statusPaused": {
+    "message": "Paused"
+  },
+  "statusPausedDetail": {
+    "message": "Paused here. Resume to scan again."
+  },
+  "suggestAdd": {
+    "message": "Add selected"
+  },
+  "suggestAdded": {
+    "message": "Added $p1$, skipped $p2$ already present. Save to keep them.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "suggestButton": {
+    "message": "Suggest from my profile"
+  },
+  "suggestFound": {
+    "message": "$p1$ suggestions from your profile.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "suggestHeading": {
+    "message": "Suggested searches"
+  },
+  "suggestHttpError": {
+    "message": "The bot answered with HTTP $p1$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "suggestNeedsBridge": {
+    "message": "Set a valid bridge URL and the secret first."
+  },
+  "suggestNone": {
+    "message": "The bot has no suggestions for your profile."
+  },
+  "suggestNothingSelected": {
+    "message": "Select at least one suggestion."
+  },
+  "suggestSecretRejected": {
+    "message": "The bot rejected the secret."
+  },
+  "suggestUnreachable": {
+    "message": "The bot is not reachable. Is it running?"
+  },
+  "sw_error_bridge_missing": {
+    "message": "Connect the extension to the bot first: Options › Schedule and bot."
+  },
+  "sw_error_load_timeout": {
+    "message": "The page did not finish loading within $SECONDS$ seconds",
+    "placeholders": {
+      "seconds": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_no_permission": {
+    "message": "Permission for $PORTAL$ is missing: enable the portal in options",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_scan_running": {
+    "message": "A scan is running: try again when it finishes."
+  },
+  "sw_error_session_expired": {
+    "message": "$PORTAL$ session expired",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_unknown_message": {
+    "message": "unknown message type"
+  },
+  "sw_error_url_required": {
+    "message": "URL required"
+  },
+  "sw_notification_session_message": {
+    "message": "Open $PORTAL$ in this browser and sign in again; the scans are stopped until then.",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_notification_session_title": {
+    "message": "$PORTAL$ session expired",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "termsLinkedin": {
+    "message": "LinkedIn warning: the LinkedIn User Agreement forbids browser extensions that scrape or automate the site. Enabling LinkedIn scans runs searches in your own logged-in session, and your account may be restricted or suspended for it. Do it at your own risk. Enable LinkedIn?"
+  },
+  "termsPortal": {
+    "message": "Enabling $p1$: the extension will open $p1$ search pages in your browser on every round and read the results. Check that $p1$'s terms of use allow automated access before turning it on; you are responsible for complying with them. Enable $p1$?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "testBeacon": {
+    "message": "Test"
+  },
+  "testFailed": {
+    "message": "Test failed: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "testFound": {
+    "message": "$p1$ offers read. First: $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "testNone": {
+    "message": "No offers read from the page."
+  },
+  "testRunning": {
+    "message": "Opening the page…"
+  },
+  "testUrlRequired": {
+    "message": "URL required"
+  },
+  "timeAgo": {
+    "message": "$p1$ ago",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeDays": {
+    "message": "$p1$d",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeHours": {
+    "message": "$p1$h",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeIn": {
+    "message": "in $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeMinutes": {
+    "message": "$p1$m",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeUnderMinute": {
+    "message": "<1m"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "cards": [
+    {
+      "id": "5900000001",
+      "title": "Backend Developer Python",
+      "company": "EMPRESA EJEMPLO UNO",
+      "location": "BARCELONA, CATALUÑA",
+      "link": "https://www.adzuna.es/details/5900000001"
+    },
+    {
+      "id": "5900000002",
+      "title": "Senior Software Engineer (Backend)",
+      "company": "EMPRESA EJEMPLO DOS",
+      "location": "BARCELONA",
+      "link": "https://www.adzuna.es/details/5900000002"
+    },
+    {
+      "id": "5900000003",
+      "title": "Ingeniero Backend Java",
+      "company": "EMPRESA EJEMPLO TRES",
+      "location": "BARCELONA, CATALUÑA",
+      "link": "https://www.adzuna.es/details/5900000003"
+    },
+    {
+      "id": "5900000004",
+      "title": "Desarrollador Backend remoto",
+      "company": "EMPRESA EJEMPLO CUATRO",
+      "location": "BARCELONA",
+      "link": "https://www.adzuna.es/details/5900000004"
+    }
+  ],
+  "no_results_text": "0 Backend empleos en Barcelona",
+  "urls": [
+    "https://www.adzuna.es/search?f=7&loc=206508&q=backend",
+    "https://www.adzuna.es/details/5900000001"
+  ]
+}

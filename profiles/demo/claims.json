@@ -1,0 +1,1193 @@
+[
+  {
+    "id": "identity-contact",
+    "text": "Alex Rivera · Barcelona, España · alex.rivera@example.com · linkedin.com/in/alex-rivera-example · github.com/example",
+    "category": "identity",
+    "tags": [
+      "alex rivera",
+      "barcelona",
+      "contacto",
+      "contact",
+      "linkedin",
+      "github"
+    ]
+  },
+  {
+    "id": "identity-contact_en",
+    "text": "Alex Rivera · Barcelona, Spain · alex.rivera@example.com · linkedin.com/in/alex-rivera-example · github.com/example",
+    "category": "identity",
+    "tags": [
+      "alex rivera",
+      "barcelona",
+      "spain",
+      "contact",
+      "linkedin",
+      "github"
+    ]
+  },
+  {
+    "id": "identity-phone",
+    "text": "+34 600 000 000",
+    "category": "identity",
+    "tags": [
+      "telefono",
+      "phone",
+      "contacto",
+      "contact"
+    ]
+  },
+  {
+    "id": "identity-phone_en",
+    "text": "+34 600 000 000",
+    "category": "identity",
+    "tags": [
+      "telefono",
+      "phone",
+      "contacto",
+      "contact"
+    ]
+  },
+  {
+    "id": "identity-linkedin-headline",
+    "text": "AI Engineer | LLMs · RAG · Retrieval Evaluation | Python & SQL",
+    "category": "identity",
+    "tags": [
+      "ai engineer",
+      "llm",
+      "rag",
+      "python",
+      "sql"
+    ]
+  },
+  {
+    "id": "identity-ds-tagline",
+    "text": "Data Scientist | Python · SQL · pandas · RAG · Data Pipelines",
+    "category": "identity",
+    "tags": [
+      "data scientist",
+      "python",
+      "sql",
+      "pandas",
+      "numpy",
+      "rag",
+      "pipelines"
+    ]
+  },
+  {
+    "id": "identity-linkedin-headline_en",
+    "text": "AI Engineer | LLMs · RAG · Retrieval Evaluation | Python & SQL",
+    "category": "identity",
+    "tags": [
+      "ai engineer",
+      "llm",
+      "rag",
+      "python",
+      "sql"
+    ]
+  },
+  {
+    "id": "identity-ds-tagline_en",
+    "text": "Data Scientist | Python · SQL · pandas · RAG · Data Pipelines",
+    "category": "identity",
+    "tags": [
+      "data scientist",
+      "python",
+      "sql",
+      "pandas",
+      "numpy",
+      "rag",
+      "pipelines"
+    ]
+  },
+  {
+    "id": "sum-ai-foundation",
+    "text": "Ingeniero junior de datos e IA con base en desarrollo con Python y SQL, formado en un ciclo superior de sistemas y en un bootcamp de datos e IA.",
+    "category": "identity",
+    "tags": [
+      "ai engineer",
+      "python",
+      "sql",
+      "llm"
+    ]
+  },
+  {
+    "id": "sum-ai-foundation_en",
+    "text": "Junior data and AI engineer with a Python and SQL development base, trained through a higher vocational degree in systems and a data and AI bootcamp.",
+    "category": "identity",
+    "tags": [
+      "ai engineer",
+      "python",
+      "sql",
+      "llm"
+    ]
+  },
+  {
+    "id": "sum-ai-foundation_ca",
+    "text": "Enginyer júnior de dades i IA amb base en desenvolupament amb Python i SQL, format en un cicle superior de sistemes i en un bootcamp de dades i IA.",
+    "category": "identity",
+    "tags": [
+      "ai engineer",
+      "python",
+      "sql",
+      "llm",
+      "formacio",
+      "programacio"
+    ]
+  },
+  {
+    "id": "sum-ai-pipelines",
+    "text": "He construido un sistema RAG de búsqueda documental con recuperación híbrida (BM25 y embeddings), evaluado con recall@5 sobre 150 preguntas, y pipelines de datos para un cliente de logística.",
+    "category": "identity",
+    "tags": [
+      "rag",
+      "pipelines",
+      "recuperacion hibrida",
+      "evaluacion",
+      "recall"
+    ]
+  },
+  {
+    "id": "sum-ai-pipelines_en",
+    "text": "I built a document-search RAG system with hybrid retrieval (BM25 and embeddings), evaluated with recall@5 on 150 questions, and data pipelines for a logistics client.",
+    "category": "identity",
+    "tags": [
+      "rag",
+      "pipelines",
+      "hybrid retrieval",
+      "evaluation",
+      "recall"
+    ]
+  },
+  {
+    "id": "sum-ai-pipelines_ca",
+    "text": "He construït un sistema RAG de cerca documental amb recuperació híbrida (BM25 i embeddings), avaluat amb recall@5 sobre 150 preguntes, i pipelines de dades per a un client de logística.",
+    "category": "identity",
+    "tags": [
+      "rag",
+      "pipelines",
+      "recuperacio hibrida",
+      "avaluacio",
+      "recall"
+    ]
+  },
+  {
+    "id": "sum-ai-goal",
+    "text": "Busco un primer rol de IA aplicada donde llevar sistemas con LLM a producción con rigor de ingeniería.",
+    "category": "identity",
+    "tags": [
+      "produccion",
+      "llm",
+      "ingenieria"
+    ]
+  },
+  {
+    "id": "sum-ai-goal_en",
+    "text": "I am looking for a first applied-AI role where I can take LLM systems to production with engineering rigour.",
+    "category": "identity",
+    "tags": [
+      "production",
+      "llm",
+      "engineering rigour"
+    ]
+  },
+  {
+    "id": "sum-ai-goal_ca",
+    "text": "Busco un primer rol d'IA aplicada on dur sistemes amb LLM a producció amb rigor d'enginyeria.",
+    "category": "identity",
+    "tags": [
+      "produccio",
+      "llm",
+      "enginyeria"
+    ]
+  },
+  {
+    "id": "sum-ds-foundation",
+    "text": "Científico de datos junior con base sólida en Python, SQL y pandas y experiencia construyendo pipelines de datos para un cliente real.",
+    "category": "identity",
+    "tags": [
+      "data scientist",
+      "python",
+      "sql",
+      "pandas"
+    ]
+  },
+  {
+    "id": "sum-ds-foundation_en",
+    "text": "Junior data scientist with a solid base in Python, SQL and pandas and experience building data pipelines for a real client.",
+    "category": "identity",
+    "tags": [
+      "data scientist",
+      "python",
+      "sql",
+      "pandas"
+    ]
+  },
+  {
+    "id": "sum-ds-pipelines",
+    "text": "Pipelines de ingesta y limpieza con validación, análisis de la tasa de entrega a tiempo y evaluación de recuperación (recall@5) en un proyecto propio de RAG.",
+    "category": "identity",
+    "tags": [
+      "ingesta",
+      "validacion",
+      "analisis",
+      "sql",
+      "recall"
+    ]
+  },
+  {
+    "id": "sum-ds-pipelines_en",
+    "text": "Ingestion and cleaning pipelines with validation, on-time delivery analysis and retrieval evaluation (recall@5) in my own RAG project.",
+    "category": "identity",
+    "tags": [
+      "ingesta",
+      "validacion",
+      "analisis",
+      "sql",
+      "recall"
+    ]
+  },
+  {
+    "id": "sum-ds-goal",
+    "text": "Quiero aplicar el análisis de datos y los LLM en un equipo que valore la ingeniería de software.",
+    "category": "identity",
+    "tags": [
+      "analisis de datos",
+      "llm",
+      "ingenieria de software"
+    ]
+  },
+  {
+    "id": "sum-ds-goal_en",
+    "text": "I want to apply data analysis and LLMs in a team that values software engineering.",
+    "category": "identity",
+    "tags": [
+      "analisis de datos",
+      "llm",
+      "ingenieria de software"
+    ]
+  },
+  {
+    "id": "identity-backend-tagline",
+    "text": "Python Backend Developer | FastAPI · PostgreSQL · REST APIs",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "identity-backend-tagline_en",
+    "text": "Python Backend Developer | FastAPI · PostgreSQL · REST APIs",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-foundation",
+    "text": "Desarrollador backend junior en Python con FastAPI, PostgreSQL y APIs REST, con una base de sistemas y redes.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-foundation_en",
+    "text": "Junior Python backend developer with FastAPI, PostgreSQL and REST APIs, on top of a systems and networking background.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-experience",
+    "text": "Casi dos años de práctica entre unas prácticas en una consultora de datos y un proyecto freelance en el que diseñé e implementé un servicio de ingesta de envíos con integraciones de APIs de terceros, tests y despliegue con Docker.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-experience_en",
+    "text": "Nearly two years of practice across an internship at a data consultancy and a freelance project where I designed and shipped a shipment-ingestion service with third-party API integrations, tests and Docker deployment.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-ai",
+    "text": "Además he construido un sistema RAG con FastAPI y un LLM local, que aporta contexto de IA al trabajo de backend.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "sum-backend-ai_en",
+    "text": "I have also built a RAG system with FastAPI and a local LLM, which brings AI context to backend work.",
+    "category": "identity",
+    "tags": [
+      "backend cv profile text"
+    ]
+  },
+  {
+    "id": "edu-asir",
+    "text": "Técnico Superior en Administración de Sistemas Informáticos en Red (ASIR), Institut Example de Barcelona: redes, Linux, bases de datos y scripting.",
+    "category": "education",
+    "tags": [
+      "asir",
+      "grado superior",
+      "linux",
+      "sql",
+      "bash"
+    ]
+  },
+  {
+    "id": "edu-asir_en",
+    "text": "Higher vocational degree in Network Systems Administration (ASIR), Institut Example de Barcelona: networking, Linux, databases and scripting.",
+    "category": "education",
+    "tags": [
+      "higher vocational degree",
+      "asir",
+      "linux",
+      "sql",
+      "bash"
+    ]
+  },
+  {
+    "id": "edu-bootcamp-data",
+    "text": "Bootcamp de Datos e IA en Northgate Tech Academy (480 horas): Python, pandas, SQL, PyTorch y LLM, con proyectos propios de principio a fin.",
+    "category": "education",
+    "tags": [
+      "bootcamp",
+      "northgate tech academy",
+      "python",
+      "pandas",
+      "sql",
+      "pytorch",
+      "llm"
+    ]
+  },
+  {
+    "id": "edu-bootcamp-data_en",
+    "text": "Data and AI Bootcamp at Northgate Tech Academy (480 hours): Python, pandas, SQL, PyTorch and LLMs, with end-to-end personal projects.",
+    "category": "education",
+    "tags": [
+      "bootcamp",
+      "northgate tech academy",
+      "python",
+      "pandas",
+      "sql",
+      "pytorch",
+      "llm"
+    ]
+  },
+  {
+    "id": "edu-sql-course",
+    "text": "Curso de PostgreSQL avanzado (plataforma online)",
+    "category": "education",
+    "tags": [
+      "postgresql",
+      "curso",
+      "sql"
+    ]
+  },
+  {
+    "id": "edu-sql-course_en",
+    "text": "Advanced PostgreSQL course (online platform)",
+    "category": "education",
+    "tags": [
+      "postgresql",
+      "course",
+      "sql"
+    ]
+  },
+  {
+    "id": "exp-acme-role",
+    "text": "Desarrollador de datos junior (prácticas FP Dual), Acme Analytics",
+    "category": "experience",
+    "tags": [
+      "acme analytics",
+      "desarrollador de datos junior",
+      "practicas",
+      "fp dual",
+      "internship",
+      "dual vet"
+    ]
+  },
+  {
+    "id": "exp-acme-role_en",
+    "text": "Junior data developer (dual vocational internship), Acme Analytics",
+    "category": "experience",
+    "tags": [
+      "acme analytics",
+      "junior data developer",
+      "practicas",
+      "fp dual",
+      "internship",
+      "dual vet"
+    ]
+  },
+  {
+    "id": "exp-acme-etl",
+    "text": "Automaticé en Python la consolidación semanal de 14 informes de Excel en una única tabla SQL, ahorrando unas 6 horas de trabajo manual a la semana.",
+    "category": "experience",
+    "tags": [
+      "python",
+      "automatizacion",
+      "excel",
+      "etl",
+      "etl/elt",
+      "elt",
+      "sql",
+      "transformacion de datos",
+      "data transformation",
+      "migracion de datos"
+    ]
+  },
+  {
+    "id": "exp-acme-etl_en",
+    "text": "Automated in Python the weekly consolidation of 14 Excel reports into a single SQL table, saving about 6 hours of manual work per week.",
+    "category": "experience",
+    "tags": [
+      "python",
+      "automation",
+      "excel",
+      "etl",
+      "etl/elt",
+      "elt",
+      "sql",
+      "data transformation",
+      "data migration"
+    ]
+  },
+  {
+    "id": "exp-acme-quality",
+    "text": "Escribí comprobaciones de calidad de datos en SQL y Python que detectaban duplicados y fechas inválidas antes de cada carga, y trabajé con Git y revisiones de código.",
+    "category": "experience",
+    "tags": [
+      "validacion de datos",
+      "calidad de datos",
+      "git",
+      "sql",
+      "python"
+    ]
+  },
+  {
+    "id": "exp-acme-quality_en",
+    "text": "Wrote data-quality checks in SQL and Python that caught duplicates and invalid dates before every load, and worked with Git and code reviews.",
+    "category": "experience",
+    "tags": [
+      "data validation",
+      "data quality",
+      "git",
+      "sql",
+      "python"
+    ]
+  },
+  {
+    "id": "exp-northwind-role",
+    "text": "Ingeniero de datos y backend freelance, Northwind Logistics",
+    "category": "experience",
+    "tags": [
+      "northwind logistics",
+      "freelance",
+      "ingeniero de datos",
+      "data engineer",
+      "backend"
+    ]
+  },
+  {
+    "id": "exp-northwind-role_en",
+    "text": "Freelance data and backend engineer, Northwind Logistics",
+    "category": "experience",
+    "tags": [
+      "northwind logistics",
+      "freelance",
+      "data engineer",
+      "backend"
+    ]
+  },
+  {
+    "id": "exp-northwind-platform",
+    "text": "Diseñé e implementé con FastAPI y PostgreSQL un servicio que ingiere cada día unos 25.000 envíos de tres transportistas y calcula la tasa de entrega a tiempo por cliente.",
+    "category": "experience",
+    "tags": [
+      "logistica",
+      "fastapi",
+      "postgresql",
+      "ingesta de datos",
+      "plataforma multi-usuario",
+      "transformacion de datos",
+      "data transformation",
+      "api"
+    ]
+  },
+  {
+    "id": "exp-northwind-platform_en",
+    "text": "Designed and built with FastAPI and PostgreSQL a service that ingests about 25,000 shipments a day from three carriers and computes the on-time delivery rate per customer.",
+    "category": "experience",
+    "tags": [
+      "logistics",
+      "fastapi",
+      "postgresql",
+      "data ingestion",
+      "multi-user platform",
+      "data transformation",
+      "api"
+    ]
+  },
+  {
+    "id": "exp-northwind-platform-ds",
+    "text": "Analicé con pandas el histórico diario de envíos para medir la tasa de entrega a tiempo por transportista y localizar rutas con retrasos recurrentes.",
+    "category": "experience",
+    "tags": [
+      "logistica",
+      "ingesta",
+      "analisis",
+      "pandas",
+      "metricas"
+    ]
+  },
+  {
+    "id": "exp-northwind-platform-ds_en",
+    "text": "Analysed the daily shipment history with pandas to measure the on-time delivery rate per carrier and find routes with recurring delays.",
+    "category": "experience",
+    "tags": [
+      "logistics",
+      "ingestion",
+      "analysis",
+      "pandas",
+      "metrics"
+    ]
+  },
+  {
+    "id": "exp-northwind-carriers",
+    "text": "Integré tres APIs de transportistas con reintentos y registro de errores, de modo que las cargas nocturnas fallaron menos de una vez al mes.",
+    "category": "experience",
+    "tags": [
+      "api",
+      "integracion",
+      "reintentos",
+      "logistica"
+    ]
+  },
+  {
+    "id": "exp-northwind-carriers_en",
+    "text": "Integrated three carrier APIs with retries and error logging, so the nightly loads failed less than once a month.",
+    "category": "experience",
+    "tags": [
+      "api",
+      "integration",
+      "retries",
+      "logistics"
+    ]
+  },
+  {
+    "id": "exp-northwind-dashboards",
+    "text": "Entregué dashboards en Plotly para el equipo de operaciones con la tasa de entrega a tiempo y el volumen por ruta.",
+    "category": "experience",
+    "tags": [
+      "dashboards",
+      "plotly",
+      "visualizacion de datos"
+    ]
+  },
+  {
+    "id": "exp-northwind-dashboards_en",
+    "text": "Delivered Plotly dashboards for the operations team showing on-time delivery rate and volume per route.",
+    "category": "experience",
+    "tags": [
+      "dashboards",
+      "plotly",
+      "data visualization"
+    ]
+  },
+  {
+    "id": "proj-rag-overview",
+    "text": "DocSearch: sistema RAG de preguntas y respuestas sobre un corpus de libros de dominio público, con FastAPI y un LLM local (Llama 3.2 3B).",
+    "category": "project",
+    "tags": [
+      "rag",
+      "fastapi",
+      "llm",
+      "local",
+      "llama",
+      "data service development"
+    ]
+  },
+  {
+    "id": "proj-rag-overview_en",
+    "text": "DocSearch: RAG question-answering system over a corpus of public-domain books, built with FastAPI and a local LLM (Llama 3.2 3B).",
+    "category": "project",
+    "tags": [
+      "rag",
+      "fastapi",
+      "llm",
+      "local",
+      "llama",
+      "data service development"
+    ]
+  },
+  {
+    "id": "proj-rag-hybrid-retrieval",
+    "text": "Recuperación híbrida que combina BM25 y embeddings MiniLM sobre 12.000 fragmentos con una puntuación combinada.",
+    "category": "project",
+    "tags": [
+      "bm25",
+      "hybrid search",
+      "embeddings",
+      "minilm",
+      "semantic search"
+    ]
+  },
+  {
+    "id": "proj-rag-hybrid-retrieval_en",
+    "text": "Hybrid retrieval combining BM25 and MiniLM embeddings over 12,000 passages with a combined score.",
+    "category": "project",
+    "tags": [
+      "bm25",
+      "hybrid search",
+      "embeddings",
+      "minilm",
+      "semantic search"
+    ]
+  },
+  {
+    "id": "proj-rag-recall-metrics",
+    "text": "Evaluación con 150 preguntas escritas a mano: recall@5 de 0,61 con solo BM25 a 0,78 con la búsqueda híbrida.",
+    "category": "project",
+    "tags": [
+      "recall",
+      "evaluacion",
+      "metricas",
+      "retrieval"
+    ]
+  },
+  {
+    "id": "proj-rag-recall-metrics_en",
+    "text": "Evaluation on 150 hand-written questions: recall@5 rose from 0.61 with BM25 only to 0.78 with hybrid search.",
+    "category": "project",
+    "tags": [
+      "recall",
+      "evaluation",
+      "metrics",
+      "retrieval"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-overview",
+    "text": "Metrics API: servicio REST con FastAPI, Pydantic y PostgreSQL que expone KPIs de entregas de un almacén de ejemplo.",
+    "category": "project",
+    "tags": [
+      "fastapi",
+      "pydantic",
+      "postgresql",
+      "rest",
+      "api",
+      "metrics"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-overview_en",
+    "text": "Metrics API: REST service built with FastAPI, Pydantic and PostgreSQL that exposes delivery KPIs for a sample warehouse.",
+    "category": "project",
+    "tags": [
+      "fastapi",
+      "pydantic",
+      "postgresql",
+      "rest",
+      "api",
+      "metrics"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-testing",
+    "text": "Cobertura de tests del 91 % con pytest, tipado estático con mypy y pruebas de carga a 400 peticiones por segundo.",
+    "category": "project",
+    "tags": [
+      "pytest",
+      "mypy",
+      "testing",
+      "software development practices",
+      "load testing"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-testing_en",
+    "text": "91% test coverage with pytest, static typing with mypy and load tests at 400 requests per second.",
+    "category": "project",
+    "tags": [
+      "pytest",
+      "mypy",
+      "testing",
+      "software development practices",
+      "load testing"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-docker",
+    "text": "Empaquetado con Docker y arranque local con un solo comando de docker compose.",
+    "category": "project",
+    "tags": [
+      "docker",
+      "docker compose"
+    ]
+  },
+  {
+    "id": "proj-metrics-api-docker_en",
+    "text": "Packaged with Docker and started locally with a single docker compose command.",
+    "category": "project",
+    "tags": [
+      "docker",
+      "docker compose"
+    ]
+  },
+  {
+    "id": "skill-python",
+    "text": "Python",
+    "category": "skill",
+    "tags": [
+      "python"
+    ]
+  },
+  {
+    "id": "skill-python_en",
+    "text": "Python",
+    "category": "skill",
+    "tags": [
+      "python"
+    ]
+  },
+  {
+    "id": "skill-sql",
+    "text": "SQL",
+    "category": "skill",
+    "tags": [
+      "sql",
+      "bases de datos",
+      "databases"
+    ]
+  },
+  {
+    "id": "skill-sql_en",
+    "text": "SQL",
+    "category": "skill",
+    "tags": [
+      "sql",
+      "bases de datos",
+      "databases"
+    ]
+  },
+  {
+    "id": "skill-postgresql",
+    "text": "PostgreSQL",
+    "category": "skill",
+    "tags": [
+      "postgresql",
+      "sql",
+      "databases"
+    ]
+  },
+  {
+    "id": "skill-bash",
+    "text": "Bash",
+    "category": "skill",
+    "tags": [
+      "bash",
+      "shell"
+    ]
+  },
+  {
+    "id": "skill-llms",
+    "text": "LLMs",
+    "category": "skill",
+    "tags": [
+      "llm",
+      "llms"
+    ]
+  },
+  {
+    "id": "skill-llms_en",
+    "text": "LLMs",
+    "category": "skill",
+    "tags": [
+      "llm",
+      "llms"
+    ]
+  },
+  {
+    "id": "skill-rag",
+    "text": "RAG (Retrieval-Augmented Generation)",
+    "category": "skill",
+    "tags": [
+      "rag",
+      "retrieval augmented generation"
+    ]
+  },
+  {
+    "id": "skill-pytorch",
+    "text": "PyTorch (inferencia)",
+    "category": "skill",
+    "tags": [
+      "pytorch",
+      "inference"
+    ]
+  },
+  {
+    "id": "skill-transformers",
+    "text": "Transformers / Hugging Face",
+    "category": "skill",
+    "tags": [
+      "transformers",
+      "hugging face",
+      "hf"
+    ]
+  },
+  {
+    "id": "skill-transformers_en",
+    "text": "Transformers / Hugging Face",
+    "category": "skill",
+    "tags": [
+      "transformers",
+      "hugging face",
+      "hf"
+    ]
+  },
+  {
+    "id": "skill-bm25",
+    "text": "BM25",
+    "category": "skill",
+    "tags": [
+      "bm25"
+    ]
+  },
+  {
+    "id": "skill-bm25_en",
+    "text": "BM25",
+    "category": "skill",
+    "tags": [
+      "bm25"
+    ]
+  },
+  {
+    "id": "skill-numpy",
+    "text": "NumPy",
+    "category": "skill",
+    "tags": [
+      "numpy"
+    ]
+  },
+  {
+    "id": "skill-pandas",
+    "text": "pandas",
+    "category": "skill",
+    "tags": [
+      "pandas"
+    ]
+  },
+  {
+    "id": "skill-fastapi",
+    "text": "FastAPI",
+    "category": "skill",
+    "tags": [
+      "fastapi"
+    ]
+  },
+  {
+    "id": "skill-fastapi_en",
+    "text": "FastAPI",
+    "category": "skill",
+    "tags": [
+      "fastapi"
+    ]
+  },
+  {
+    "id": "skill-pydantic",
+    "text": "Pydantic",
+    "category": "skill",
+    "tags": [
+      "pydantic"
+    ]
+  },
+  {
+    "id": "skill-pydantic_en",
+    "text": "Pydantic",
+    "category": "skill",
+    "tags": [
+      "pydantic"
+    ]
+  },
+  {
+    "id": "skill-pytest",
+    "text": "pytest",
+    "category": "skill",
+    "tags": [
+      "pytest",
+      "testing",
+      "software development practices"
+    ]
+  },
+  {
+    "id": "skill-mypy",
+    "text": "mypy (tipado estático)",
+    "category": "skill",
+    "tags": [
+      "mypy",
+      "type checking",
+      "software development practices"
+    ]
+  },
+  {
+    "id": "skill-git",
+    "text": "Git",
+    "category": "skill",
+    "tags": [
+      "git",
+      "github",
+      "software development practices"
+    ]
+  },
+  {
+    "id": "skill-git_en",
+    "text": "Git",
+    "category": "skill",
+    "tags": [
+      "git",
+      "github",
+      "software development practices"
+    ]
+  },
+  {
+    "id": "skill-linux",
+    "text": "Linux",
+    "category": "skill",
+    "tags": [
+      "linux"
+    ]
+  },
+  {
+    "id": "skill-docker",
+    "text": "Docker",
+    "category": "skill",
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "skill-django",
+    "text": "Django (proyecto del bootcamp)",
+    "category": "skill",
+    "tags": [
+      "django"
+    ]
+  },
+  {
+    "id": "skill-plotly",
+    "text": "Plotly",
+    "category": "skill",
+    "tags": [
+      "plotly"
+    ]
+  },
+  {
+    "id": "skill-rest-apis",
+    "text": "REST APIs",
+    "category": "skill",
+    "tags": [
+      "rest",
+      "api"
+    ]
+  },
+  {
+    "id": "skill-nlp",
+    "text": "NLP (procesamiento del lenguaje natural)",
+    "category": "skill",
+    "tags": [
+      "nlp",
+      "natural language processing"
+    ]
+  },
+  {
+    "id": "skill-nlp_en",
+    "text": "NLP (natural language processing)",
+    "category": "skill",
+    "tags": [
+      "nlp",
+      "natural language processing"
+    ]
+  },
+  {
+    "id": "skill-sentence-transformers",
+    "text": "sentence-transformers (MiniLM, embeddings)",
+    "category": "skill",
+    "tags": [
+      "sentence-transformers",
+      "minilm",
+      "embeddings"
+    ]
+  },
+  {
+    "id": "skill-sentence-transformers_en",
+    "text": "sentence-transformers (MiniLM, embeddings)",
+    "category": "skill",
+    "tags": [
+      "sentence-transformers",
+      "minilm",
+      "embeddings"
+    ]
+  },
+  {
+    "id": "skill-ir",
+    "text": "IR (recuperación de información)",
+    "category": "skill",
+    "tags": [
+      "ir",
+      "information retrieval"
+    ]
+  },
+  {
+    "id": "skill-ir_en",
+    "text": "IR (information retrieval)",
+    "category": "skill",
+    "tags": [
+      "ir",
+      "information retrieval"
+    ]
+  },
+  {
+    "id": "lang-spanish",
+    "text": "Español (nativo)",
+    "category": "language",
+    "tags": [
+      "español",
+      "spanish",
+      "nativo"
+    ]
+  },
+  {
+    "id": "lang-spanish_en",
+    "text": "Spanish (native)",
+    "category": "language",
+    "tags": [
+      "spanish",
+      "native"
+    ]
+  },
+  {
+    "id": "lang-catalan",
+    "text": "Catalán (básico, A2)",
+    "category": "language",
+    "tags": [
+      "catalan",
+      "catala",
+      "basico",
+      "a2"
+    ]
+  },
+  {
+    "id": "lang-catalan_en",
+    "text": "Catalan (basic, A2)",
+    "category": "language",
+    "tags": [
+      "catalan",
+      "basic",
+      "a2"
+    ]
+  },
+  {
+    "id": "lang-english",
+    "text": "Inglés (B2 hablado, C1 escrito)",
+    "category": "language",
+    "tags": [
+      "ingles",
+      "english",
+      "b2",
+      "c1"
+    ]
+  },
+  {
+    "id": "lang-english_en",
+    "text": "English (B2 spoken, C1 written)",
+    "category": "language",
+    "tags": [
+      "english",
+      "b2",
+      "c1"
+    ]
+  },
+  {
+    "id": "soft-teamwork",
+    "text": "Trabajo en equipo: revisiones de código cruzadas y programación en pareja durante las prácticas y el bootcamp.",
+    "category": "soft",
+    "tags": [
+      "trabajo en equipo",
+      "teamwork",
+      "pair programming"
+    ]
+  },
+  {
+    "id": "soft-teamwork_en",
+    "text": "Teamwork: cross code reviews and pair programming during the internship and the bootcamp.",
+    "category": "soft",
+    "tags": [
+      "teamwork",
+      "pair programming"
+    ]
+  },
+  {
+    "id": "soft-problem-solving",
+    "text": "Resolución de problemas: depuré las cargas nocturnas fallidas de un cliente hasta eliminar la causa, un cambio de formato en la API de un transportista.",
+    "category": "soft",
+    "tags": [
+      "resolucion de problemas",
+      "problem solving",
+      "problem-solving"
+    ]
+  },
+  {
+    "id": "soft-problem-solving_en",
+    "text": "Problem solving: debugged a client's failing nightly loads down to the root cause, a format change in a carrier API.",
+    "category": "soft",
+    "tags": [
+      "problem solving",
+      "problem-solving"
+    ]
+  },
+  {
+    "id": "soft-autonomous-learning",
+    "text": "Aprendizaje autónomo: pasé de administración de sistemas a datos e IA con un bootcamp y proyectos propios.",
+    "category": "soft",
+    "tags": [
+      "aprendizaje autonomo",
+      "autonomous learning",
+      "self-learning"
+    ]
+  },
+  {
+    "id": "soft-autonomous-learning_en",
+    "text": "Autonomous learning: moved from systems administration to data and AI through a bootcamp and personal projects.",
+    "category": "soft",
+    "tags": [
+      "autonomous learning",
+      "self-learning"
+    ]
+  },
+  {
+    "id": "soft-results-communication",
+    "text": "Comunicación de resultados: presenté al equipo de operaciones de un cliente la evolución semanal de sus indicadores con dashboards.",
+    "category": "soft",
+    "tags": [
+      "comunicacion de resultados",
+      "results communication"
+    ]
+  },
+  {
+    "id": "soft-results-communication_en",
+    "text": "Results communication: presented a client's operations team with the weekly evolution of their indicators using dashboards.",
+    "category": "soft",
+    "tags": [
+      "results communication"
+    ]
+  }
+]

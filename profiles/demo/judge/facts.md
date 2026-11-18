@@ -1,0 +1,1 @@
+Candidate timeline (do not contradict it): Acme Analytics dual vocational internship (Oct 2022-Jun 2023) + Northwind Logistics freelance (Nov 2023-Dec 2024) + a data and AI bootcamp (Feb 2025-Jun 2026) - total professional experience is under 2 years (~1.8).

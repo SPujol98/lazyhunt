@@ -1,0 +1,28 @@
+Becari@ / Junior de Machine Learning (Barcelona)
+
+Tramuntana Analytics (tramuntana-analytics.example.com) és una empresa de dades de Barcelona que treballa amb comerços i petites indústries. Busquem una persona amb ganes d'aprendre per unir-se a l'equip de ciència de dades i enginyeria.
+
+Què faràs
+- Preparar dades i entrenar models senzills de classificació i previsió amb Python i scikit-learn.
+- Posar models en producció darrere d'una API REST amb FastAPI.
+- Automatitzar informes de qualitat de dades amb SQL.
+- Ajudar a avaluar models amb mètriques clares i explicar-ne els resultats a persones no tècniques.
+
+Què demanem
+- Python i pandas; algun projecte propi o pràctiques amb dades.
+- Nocions de SQL i Git.
+- Formació en informàtica, estadística o similar (cicle formatiu de grau superior, bootcamp o grau).
+- Català i castellà; l'anglès tècnic és suficient per llegir documentació.
+- Sense experiència professional mínima.
+
+Valorem
+- Projectes publicats a GitHub.
+- Interès per la recuperació d'informació i els models de llenguatge.
+
+Oferim
+- Treball presencial a la nostra oficina de Barcelona (Sant Martí) amb dos dies de teletreball setmanals.
+- Contracte laboral amb retribució de 24.000 a 28.000 euros bruts anuals.
+- Acompanyament continu per una persona referent i formació pagada.
+- Possibilitat de quedar-te amb contracte indefinit després de sis mesos.
+
+Si t'interessa, envia'ns el teu CV i un enllaç als teus projectes.

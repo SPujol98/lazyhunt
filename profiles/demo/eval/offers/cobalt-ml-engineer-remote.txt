@@ -1,0 +1,28 @@
+Machine Learning Engineer (remote, Europe)
+
+Cobalt Insight (cobalt-insight.example.com) is a remote-first company that builds forecasting tools for energy retailers. We are growing the ML team and are looking for an engineer with a couple of years of hands-on experience.
+
+Responsibilities
+- Develop and deploy ML models for demand forecasting and anomaly detection.
+- Build data pipelines in Python and SQL and keep them reliable.
+- Package models as services and deploy them on AWS (ECS, S3, CloudWatch).
+- Monitor models in production and iterate with the data scientists.
+
+Requirements
+- 2-3 years of experience in machine learning or data engineering roles.
+- Strong Python, pandas and scikit-learn; basic knowledge of PyTorch.
+- Hands-on experience with a cloud platform, ideally AWS.
+- Good written and spoken English.
+- A degree in a quantitative field or equivalent practical experience.
+
+Nice to have
+- Experience with MLflow or similar experiment tracking.
+- Knowledge of time series methods.
+
+What we offer
+- Fully remote work from any country in the EU, with a yearly team meeting in Lisbon.
+- 40,000 - 48,000 EUR gross per year.
+- Home-office budget, 28 days of holiday and a conference allowance.
+- A supportive team that documents everything.
+
+If you meet most of these points we would like to hear from you, even if you do not tick every box.

@@ -1,0 +1,475 @@
+/* Options page layout. Tokens and components come from shared.css. */
+
+body.options {
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+}
+
+.topbar .brand {
+  font-size: 16px;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.save-state {
+  font-size: 12.5px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-5);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.sidenav {
+  position: sticky;
+  top: 76px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidenav a {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 560;
+}
+
+.sidenav a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.status-banner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.status-banner.status-warn {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  scroll-margin-top: 76px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.panel-head h2 {
+  font-size: 17px;
+  margin-bottom: 2px;
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.grid-2,
+.grid-3 {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.input-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Portals */
+.portal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
+
+.portal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.portal.is-on {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-soft);
+}
+
+.portal-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.portal-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.portal-notes:empty {
+  display: none;
+}
+
+/* Editable rows (searches, beacons) */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.row.is-disabled {
+  opacity: 0.75;
+}
+
+.row-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.row-remove {
+  margin-left: auto;
+}
+
+.beacon-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 2fr) 140px;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field-inline .select {
+  width: auto;
+}
+
+.portal-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.portal-picks legend {
+  width: 100%;
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.check.is-off {
+  color: var(--text-muted);
+}
+
+.empty-row {
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.test-result:empty {
+  display: none;
+}
+
+.test-result.is-error {
+  color: var(--danger);
+}
+
+.test-result.is-ok {
+  color: var(--ok);
+}
+
+.test-result.is-warn {
+  color: var(--warn);
+}
+
+.scan-time {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Suggestions and preview */
+.suggest {
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.suggest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.suggest-head h3 {
+  font-size: 14px;
+}
+
+.suggest-list,
+.preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggest-item {
+  padding: 4px 0;
+}
+
+.suggest-name {
+  font-weight: 600;
+}
+
+.preview summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.preview-list {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.preview-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+}
+
+.preview-item + .preview-item {
+  border-top: 1px solid var(--border);
+}
+
+.preview-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Title filter profile switch */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.segment {
+  min-height: 28px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* Maintenance */
+.maintenance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.maintenance-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.maintenance-item h3 {
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  max-width: min(440px, calc(100vw - 48px));
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+}
+
+.toast-error {
+  background: var(--danger);
+  color: #fff;
+}
+
+.toast-ok {
+  background: var(--ok);
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .toast-error,
+  .toast-ok {
+    color: #0f1419;
+  }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-4);
+  }
+
+  .sidenav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .beacon-fields {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-head,
+  .maintenance-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .topbar-inner {
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+  }
+}
+
+/* Missing bridge (S2): the connection panel and its empty fields stand out. */
+.panel.needs-bridge {
+  border-color: var(--warn);
+}
+
+.input.is-missing {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
+}

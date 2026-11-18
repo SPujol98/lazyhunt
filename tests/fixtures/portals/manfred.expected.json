@@ -1,0 +1,31 @@
+{
+  "cards": [
+    {
+      "id": "8501",
+      "title": "Senior Python Engineer",
+      "company": "Empresa Ejemplo Uno",
+      "location": "Barcelona",
+      "link": "https://www.getmanfred.com/ofertas-empleo/8501/empresa-ejemplo-uno-senior-python-engineer-oct26"
+    },
+    {
+      "id": "8500",
+      "title": "Data Engineer",
+      "company": "Empresa Ejemplo Dos",
+      "location": "Remoto",
+      "link": "https://www.getmanfred.com/ofertas-empleo/8500/empresa-ejemplo-dos-data-engineer-oct26"
+    },
+    {
+      "id": "8379",
+      "title": "Backend Developer",
+      "company": "Empresa Ejemplo Tres",
+      "location": "Madrid",
+      "link": "https://www.getmanfred.com/ofertas-empleo/8379/empresa-ejemplo-tres-backend-developer-jun26"
+    }
+  ],
+  "no_results_text": "No hay ofertas que coincidan con tu búsqueda",
+  "urls": [
+    "https://www.getmanfred.com/ofertas-empleo?onlyActive=true",
+    "https://www.getmanfred.com/ofertas-empleo/8501/empresa-ejemplo-uno-senior-python-engineer-oct26"
+  ],
+  "ignores_keywords": true
+}

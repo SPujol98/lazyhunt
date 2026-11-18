@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build artifacts
+dist/
+build/
+
+# Secrets
+.env
+
+# Machine-specific/personal config layer (shared-config); see
+# config.local.toml.example for the tracked template.
+config.local.toml
+
+# Runtime state (data/ is ignored except the tracked salary reference table)
+data/*
+!data/salary_reference.toml
+!data/cover_letter_voice.md
+adaptadas/
+
+# Owner engine outputs (cvgen writes CV_*.pdf at the repo root; never committed)
+/CV_*.pdf
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Tooling caches (registry)
+.atl/.skill-registry.cache.json
+
+# Owner reference clone (nested git repo, read-only)
+repo_beacons/
+
+# Personal profile directories (cli.py init creates profiles/me); only the
+# fictional demo profile is tracked.
+/profiles/*
+!/profiles/demo/

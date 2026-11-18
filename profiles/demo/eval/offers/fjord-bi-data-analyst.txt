@@ -1,0 +1,24 @@
+Data Analyst / BI Developer (Barcelona, hybrid)
+
+Fjord Retail Group (fjord-retail.example.com) runs a network of home goods stores and an online shop. Our business intelligence team in Barcelona is looking for a data analyst to own the commercial dashboards.
+
+Your mission
+- Build and maintain dashboards in Power BI for the sales, stock and marketing teams.
+- Write SQL queries and views that feed those reports.
+- Automate recurring data preparation with Python scripts.
+- Translate business questions into metrics and present findings to managers.
+
+Requirements
+- 2 years of experience in an analyst or BI role.
+- Advanced SQL and good command of Power BI (DAX, data modelling).
+- Python or R for data cleaning is a plus.
+- Excellent communication in Spanish; business English.
+- Degree in economics, engineering, statistics or a similar field.
+
+We offer
+- Hybrid schedule with two days a week in our Barcelona offices.
+- Salary of 30,000 - 36,000 EUR gross per year plus a performance bonus.
+- Employee discount in our stores, health insurance and intensive summer hours.
+- Career path towards analytics engineering.
+
+The daily core of this role is reporting and dashboards, with Python as occasional support. We will review applications as they arrive.

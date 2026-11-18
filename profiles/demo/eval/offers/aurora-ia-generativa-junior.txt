@@ -1,0 +1,28 @@
+Desarrollador/a Junior de IA Generativa
+
+Aurora Datos S.L. (aurora-datos.example.com) es una consultora tecnológica con oficina en Barcelona que desarrolla asistentes basados en modelos de lenguaje para empresas del sector logístico y de seguros. Buscamos una persona junior para reforzar nuestro equipo de IA aplicada.
+
+Responsabilidades
+- Diseñar e implementar asistentes con LLM y arquitecturas RAG sobre documentación interna de clientes.
+- Desarrollar servicios en Python (FastAPI) y conectarlos con bases de datos PostgreSQL.
+- Evaluar la calidad de las respuestas y mejorar los prompts con métricas objetivas.
+- Documentar los resultados y presentarlos al cliente.
+
+Requisitos
+- Python sólido y experiencia previa con APIs de LLM (proyectos personales o prácticas valen).
+- Conocimientos de SQL y control de versiones con Git.
+- Formación en informática, ciencia de datos o equivalente (se acepta FP Superior o bootcamp).
+- Nivel de inglés suficiente para leer documentación técnica.
+- 1-2 años de experiencia deseable, no imprescindible.
+
+Se valorará
+- Haber desplegado un servicio con Docker.
+- Interés por la evaluación de sistemas de recuperación de información.
+
+Ofrecemos
+- Modalidad híbrida: 2 días por semana en nuestra oficina de Barcelona (Poblenou) y el resto en remoto.
+- Contrato indefinido, retribución de 27.000 a 32.000 euros brutos anuales.
+- Plan de formación, certificaciones pagadas y horario flexible.
+- Un equipo pequeño donde tu trabajo llega pronto a producción.
+
+Si te interesa, envíanos tu CV y cuéntanos en qué proyecto has aprendido más.

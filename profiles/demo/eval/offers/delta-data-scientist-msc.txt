@@ -1,0 +1,28 @@
+Data Scientist (Barcelona, hybrid)
+
+Delta Biometrics (delta-biometrics.example.com) analyses sensor data from wearable devices for clinical research. We are looking for a data scientist to join our research group in Barcelona.
+
+Responsibilities
+- Develop statistical and machine learning models on physiological signals.
+- Design experiments and validate them with clinical partners.
+- Write Python code for data pipelines and reproducible analyses.
+- Prepare figures and sections for scientific publications.
+
+Requirements
+- Master's degree (MSc) in statistics, mathematics, physics, bioengineering or a closely related discipline is mandatory.
+- 1-2 years of experience with Python, scikit-learn and signal processing.
+- Solid foundations in probability and statistics.
+- Fluent English; Spanish is useful.
+- Interest in biomedical research.
+
+Nice to have
+- A PhD or published papers.
+- Experience with R.
+
+We offer
+- Hybrid work, two days a week in our Barcelona lab.
+- 33,000 - 38,000 EUR gross per year.
+- Time for conferences and a collaborative research culture.
+- A permanent contract after the probation period.
+
+Candidates without a Master's degree cannot be considered for this position, as the qualification is a requirement of the research grants that fund the role.

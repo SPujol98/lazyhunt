@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lazyhunt</title>
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body class="popup">
+  <header class="pop-top">
+    <span class="brand"><span class="brand-mark" aria-hidden="true"></span>lazyhunt</span>
+    <span id="statusChip" class="chip" role="status">…</span>
+  </header>
+
+  <main class="popup-main">
+    <p id="statusDetail" class="status-detail muted"></p>
+    <button id="connectBotBtn" type="button" class="btn btn-primary btn-sm connect-bot" data-i18n="popupConnectBot" hidden>Connect to the bot</button>
+
+    <dl class="tiles">
+      <div class="tile">
+        <dt data-i18n="popupLastRound">Last round</dt>
+        <dd id="roundLast">—</dd>
+      </div>
+      <div class="tile">
+        <dt data-i18n="popupNextRound">Next round</dt>
+        <dd id="roundNext">—</dd>
+      </div>
+    </dl>
+
+    <section class="beacons" aria-labelledby="beaconsHeading">
+      <div class="panel-head">
+        <h2 id="beaconsHeading" data-i18n="popupBeaconsHeading">Searches being watched</h2>
+        <span id="watchCount" class="chip chip-plain">0</span>
+      </div>
+      <ul id="watchList" class="watch-list"></ul>
+      <div id="emptyState" class="empty" hidden>
+        <p data-i18n="popupEmpty">Nothing to watch yet. Add a search or a beacon in the options.</p>
+        <button id="emptyOptionsBtn" type="button" class="btn btn-sm" data-i18n="popupOpenOptionsShort">Open options</button>
+      </div>
+    </section>
+
+    <p id="resultLine" class="result" role="status" aria-live="polite"></p>
+  </main>
+
+  <footer class="popup-actions">
+    <button id="checkNowBtn" type="button" class="btn btn-primary" data-i18n="popupCheckNow">Check now</button>
+    <button id="pauseBtn" type="button" class="btn" data-i18n="popupPause">Pause</button>
+    <button id="optionsBtn" type="button" class="btn btn-ghost" data-i18n="popupOptions">Options</button>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

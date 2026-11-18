@@ -1,0 +1,27 @@
+Python Backend Engineer (remote Spain)
+
+Ironwood Systems (ironwood-systems.example.com) builds supply chain software for manufacturers. We are looking for an experienced backend engineer to join our remote platform team.
+
+Responsibilities
+- Own the design and evolution of our Python and FastAPI services.
+- Optimise PostgreSQL performance and plan zero-downtime migrations.
+- Define coding standards and review the work of other engineers.
+- Participate in architecture discussions with the CTO.
+
+Requirements
+- At least 5 years of professional experience building and operating Python backends in production.
+- Deep knowledge of distributed systems, caching and message queues.
+- Experience with Docker, Kubernetes and a public cloud.
+- Strong English; Spanish is a plus.
+- Degree in computer science or equivalent experience.
+
+Nice to have
+- Experience with event-driven architectures.
+- Open source contributions.
+
+We offer
+- Fully remote work from Spain.
+- 48,000 - 58,000 EUR gross per year.
+- Flexible hours, 25 days of holiday and a conference budget.
+
+The role requires 5 or more years of hands-on backend experience: we cannot consider candidates with less, since there is no one available to onboard beginners at the moment.

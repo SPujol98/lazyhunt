@@ -1,0 +1,28 @@
+Junior Data Engineer, Logistics Analytics (Remote within Spain)
+
+Harbor Freight Tech (harbor-freight.example.com) moves containers and parcels across southern Europe and we need clean data to run it. The analytics platform team is hiring a junior data engineer, fully remote for candidates living in Spain.
+
+Responsibilities
+- Build and maintain batch data pipelines in Python and SQL that load shipment events into a warehouse.
+- Clean, validate and document datasets used by operations and planning teams.
+- Create small APIs and dashboards' data feeds that expose delivery metrics.
+- Monitor pipeline health and fix data quality issues together with the operations team.
+
+Requirements
+- Solid Python and SQL (PostgreSQL preferred).
+- Understanding of ETL concepts; experience from a bootcamp, an internship or a personal project is enough.
+- Working proficiency in English; we use it in all meetings.
+- Willingness to learn orchestration tools such as Airflow.
+- Up to 2 years of experience. Higher vocational training or a degree in a technical field, or equivalent experience.
+
+A plus
+- Previous work with logistics, transport or operations data.
+- Basic knowledge of Docker.
+
+What we offer
+- Remote work in Spain, with a team meetup twice a year.
+- 29,000 - 35,000 EUR gross per year and an annual bonus.
+- 25 days of holiday, flexible schedule and a home-office allowance.
+- Mentoring from an experienced data engineer who will review your first pipelines.
+
+Apply with your CV in English or Spanish.

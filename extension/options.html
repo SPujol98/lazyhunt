@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lazyhunt options</title>
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="options">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"></span>lazyhunt</span>
+      <span id="statusChip" class="chip" role="status">…</span>
+      <span class="topbar-spacer"></span>
+      <span id="saveState" class="save-state muted" aria-live="polite"></span>
+      <button id="saveBtn" type="button" class="btn btn-primary" title="Ctrl+S" data-i18n="optSave">Save changes</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidenav" aria-label="Sections" data-i18n-aria-label="navLabel">
+      <a href="#portals" data-i18n="navPortals">Portals</a>
+      <a href="#searches" data-i18n="navSearches">Searches</a>
+      <a href="#beacons" data-i18n="navBeacons">Manual beacons</a>
+      <a href="#filters" data-i18n="navFilters">Title filters</a>
+      <a href="#connection" data-i18n="navConnection">Schedule and bot</a>
+      <a href="#maintenance" data-i18n="navMaintenance">Maintenance</a>
+    </nav>
+
+    <main class="content">
+      <p id="statusDetail" class="status-banner" hidden></p>
+
+      <section id="portals" class="card panel" aria-labelledby="portalsHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="portalsHeading" data-i18n="portalsHeading">Portals</h2>
+            <p class="hint" data-i18n="portalsIntro">Only enabled portals are scanned. Enabling one asks for the browser permission to read that site. Changes apply at once.</p>
+          </div>
+        </div>
+        <ul id="portalList" class="portal-list"></ul>
+      </section>
+
+      <section id="searches" class="card panel" aria-labelledby="searchesHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="searchesHeading" data-i18n="searchesHeading">Searches</h2>
+            <p class="hint" data-i18n="searchesIntro">Each search runs on every portal you tick. New offers are sent to the bot, first scans included.</p>
+          </div>
+          <div class="panel-actions">
+            <button id="suggestBtn" type="button" class="btn btn-sm" data-i18n="suggestButton">Suggest from my profile</button>
+            <button id="addSearchBtn" type="button" class="btn btn-sm" data-i18n="addSearch">Add search</button>
+          </div>
+        </div>
+
+        <div id="suggestPanel" class="suggest" hidden>
+          <div class="suggest-head">
+            <h3 data-i18n="suggestHeading">Suggested searches</h3>
+            <button id="addSuggestedBtn" type="button" class="btn btn-sm btn-primary" data-i18n="suggestAdd">Add selected</button>
+          </div>
+          <ul id="suggestList" class="suggest-list"></ul>
+        </div>
+
+        <div id="searchList" class="rows"></div>
+        <p id="searchEmpty" class="empty-row muted" data-i18n="searchesEmpty">No searches yet.</p>
+
+        <details class="preview">
+          <summary><span data-i18n="previewHeading">What the next round will open</span> <span id="previewCount" class="chip chip-plain">0</span></summary>
+          <ul id="previewList" class="preview-list"></ul>
+        </details>
+      </section>
+
+      <section id="beacons" class="card panel" aria-labelledby="beaconsHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="beaconsHeading" data-i18n="beaconsHeading">Manual beacons</h2>
+            <p class="hint" data-i18n="beaconsIntro">A results page you pasted from a portal. Use Test to check what the extension reads from it.</p>
+          </div>
+          <div class="panel-actions">
+            <button id="addBeaconBtn" type="button" class="btn btn-sm" data-i18n="addBeacon">Add beacon</button>
+          </div>
+        </div>
+        <div id="watchList" class="rows"></div>
+        <p id="watchEmpty" class="empty-row muted" data-i18n="beaconsEmpty">No manual beacons.</p>
+      </section>
+
+      <section id="filters" class="card panel" aria-labelledby="filtersHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="filtersHeading" data-i18n="filtersHeading">Title filters</h2>
+            <p class="hint" data-i18n="filtersIntro">Each search and beacon uses one profile. Offers that do not pass are skipped and never sent.</p>
+          </div>
+          <div class="segmented" role="group" aria-labelledby="filtersHeading">
+            <button id="profileAiBtn" type="button" class="segment" aria-pressed="true" data-i18n="profileAi">AI</button>
+            <button id="profileBackendBtn" type="button" class="segment" aria-pressed="false" data-i18n="profileBackend">Backend</button>
+          </div>
+        </div>
+        <label class="inline-field">
+          <input id="filterEnabled" type="checkbox" class="switch">
+          <span data-i18n="filterEnabled">Filter enabled for this profile</span>
+        </label>
+        <div class="grid-2">
+          <label class="field">
+            <span class="field-label" data-i18n="filterInclude">Must include (one group per line, terms separated by commas)</span>
+            <textarea id="filterInclude" class="textarea" rows="5" spellcheck="false"></textarea>
+            <span class="hint" data-i18n="filterIncludeHint">Every line needs at least one matching word in the title.</span>
+          </label>
+          <label class="field">
+            <span class="field-label" data-i18n="filterExclude">Exclude (commas or new lines)</span>
+            <textarea id="filterExclude" class="textarea" rows="5" spellcheck="false"></textarea>
+            <span class="hint" data-i18n="filterExcludeHint">Any match in the title or the company drops the offer.</span>
+          </label>
+        </div>
+      </section>
+
+      <section id="connection" class="card panel" aria-labelledby="connectionHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="connectionHeading" data-i18n="connectionHeading">Schedule and bot</h2>
+            <p class="hint" data-i18n="connectionIntro">New offers go to the local bot through the bridge; the bot sends the notifications.</p>
+          </div>
+        </div>
+        <div class="grid-3">
+          <label class="field">
+            <span class="field-label" data-i18n="intervalLabel">Minutes between rounds</span>
+            <input id="intervalInput" class="input" type="number" min="1" max="1440" step="1" inputmode="numeric">
+            <span id="intervalWarning" class="hint hint-warn" data-i18n="intervalWarning" hidden>Under 30 minutes portals may throttle or block you.</span>
+          </label>
+          <label class="field">
+            <span class="field-label" data-i18n="bridgeUrlLabel">Bridge URL</span>
+            <input id="bridgeUrlInput" class="input" type="url" placeholder="http://127.0.0.1:8765/bridge" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field-label" data-i18n="bridgeSecretLabel">Bridge secret</span>
+            <span class="input-group">
+              <input id="bridgeSecretInput" class="input" type="password" spellcheck="false" autocomplete="off">
+              <button id="toggleSecretBtn" type="button" class="btn btn-sm btn-ghost" aria-pressed="false" data-i18n="secretShow">Show</button>
+            </span>
+            <span class="hint" data-i18n="bridgeSecretHint">Never included in exported files.</span>
+          </label>
+        </div>
+        <p id="bridgeMissingHint" class="hint hint-warn" data-i18n="bridgeMissingHint" hidden>Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost.</p>
+        <p id="botInfo" class="hint" hidden></p>
+      </section>
+
+      <section id="maintenance" class="card panel" aria-labelledby="maintenanceHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="maintenanceHeading" data-i18n="maintenanceHeading">Maintenance and backup</h2>
+          </div>
+        </div>
+        <div class="maintenance">
+          <div class="maintenance-item">
+            <div>
+              <h3 data-i18n="clearHistoryHeading">Seen offers</h3>
+              <p class="hint" data-i18n="clearHistoryIntro">Clearing the history makes the next scan send every offer on the page to the bot again.</p>
+            </div>
+            <button id="clearHistoryBtn" type="button" class="btn btn-danger" data-i18n="clearHistory">Clear history</button>
+          </div>
+          <div class="maintenance-item">
+            <div>
+              <h3 data-i18n="backupHeading">Configuration file</h3>
+              <p class="hint" data-i18n="backupIntro">Beacons, searches, title filters, interval and bridge URL. The secret, the pause and the seen offers stay here.</p>
+            </div>
+            <div class="panel-actions">
+              <button id="exportBtn" type="button" class="btn" data-i18n="exportConfig">Export</button>
+              <button id="importBtn" type="button" class="btn" data-i18n="importConfig">Import</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

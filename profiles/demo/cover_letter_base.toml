@@ -1,0 +1,40 @@
+# Demo profile: base cover letter of the fictional candidate "Alex Rivera".
+# Keys and placeholders: cva/profile_persona.py (load_letter_bases). The model
+# writes the linking sentence of paragraph 1 and paragraphs 2 and 3; everything
+# here is fixed text. open_salutation + open_paragraph build the open letter
+# of /cartabase (no offer, no model). The Catalan entry is a translation of the Spanish one.
+
+[es]
+salutation = "Hola equipo de {company},"
+salutation_generic = "Hola equipo,"
+salutation_formal = "Estimado equipo de selección de {company}:"
+salutation_formal_generic = "Estimado equipo de selección:"
+paragraph1 = "Vengo de administrar sistemas y hace dos años me pasé a los datos. En mi proyecto DocSearch escribí 150 preguntas a mano para medir si de verdad funcionaba y subí el recall de 0,61 a 0,78 combinando dos tipos de búsqueda. Antes ya había cuidado las cargas nocturnas de miles de envíos de un cliente de logística, con datos reales y plazos reales. Lo que me mueve es que los sistemas funcionen en producción, no solo en una demo."
+closing = "Me encantaría contároslo en una entrevista y enseñaros el código de estos proyectos. Puedo incorporarme de inmediato."
+closing_formal = "Me encantaría contárselo en una entrevista y enseñarles el código de estos proyectos. Puedo incorporarme de inmediato."
+signoff = "Un saludo,\nAlex Rivera"
+open_salutation = "Hola,"
+open_paragraph = "Busco un puesto como ingeniero de datos o desarrollador Python, en remoto o en híbrido. Me interesan los equipos que cuidan sus datos en producción: cargas que no fallan de noche y búsquedas que se pueden medir. Es lo que he hecho estos dos años, midiendo cada cambio antes de darlo por bueno, y quiero seguir por ese camino."
+
+[en]
+salutation = "Dear {company} team,"
+salutation_generic = "Dear hiring team,"
+salutation_formal = "Dear {company} hiring team,"
+salutation_formal_generic = "Dear hiring team,"
+paragraph1 = "I come from systems administration, and two years ago I moved into data. In my DocSearch project I wrote 150 questions by hand to check it really worked, and raised recall from 0.61 to 0.78 by combining two kinds of search. Before that, I had looked after the nightly loads of thousands of shipments for a logistics client, with real data and real deadlines. What drives me is making systems work in production, not just in a demo."
+closing = "I'd love to tell you more in an interview and walk you through the code behind these projects. I can start immediately."
+signoff = "Best regards,\nAlex Rivera"
+open_salutation = "Hello,"
+open_paragraph = "I am looking for a data engineering or Python developer role, remote or hybrid. I am interested in teams that look after their data in production: loads that do not fail at night and search that can be measured. That is what I have done these two years, measuring every change before calling it done, and I want to keep going down that path."
+
+[ca]
+salutation = "Hola equip {company_de},"
+salutation_generic = "Hola equip,"
+salutation_formal = "Benvolgut equip de selecció {company_de}:"
+salutation_formal_generic = "Benvolgut equip de selecció:"
+paragraph1 = "Vinc d'administrar sistemes i fa dos anys em vaig passar a les dades. Al meu projecte DocSearch vaig escriure 150 preguntes a mà per mesurar si de debò funcionava i vaig pujar el recall de 0,61 a 0,78 combinant dos tipus de cerca. Abans ja havia cuidat les càrregues nocturnes de milers d'enviaments d'un client de logística, amb dades reals i terminis reals. El que em mou és que els sistemes funcionin en producció, no només en una demo."
+closing = "M'encantaria explicar-vos-ho en una entrevista i ensenyar-vos el codi d'aquests projectes. Puc incorporar-me d'immediat."
+closing_formal = "M'encantaria explicar-ho en una entrevista i ensenyar-los el codi d'aquests projectes. Puc incorporar-me d'immediat."
+signoff = "Salutacions,\nAlex Rivera"
+open_salutation = "Hola,"
+open_paragraph = "Busco una feina com a enginyer de dades o desenvolupador Python, en remot o en híbrid. M'interessen els equips que cuiden les seves dades en producció: càrregues que no fallen de nit i cerques que es poden mesurar. És el que he fet aquests dos anys, mesurant cada canvi abans de donar-lo per bo, i vull continuar per aquest camí."

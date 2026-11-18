@@ -1,0 +1,24 @@
+AI Engineer, Applied LLM Systems (Remote)
+
+Summit Cognition (summit-cognition.example.com) is a US-based startup building agents for insurance claims. We are hiring an AI engineer to work with our product team in a remote-first environment.
+
+Responsibilities
+- Build LLM-powered workflows with Python and FastAPI.
+- Implement retrieval pipelines over claims documents.
+- Evaluate model outputs and run experiments to reduce errors.
+- Work with the head of engineering on architecture decisions.
+
+Requirements
+- 1-3 years of experience with Python and LLM APIs.
+- Experience with PostgreSQL and Docker.
+- Strong written English; the team works on US Eastern hours.
+- Candidates must be authorized to work in the United States and must not require visa sponsorship now or in the future.
+- Bachelor's degree or equivalent experience.
+
+What we offer
+- Remote work from anywhere in the United States.
+- Salary of 95,000 - 120,000 USD per year plus equity.
+- Health, dental and vision coverage under a US employment contract.
+- Quarterly team retreats.
+
+We are unable to hire outside the US at this time because we do not have entities elsewhere. Applications from other countries will not be considered.

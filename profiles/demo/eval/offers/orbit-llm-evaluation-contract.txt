@@ -1,0 +1,27 @@
+LLM Evaluation Engineer (contract, remote EU)
+
+Orbit Assist (orbit-assist.example.com) builds customer-support copilots. We need an engineer for a six-month contract to design the evaluation harness that decides whether a new prompt or model goes live.
+
+Scope
+- Build datasets and automatic checks for answer quality, groundedness and tone.
+- Implement regression suites in Python that run in CI on every prompt change.
+- Analyse failure cases and propose fixes to the retrieval and prompting layers.
+- Document the evaluation method for the wider engineering team.
+
+Requirements
+- Good Python and pytest; experience calling LLM APIs.
+- Understanding of retrieval-augmented generation and of metrics for retrieval and generation.
+- Written English; you will report weekly to the head of product.
+- 1-3 years of related experience. A degree or equivalent practical experience.
+
+Nice to have
+- Experience with annotation tools or human evaluation protocols.
+- Spanish or French for reading customer transcripts.
+
+Conditions
+- Fully remote for residents of the EU.
+- Day rate between 220 and 280 EUR as a freelancer, invoiced monthly.
+- Possible extension or permanent offer after the contract.
+- No fixed hours: deliverables are agreed every two weeks.
+
+This is a contract position, not an employee role, so benefits are not included. If you are comfortable invoicing as a self-employed person in Spain, apply with your CV and a short note about a similar project.

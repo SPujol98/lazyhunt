@@ -1,0 +1,27 @@
+Data Engineer (100% presencial, Madrid)
+
+Plaza Mayor Data (plaza-mayor-data.example.com) es una empresa de servicios de datos con sede en Madrid. Buscamos un/a ingeniero/a de datos junior-medio para nuestro equipo de plataforma.
+
+Responsabilidades
+- Construir pipelines de datos con Python, SQL y Airflow.
+- Mantener nuestro almacén de datos en PostgreSQL y optimizar las cargas.
+- Documentar los modelos de datos y apoyar a los equipos de negocio.
+- Resolver incidencias de calidad de datos.
+
+Requisitos
+- 1-2 años de experiencia con Python y SQL.
+- Conocimientos de ETL y orquestación.
+- Formación en informática o similar (se acepta formación profesional).
+- Castellano nativo e inglés técnico.
+
+Se valorará
+- Experiencia con dbt o Spark.
+- Proyectos propios publicados.
+
+Condiciones
+- Trabajo 100% presencial en nuestras oficinas de Madrid, de lunes a viernes. No ofrecemos teletrabajo.
+- Es imprescindible residir en Madrid o trasladarse antes de la incorporación; no hay ayuda de reubicación.
+- Salario de 30.000 a 36.000 euros brutos anuales.
+- Seguro médico y tickets restaurante.
+
+Las entrevistas se realizan en persona en la oficina de Madrid.

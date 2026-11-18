@@ -1,0 +1,27 @@
+Backend Engineer, Python (hybrid Barcelona)
+
+Quanta Mobility (quanta-mobility.example.com) is a Barcelona scale-up that connects electric scooters with fleet operators. Our platform team needs a backend engineer to help us scale the API layer.
+
+Responsibilities
+- Develop and operate FastAPI services that handle telemetry from thousands of vehicles.
+- Design PostgreSQL schemas and optimise queries under load.
+- Contribute to our infrastructure as code (Terraform) and deploy to Kubernetes on a managed cloud.
+- Participate in on-call rotations after an initial onboarding period.
+
+Requirements
+- 3+ years of experience developing Python backends in production.
+- Experience with Docker and CI/CD pipelines; knowledge of Kubernetes is valued.
+- Good SQL and an understanding of REST design.
+- Spanish and professional English.
+- Degree in computer science or equivalent experience.
+
+Nice to have
+- Experience with message brokers (Kafka, RabbitMQ).
+- Metrics and tracing with Prometheus and Grafana.
+
+We offer
+- Hybrid work: three days a week at our office in Barcelona.
+- 38,000 - 46,000 EUR gross per year, equity programme and health insurance.
+- A direct impact on a product with growing traffic.
+
+Candidates with slightly less than three years who have built something comparable are welcome to apply.

@@ -1,0 +1,28 @@
+Java Backend Developer (Barcelona, hybrid)
+
+Kestrel Payments (kestrel-payments.example.com) processes card transactions for retailers. Our core platform is written in Java and we are looking for developers to extend it.
+
+You will
+- Develop microservices in Java 17 and Spring Boot for the payment authorisation flow.
+- Design Spring Data JPA entities and tune Oracle queries.
+- Write unit and integration tests with JUnit and Mockito.
+- Take part in the migration of legacy Java modules to Spring Cloud.
+
+Requirements
+- 3 years of professional experience with Java and Spring Boot: this is the daily core of the position.
+- Deep knowledge of Java concurrency, JPA and Hibernate.
+- Experience with Maven, Jenkins and relational databases.
+- Knowledge of payment standards is a plus.
+- Spanish and English.
+- Degree in computer science or similar.
+
+Nice to have
+- Python for internal scripts and tooling.
+- Experience with Kafka.
+
+We offer
+- Hybrid model with three days in our Barcelona office.
+- 34,000 - 42,000 EUR gross per year.
+- Health insurance and a training plan.
+
+Only Java developers will be considered: all our services, libraries and tests are written in Java, and our engineers work in Java every day of the week.

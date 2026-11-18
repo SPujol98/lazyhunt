@@ -1,0 +1,238 @@
+{
+  "variant": "BACKEND_ES",
+  "header": {
+    "name": {
+      "claim_id": "identity-contact",
+      "text": "Alex Rivera"
+    },
+    "tagline": {
+      "claim_id": "identity-backend-tagline",
+      "text": "Python Backend Developer | FastAPI · PostgreSQL · REST APIs"
+    },
+    "contact": [
+      {
+        "claim_id": "identity-contact",
+        "text": "Barcelona, España"
+      },
+      {
+        "claim_id": "identity-phone",
+        "text": "+34 600 000 000"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "alex.rivera@example.com"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "linkedin.com/in/alex-rivera-example"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "github.com/example"
+      }
+    ]
+  },
+  "sections": {
+    "summary": {
+      "title": "Perfil Profesional",
+      "paragraphs": [
+        {
+          "claim_id": "sum-backend-foundation",
+          "text": "Desarrollador backend junior en Python con FastAPI, PostgreSQL y APIs REST, con una base de sistemas y redes."
+        },
+        {
+          "claim_id": "sum-backend-experience",
+          "text": "Casi dos años de práctica entre unas prácticas en una consultora de datos y un proyecto freelance en el que diseñé e implementé un servicio de ingesta de envíos con integraciones de APIs de terceros, tests y despliegue con Docker."
+        },
+        {
+          "claim_id": "sum-backend-ai",
+          "text": "Además he construido un sistema RAG con FastAPI y un LLM local, que aporta contexto de IA al trabajo de backend."
+        }
+      ]
+    },
+    "experience": {
+      "title": "Experiencia Profesional",
+      "entries": [
+        {
+          "title": {
+            "claim_id": "exp-northwind-role",
+            "text": "Ingeniero de datos y backend freelance · Northwind Logistics"
+          },
+          "date": "Noviembre 2023 – Diciembre 2024",
+          "bullets": [
+            {
+              "claim_id": "exp-northwind-platform",
+              "text": "Diseñé e implementé con FastAPI y PostgreSQL un servicio que ingiere cada día unos 25.000 envíos de tres transportistas y calcula la tasa de entrega a tiempo por cliente."
+            },
+            {
+              "claim_id": "exp-northwind-carriers",
+              "text": "Integré tres APIs de transportistas con reintentos y registro de errores, de modo que las cargas nocturnas fallaron menos de una vez al mes."
+            },
+            {
+              "claim_id": "exp-northwind-dashboards",
+              "text": "Entregué dashboards en Plotly para el equipo de operaciones con la tasa de entrega a tiempo y el volumen por ruta."
+            }
+          ]
+        },
+        {
+          "title": {
+            "claim_id": "exp-acme-role",
+            "text": "Desarrollador de datos junior (prácticas FP Dual) · Acme Analytics"
+          },
+          "date": "Octubre 2022 – Junio 2023",
+          "bullets": [
+            {
+              "claim_id": "exp-acme-etl",
+              "text": "Automaticé en Python la consolidación semanal de 14 informes de Excel en una única tabla SQL, ahorrando unas 6 horas de trabajo manual a la semana."
+            },
+            {
+              "claim_id": "exp-acme-quality",
+              "text": "Escribí comprobaciones de calidad de datos en SQL y Python que detectaban duplicados y fechas inválidas antes de cada carga, y trabajé con Git y revisiones de código."
+            }
+          ]
+        }
+      ]
+    },
+    "projects": {
+      "title": "Proyectos",
+      "projects": [
+        {
+          "title": {
+            "claim_id": "proj-rag-overview",
+            "text": "DocSearch: RAG sobre libros de dominio público"
+          },
+          "url": "https://github.com/example/docsearch-rag",
+          "bullets": [
+            {
+              "claim_id": "proj-rag-overview",
+              "text": "Sistema RAG de preguntas y respuestas sobre un corpus de libros de dominio público, con FastAPI y un LLM local (Llama 3.2 3B)."
+            },
+            {
+              "claim_id": "proj-rag-hybrid-retrieval",
+              "text": "Recuperación híbrida que combina BM25 y embeddings MiniLM sobre 12.000 fragmentos con una puntuación combinada."
+            },
+            {
+              "claim_id": "proj-rag-recall-metrics",
+              "text": "Evaluación con 150 preguntas escritas a mano: recall@5 de 0,61 con solo BM25 a 0,78 con la búsqueda híbrida."
+            }
+          ],
+          "stack": {
+            "claim_id": "skill-bm25",
+            "text": "Python, FastAPI, sentence-transformers, BM25, Llama 3.2"
+          }
+        },
+        {
+          "title": {
+            "claim_id": "proj-metrics-api-overview",
+            "text": "Metrics API: servicio REST de KPIs de entregas"
+          },
+          "url": "https://github.com/example/metrics-api",
+          "bullets": [
+            {
+              "claim_id": "proj-metrics-api-overview",
+              "text": "Servicio REST con FastAPI, Pydantic y PostgreSQL que expone KPIs de entregas de un almacén de ejemplo."
+            },
+            {
+              "claim_id": "proj-metrics-api-testing",
+              "text": "Cobertura de tests del 91 % con pytest, tipado estático con mypy y pruebas de carga a 400 peticiones por segundo."
+            },
+            {
+              "claim_id": "proj-metrics-api-docker",
+              "text": "Empaquetado con Docker y arranque local con un solo comando de docker compose."
+            }
+          ],
+          "stack": {
+            "claim_id": "skill-fastapi",
+            "text": "Python, FastAPI, Pydantic, PostgreSQL, pytest, Docker"
+          }
+        }
+      ]
+    },
+    "education": {
+      "title": "Formación",
+      "entries": [
+        {
+          "title": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "Bootcamp de Datos e IA"
+          },
+          "date": "Febrero 2025 – Junio 2026",
+          "subtitle": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "Northgate Tech Academy"
+          },
+          "description": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "480 horas: Python, pandas, SQL, PyTorch y LLM, con proyectos propios de principio a fin."
+          },
+          "bullets": []
+        },
+        {
+          "title": {
+            "claim_id": "edu-asir",
+            "text": "Técnico Superior en ASIR"
+          },
+          "date": "2021 – 2023",
+          "subtitle": {
+            "claim_id": "edu-asir",
+            "text": "Institut Example de Barcelona"
+          },
+          "description": {
+            "claim_id": "edu-asir",
+            "text": "Redes, Linux, bases de datos y scripting."
+          },
+          "bullets": []
+        }
+      ]
+    },
+    "certifications": {
+      "title": "Certificaciones",
+      "certs": [
+        {
+          "claim_id": "edu-sql-course",
+          "text": "Curso de PostgreSQL avanzado (plataforma online)"
+        }
+      ]
+    },
+    "skills": {
+      "title": "Skills",
+      "skills": [
+        {
+          "label": "Lenguajes de Programación",
+          "items": {
+            "claim_id": "skill-python",
+            "text": "Python, SQL, Bash"
+          }
+        },
+        {
+          "label": "Backend",
+          "items": {
+            "claim_id": "skill-fastapi",
+            "text": "FastAPI, Pydantic, PostgreSQL, REST APIs, Django"
+          }
+        },
+        {
+          "label": "AI / ML",
+          "items": {
+            "claim_id": "skill-llms",
+            "text": "LLMs, RAG, BM25, sentence-transformers, PyTorch (inferencia), Transformers"
+          }
+        },
+        {
+          "label": "Herramientas",
+          "items": {
+            "claim_id": "skill-git",
+            "text": "Git, Linux, Docker, pytest, mypy"
+          }
+        },
+        {
+          "label": "Idiomas",
+          "items": {
+            "claim_id": "lang-spanish",
+            "text": "Español (nativo), Inglés (B2/C1), Catalán (básico)"
+          }
+        }
+      ]
+    }
+  }
+}

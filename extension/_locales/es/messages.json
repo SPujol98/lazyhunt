@@ -1,0 +1,739 @@
+{
+  "addBeacon": {
+    "message": "Añadir baliza"
+  },
+  "addSearch": {
+    "message": "Añadir búsqueda"
+  },
+  "backupHeading": {
+    "message": "Archivo de configuración"
+  },
+  "backupIntro": {
+    "message": "Balizas, búsquedas, filtros de títulos, intervalo y URL del puente. El secreto, la pausa y las ofertas vistas se quedan aquí."
+  },
+  "beaconDisabled": {
+    "message": "Desactivado"
+  },
+  "beaconEnabled": {
+    "message": "Activado"
+  },
+  "beaconError": {
+    "message": "Error · $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconJobs": {
+    "message": "$p1$ ofertas · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "beaconName": {
+    "message": "Nombre"
+  },
+  "beaconNewTitle": {
+    "message": "$p1$ nuevas en el último escaneo",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconNoPermission": {
+    "message": "Falta el permiso: activa el portal en las opciones"
+  },
+  "beaconNotScanned": {
+    "message": "Aún sin escanear"
+  },
+  "beaconPortalOff": {
+    "message": "$p1$ no está activado",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconRemoveConfirm": {
+    "message": "¿Eliminar la baliza \"$p1$\"?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconSessionExpired": {
+    "message": "Sesión caducada: vuelve a iniciar sesión en $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "beaconUnnamed": {
+    "message": "(sin nombre)"
+  },
+  "beaconUrl": {
+    "message": "URL de la página de resultados"
+  },
+  "beaconsEmpty": {
+    "message": "No hay balizas manuales."
+  },
+  "beaconsHeading": {
+    "message": "Balizas manuales"
+  },
+  "beaconsIntro": {
+    "message": "Una página de resultados que has pegado desde un portal. Usa Probar para ver qué lee la extensión."
+  },
+  "botAllPortals": {
+    "message": "todos"
+  },
+  "botInfo": {
+    "message": "Configuración del bot leída a las $p1$. Portales activados en el bot: $p2$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "botNoPortals": {
+    "message": "ninguno"
+  },
+  "bridgeMissingHint": {
+    "message": "Rellena la URL y el secreto del puente: hasta entonces la extensión no escanea nada, así que no se pierde ninguna oferta."
+  },
+  "bridgeSecretHint": {
+    "message": "Nunca se incluye en los archivos exportados."
+  },
+  "bridgeSecretLabel": {
+    "message": "Secreto del puente"
+  },
+  "bridgeUrlLabel": {
+    "message": "URL del puente"
+  },
+  "clearHistory": {
+    "message": "Borrar historial"
+  },
+  "clearHistoryConfirm": {
+    "message": "¿Borrar las ofertas vistas de todas las balizas? El próximo escaneo volverá a enviar al bot todas las ofertas que encuentre."
+  },
+  "clearHistoryDone": {
+    "message": "Historial borrado."
+  },
+  "clearHistoryFailed": {
+    "message": "No se ha podido borrar el historial: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "clearHistoryHeading": {
+    "message": "Ofertas vistas"
+  },
+  "clearHistoryIntro": {
+    "message": "Al borrar el historial, el próximo escaneo volverá a enviar al bot todas las ofertas de la página."
+  },
+  "connectionHeading": {
+    "message": "Frecuencia y bot"
+  },
+  "connectionIntro": {
+    "message": "Las ofertas nuevas llegan al bot local a través del puente; el bot es quien envía los avisos."
+  },
+  "errorBeaconDuplicate": {
+    "message": "Hay dos balizas llamadas \"$p1$\": los nombres deben ser únicos.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorBeaconIncomplete": {
+    "message": "La baliza $p1$ necesita un nombre y una URL.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorSearchIncomplete": {
+    "message": "La búsqueda $p1$ necesita un nombre y palabras clave.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportConfig": {
+    "message": "Exportar"
+  },
+  "exportDone": {
+    "message": "Configuración exportada (sin el secreto)."
+  },
+  "extDescription": {
+    "message": "Vigila búsquedas de empleo en los portales que actives y envía las ofertas nuevas a tu bot local."
+  },
+  "extName": {
+    "message": "lazyhunt"
+  },
+  "filterEnabled": {
+    "message": "Filtro activado para este perfil"
+  },
+  "filterExclude": {
+    "message": "Excluir (comas o saltos de línea)"
+  },
+  "filterExcludeHint": {
+    "message": "Cualquier coincidencia en el título o en la empresa descarta la oferta."
+  },
+  "filterInclude": {
+    "message": "Debe incluir (un grupo por línea, términos separados por comas)"
+  },
+  "filterIncludeHint": {
+    "message": "Cada línea necesita al menos una palabra que coincida en el título."
+  },
+  "filtersHeading": {
+    "message": "Filtros de títulos"
+  },
+  "filtersIntro": {
+    "message": "Cada búsqueda y cada baliza usan un perfil. Las ofertas que no lo pasan se descartan y nunca se envían."
+  },
+  "htmlLang": {
+    "message": "es"
+  },
+  "importConfig": {
+    "message": "Importar"
+  },
+  "importConfirm": {
+    "message": "¿Sustituir la configuración actual por las $p1$ balizas de este archivo?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importDone": {
+    "message": "$p1$ balizas importadas.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importFailed": {
+    "message": "La importación ha fallado: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "importInvalidJson": {
+    "message": "Este archivo no es un JSON válido."
+  },
+  "importWrongFormat": {
+    "message": "Este archivo no es una configuración de lazyhunt."
+  },
+  "intervalLabel": {
+    "message": "Minutos entre rondas"
+  },
+  "intervalWarning": {
+    "message": "Por debajo de 30 minutos los portales pueden limitarte o bloquearte."
+  },
+  "lastScan": {
+    "message": "Último escaneo"
+  },
+  "maintenanceHeading": {
+    "message": "Mantenimiento y copia de seguridad"
+  },
+  "navBeacons": {
+    "message": "Balizas manuales"
+  },
+  "navConnection": {
+    "message": "Frecuencia y bot"
+  },
+  "navFilters": {
+    "message": "Filtros de títulos"
+  },
+  "navLabel": {
+    "message": "Secciones"
+  },
+  "navMaintenance": {
+    "message": "Mantenimiento"
+  },
+  "navPortals": {
+    "message": "Portales"
+  },
+  "navSearches": {
+    "message": "Búsquedas"
+  },
+  "neverScanned": {
+    "message": "Nunca escaneado"
+  },
+  "nextBotPaused": {
+    "message": "Pausado por el bot"
+  },
+  "nextPaused": {
+    "message": "En pausa"
+  },
+  "optSave": {
+    "message": "Guardar cambios"
+  },
+  "optStatusPausedDetail": {
+    "message": "Los escaneos están en pausa. Reanúdalos desde la ventana de la barra de herramientas."
+  },
+  "optionsTitle": {
+    "message": "Opciones de lazyhunt"
+  },
+  "popupBeaconsHeading": {
+    "message": "Búsquedas vigiladas"
+  },
+  "popupCheckNow": {
+    "message": "Comprobar ahora"
+  },
+  "popupChecking": {
+    "message": "Comprobando…"
+  },
+  "popupConnectBot": {
+    "message": "Conectar con el bot"
+  },
+  "popupEmpty": {
+    "message": "Todavía no hay nada que vigilar. Añade una búsqueda o una baliza en las opciones."
+  },
+  "popupLastRound": {
+    "message": "Última ronda"
+  },
+  "popupNextRound": {
+    "message": "Próxima ronda"
+  },
+  "popupOpenOptionsShort": {
+    "message": "Abrir opciones"
+  },
+  "popupOptions": {
+    "message": "Opciones"
+  },
+  "popupPause": {
+    "message": "Pausar"
+  },
+  "popupResume": {
+    "message": "Reanudar"
+  },
+  "portalDisabled": {
+    "message": "$p1$ desactivado.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalEnabled": {
+    "message": "$p1$ activado.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalNoPermission": {
+    "message": "Falta el permiso: desactívalo y vuelve a activarlo"
+  },
+  "portalNotOnBot": {
+    "message": "No activado en el bot"
+  },
+  "portalOffSuffix": {
+    "message": "$p1$ (desactivado)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalRefused": {
+    "message": "No se ha concedido el permiso del navegador para $p1$: sigue desactivado.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalToggleLabel": {
+    "message": "Escanear $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "portalsHeading": {
+    "message": "Portales"
+  },
+  "portalsIntro": {
+    "message": "Solo se escanean los portales activados. Al activar uno se pide el permiso del navegador para leer ese sitio. Los cambios se aplican al momento."
+  },
+  "previewEmpty": {
+    "message": "Nada todavía: una búsqueda necesita palabras clave y un portal activado."
+  },
+  "previewHeading": {
+    "message": "Lo que abrirá la próxima ronda"
+  },
+  "profileAi": {
+    "message": "IA"
+  },
+  "profileBackend": {
+    "message": "Backend"
+  },
+  "profileLabel": {
+    "message": "Perfil de filtro"
+  },
+  "remove": {
+    "message": "Eliminar"
+  },
+  "resultBotPaused": {
+    "message": "El bot está en pausa: no se ha escaneado nada."
+  },
+  "resultCounts": {
+    "message": "$p1$ escaneadas · $p2$ nuevas",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "resultErrors": {
+    "message": "$p1$ errores",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFailed": {
+    "message": "Error: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFiltered": {
+    "message": "$p1$ descartadas por el filtro",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultFirstScans": {
+    "message": "$p1$ primeros escaneos, enviados al bot",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultNothing": {
+    "message": "No hay nada que escanear."
+  },
+  "resultOnlyErrors": {
+    "message": "No se ha escaneado nada: $p1$ errores.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultPaused": {
+    "message": "En pausa aquí: no se ha escaneado nada."
+  },
+  "resultSkipped": {
+    "message": "Ya hay otra ronda en marcha."
+  },
+  "saveFailed": {
+    "message": "No se ha podido guardar: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "saveStateDirty": {
+    "message": "Cambios sin guardar"
+  },
+  "saveStateSaved": {
+    "message": "Guardado"
+  },
+  "searchKeywords": {
+    "message": "Palabras clave"
+  },
+  "searchLocation": {
+    "message": "Ubicación (opcional)"
+  },
+  "searchName": {
+    "message": "Nombre"
+  },
+  "searchPortals": {
+    "message": "Portales"
+  },
+  "searchRemoveConfirm": {
+    "message": "¿Eliminar la búsqueda \"$p1$\"?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "searchTitleFilter": {
+    "message": "Aplicar el filtro de títulos"
+  },
+  "searchesEmpty": {
+    "message": "Todavía no hay búsquedas."
+  },
+  "searchesHeading": {
+    "message": "Búsquedas"
+  },
+  "searchesIntro": {
+    "message": "Cada búsqueda se ejecuta en todos los portales que marques. Las ofertas nuevas se envían al bot, también las del primer escaneo."
+  },
+  "secretHide": {
+    "message": "Ocultar"
+  },
+  "secretShow": {
+    "message": "Mostrar"
+  },
+  "statusActive": {
+    "message": "Activo"
+  },
+  "statusBotPaused": {
+    "message": "Pausado por el bot"
+  },
+  "statusBotPausedDetail": {
+    "message": "El bot está en pausa. Reanúdalo desde el bot."
+  },
+  "statusError": {
+    "message": "Requiere atención"
+  },
+  "statusErrorDetail": {
+    "message": "El último escaneo de algunas búsquedas ha fallado."
+  },
+  "statusIdle": {
+    "message": "Inactivo"
+  },
+  "statusIdleNothing": {
+    "message": "No hay nada que escanear: activa un portal y añade una búsqueda o una baliza."
+  },
+  "statusNoBeacons": {
+    "message": "Nada que escanear"
+  },
+  "statusNoBridge": {
+    "message": "Bot sin conectar"
+  },
+  "statusNoBridgeDetail": {
+    "message": "Conecta primero la extensión con el bot: Opciones › Frecuencia y bot."
+  },
+  "statusPaused": {
+    "message": "En pausa"
+  },
+  "statusPausedDetail": {
+    "message": "Pausado aquí. Reanuda para volver a escanear."
+  },
+  "suggestAdd": {
+    "message": "Añadir seleccionadas"
+  },
+  "suggestAdded": {
+    "message": "Añadidas: $p1$; omitidas por estar ya: $p2$. Guarda para conservarlas.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "suggestButton": {
+    "message": "Sugerir desde mi perfil"
+  },
+  "suggestFound": {
+    "message": "$p1$ sugerencias a partir de tu perfil.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "suggestHeading": {
+    "message": "Búsquedas sugeridas"
+  },
+  "suggestHttpError": {
+    "message": "El bot ha respondido con HTTP $p1$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "suggestNeedsBridge": {
+    "message": "Primero indica una URL del puente válida y el secreto."
+  },
+  "suggestNone": {
+    "message": "El bot no tiene sugerencias para tu perfil."
+  },
+  "suggestNothingSelected": {
+    "message": "Selecciona al menos una sugerencia."
+  },
+  "suggestSecretRejected": {
+    "message": "El bot ha rechazado el secreto."
+  },
+  "suggestUnreachable": {
+    "message": "No se puede contactar con el bot. ¿Está en marcha?"
+  },
+  "sw_error_bridge_missing": {
+    "message": "Conecta primero la extensión con el bot: Opciones › Frecuencia y bot."
+  },
+  "sw_error_load_timeout": {
+    "message": "La página no terminó de cargar en $SECONDS$ segundos",
+    "placeholders": {
+      "seconds": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_no_permission": {
+    "message": "Falta el permiso para $PORTAL$: activa el portal en las opciones",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_scan_running": {
+    "message": "Hay un escaneo en curso: vuelve a intentarlo cuando termine."
+  },
+  "sw_error_session_expired": {
+    "message": "La sesión de $PORTAL$ ha caducado",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_error_unknown_message": {
+    "message": "tipo de mensaje desconocido"
+  },
+  "sw_error_url_required": {
+    "message": "Falta la URL"
+  },
+  "sw_notification_session_message": {
+    "message": "Abre $PORTAL$ en este navegador e inicia sesión de nuevo; los escaneos quedan detenidos hasta entonces.",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "sw_notification_session_title": {
+    "message": "La sesión de $PORTAL$ ha caducado",
+    "placeholders": {
+      "portal": {
+        "content": "$1"
+      }
+    }
+  },
+  "termsLinkedin": {
+    "message": "Aviso sobre LinkedIn: las Condiciones de uso de LinkedIn prohíben las extensiones de navegador que extraen datos del sitio o lo automatizan. Al activar LinkedIn, las búsquedas se ejecutan con tu propia sesión iniciada y tu cuenta podría quedar restringida o suspendida por ello. Hazlo bajo tu responsabilidad. ¿Activar LinkedIn?"
+  },
+  "termsPortal": {
+    "message": "Activar $p1$: la extensión abrirá páginas de búsqueda de $p1$ en tu navegador en cada ronda y leerá los resultados. Antes de activarlo, comprueba que las condiciones de uso de $p1$ permiten el acceso automatizado; cumplirlas es responsabilidad tuya. ¿Activar $p1$?",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "testBeacon": {
+    "message": "Probar"
+  },
+  "testFailed": {
+    "message": "La prueba ha fallado: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "testFound": {
+    "message": "$p1$ ofertas leídas. Primera: $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "testNone": {
+    "message": "No se ha leído ninguna oferta de la página."
+  },
+  "testRunning": {
+    "message": "Abriendo la página…"
+  },
+  "testUrlRequired": {
+    "message": "Falta la URL"
+  },
+  "timeAgo": {
+    "message": "hace $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeDays": {
+    "message": "$p1$ d",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeHours": {
+    "message": "$p1$ h",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeIn": {
+    "message": "dentro de $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeMinutes": {
+    "message": "$p1$ min",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "timeUnderMinute": {
+    "message": "<1 min"
+  }
+}

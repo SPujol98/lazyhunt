@@ -1,0 +1,181 @@
+# EXAMPLE salary reference table for the demo profile (fictional candidate).
+# Gross EUR per year, Spain. The figures are made-up illustrative values, NOT
+# market data: replace them with your own researched ranges before relying on
+# them. Shape (same as the engine reads, cva/match/salary_reference.py):
+#
+#   branch     AI | BACKEND
+#   level      junior | mid          (senior and above: no reference shown)
+#   city       barcelona | madrid | spain_remote
+#   low/median/high/ask   EUR gross per year; ask = suggested ask figure
+#   sources    list of strings, FIRST one is shown on the card
+#   confidence high | medium | low (low is flagged on the card)
+#   as_of      YYYY-MM the figures were collected
+#   placeholder  optional true: row is ignored (never shown on a card)
+
+[[range]]
+branch = "AI"
+level = "junior"
+city = "barcelona"
+low = 27000
+median = 32000
+high = 40000
+ask = 31000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "AI"
+level = "junior"
+city = "madrid"
+low = 27000
+median = 32500
+high = 41000
+ask = 31000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "AI"
+level = "junior"
+city = "spain_remote"
+low = 26000
+median = 31000
+high = 39000
+ask = 30000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "AI"
+level = "mid"
+city = "barcelona"
+low = 38000
+median = 46000
+high = 58000
+ask = 44000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "AI"
+level = "mid"
+city = "madrid"
+low = 38000
+median = 47000
+high = 60000
+ask = 44000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "AI"
+level = "mid"
+city = "spain_remote"
+low = 36000
+median = 45000
+high = 57000
+ask = 43000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "junior"
+city = "barcelona"
+low = 24000
+median = 28000
+high = 35000
+ask = 28000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "junior"
+city = "madrid"
+low = 24000
+median = 28500
+high = 35000
+ask = 28000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "junior"
+city = "spain_remote"
+low = 23000
+median = 27000
+high = 34000
+ask = 27000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "mid"
+city = "barcelona"
+low = 34000
+median = 41000
+high = 52000
+ask = 40000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "mid"
+city = "madrid"
+low = 34000
+median = 42000
+high = 53000
+ask = 40000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"
+
+[[range]]
+branch = "BACKEND"
+level = "mid"
+city = "spain_remote"
+low = 33000
+median = 40000
+high = 51000
+ask = 39000
+sources = [
+  "Example value (demo profile, not market data)",
+]
+confidence = "low"
+as_of = "2026-01"

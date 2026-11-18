@@ -1,0 +1,30 @@
+{
+  "cards": [
+    {
+      "id": "9900001",
+      "title": "Backend Engineer (Python)",
+      "company": "",
+      "location": "Barcelona, Spain (remote)",
+      "link": "https://foorilla.com/hiring/jobs/backend-engineer-python-barcelona-spain-9900001/"
+    },
+    {
+      "id": "9900002",
+      "title": "Junior Software Developer",
+      "company": "",
+      "location": "Madrid, Spain",
+      "link": "https://foorilla.com/hiring/jobs/junior-software-developer-madrid-spain-9900002/"
+    },
+    {
+      "id": "9900003",
+      "title": "Data Platform Engineer",
+      "company": "",
+      "location": "London, UK",
+      "link": "https://foorilla.com/hiring/jobs/data-platform-engineer-london-uk-9900003/"
+    }
+  ],
+  "no_results_text": "No jobs found",
+  "urls": [
+    "https://foorilla.com/hiring/jobs/",
+    "https://foorilla.com/hiring/jobs/backend-engineer-python-barcelona-spain-9900001/"
+  ]
+}

@@ -1,0 +1,28 @@
+Desarrollador/a Backend .NET (Barcelona)
+
+Sable Soluciones (sable-soluciones.example.com) desarrolla software de gestión para ayuntamientos y mutuas. Nuestro equipo de Barcelona busca un/a desarrollador/a backend para evolucionar nuestro producto principal.
+
+Funciones
+- Desarrollar y mantener APIs en C# y .NET 8 con ASP.NET Core.
+- Trabajar con SQL Server y Entity Framework en bases de datos de gran tamaño.
+- Migrar módulos heredados de .NET Framework a .NET moderno.
+- Participar en revisiones de código y en el despliegue con Azure DevOps.
+
+Requisitos
+- 3 años de experiencia con C# y .NET: es el núcleo de tu trabajo diario.
+- Dominio de LINQ, Entity Framework y SQL Server.
+- Experiencia con Azure DevOps y despliegues en Azure.
+- Conocimientos de pruebas unitarias con xUnit.
+- Titulación en informática o similar.
+- Castellano e inglés técnico.
+
+Se valorará
+- Experiencia con Blazor o Angular.
+- Conocimientos de Python como apoyo en tareas de automatización.
+
+Ofrecemos
+- Trabajo híbrido en nuestra oficina de Barcelona (tres días presenciales).
+- Retribución de 32.000 a 40.000 euros brutos anuales.
+- Seguro médico y plan de formación en tecnologías Microsoft.
+
+La plataforma completa está construida en el ecosistema Microsoft y no usamos otros lenguajes en el producto principal.

@@ -1,0 +1,29 @@
+# Demo profile preferences (fictional candidate). Keys: cva/profile_prefs.py.
+
+[stack_wall]
+core_language = "Python"
+
+[gates]
+# Alex works in Spanish, Catalan and English (ISO codes).
+allowed_languages = ["es", "ca", "en"]
+flag_english_above_c1 = true
+
+[location]
+# The only region shipped with the engine.
+home_region = "catalonia"
+
+[search_targets]
+ai_roles = ["AI Engineer", "ML Engineer"]
+backend_roles = ["Backend Developer", "Python Developer"]
+locations = ["Barcelona", "remoto"]
+
+[title_filters]
+# Fictional example company, dropped by both the Python and the extension filter.
+company_blocklist = ["Acme Staffing"]
+
+[cover_letter]
+career_change = "The move from systems administration to data and AI takes ONE sentence, framed as a reason with evidence of learning speed (the bootcamp, the DocSearch and Metrics API projects). No apology and no cliches about passion."
+
+[cover_letter.branch_emphasis]
+AI = "AI branch: emphasise applied AI work (LLM systems, RAG, retrieval evaluation, going from prototype to a working service), taking only the matching claims."
+BACKEND = "BACKEND branch: emphasise backend engineering (Python, FastAPI, PostgreSQL, REST APIs, real client delivery), mentioning LLM work only as a plus, taking only the matching claims."

@@ -1,0 +1,8 @@
+# Demo profile: a fictional candidate ("Alex Rivera"). No real person is meant.
+# Layout and keys: cva/profile_paths.py, cva/profile_identity.py.
+
+[identity]
+# Prefix of every delivered file name (CV_..._Alex_Rivera.pdf).
+file_slug = "Alex_Rivera"
+# The name used in signatures is the first field of this claim's text.
+identity_claim_id = "identity-contact"

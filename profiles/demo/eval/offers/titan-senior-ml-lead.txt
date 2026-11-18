@@ -1,0 +1,25 @@
+Senior Machine Learning Engineer / Team Lead (Barcelona)
+
+Titan Predictive (titan-predictive.example.com) provides fraud detection models to banks. We are hiring a senior engineer who will also lead a team of five data scientists and ML engineers.
+
+Responsibilities
+- Define the technical roadmap of the ML team and act as its technical reference.
+- Lead, mentor and evaluate team members; run hiring and performance reviews.
+- Design and train deep learning models for fraud detection at scale.
+- Own the architecture of the model-serving platform and the MLOps process.
+- Present results to the executive committee and to customers.
+
+Requirements
+- 7+ years of experience in machine learning, with at least 3 years leading engineers.
+- Proven track record training and deploying large models in production.
+- Expert Python, PyTorch and distributed training.
+- Experience with Kubernetes and cloud platforms.
+- MSc or PhD in computer science, mathematics or physics.
+- Fluent English and Spanish.
+
+We offer
+- Hybrid schedule in Barcelona, two days at the office.
+- 70,000 - 90,000 EUR gross per year plus bonus and stock options.
+- Conference budget and a relocation package if needed.
+
+This role is not suitable for candidates at the start of their career: we expect a senior profile with people management experience from day one.

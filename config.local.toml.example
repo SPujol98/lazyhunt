@@ -1,0 +1,37 @@
+# Machine-specific / personal settings — copy this file to
+# "config.local.toml" (gitignored) and fill in your own values.
+#
+# config.local.toml overrides config.toml (the tracked, shared bot settings);
+# any CVA_<FIELD> environment variable still overrides both TOML files.
+# Never commit config.local.toml — it holds your personal Telegram id and
+# machine-specific paths.
+
+owner_telegram_id = 0   # your Telegram numeric id (owner whitelist filter)
+
+# Windows: full path to the claude.exe CLI when it's not on the scheduled
+# task's PATH (see deploy/README.md §14.1).
+# claude_code_path = 'C:\Users\<you>\.local\bin\claude.exe'
+
+# Local folder that mirrors generated CVs (auto-triage); unset/absent =
+# mirror disabled. See deploy/README.md §12.1.
+# cv_mirror_dir = 'C:\cva-mirror'
+
+# Full tracker xlsx (every offer, all estados), rewritten after each offer
+# state change. A FILE path inside a folder synced between your PCs; unset/
+# absent = disabled. See deploy/README.md §12.2.
+# tracker_xlsx_path = 'C:\Users\<you>\Syncthing\cva\ofertas_db.xlsx'
+
+# Gmail sync (read-only; proposes status changes from replies to your
+# applications). Off by default. See docs/gmail.md for the full setup.
+# gmail_enabled = true
+# gmail_credentials_path = "~/.config/cva/gmail_credentials.json"
+# gmail_token_path = "~/.config/cva/gmail_token.json"
+# gmail_poll_minutes = 60   # minimum 30
+
+# Kill switch default. The Telegram /pausa and /reanudar toggle (persistent)
+# wins once used; this only applies until then. See docs/portals.md.
+# paused = false
+
+# Portals allowed to feed the bot; unset = every registered portal (legacy).
+# Unknown ids are a startup error. See docs/portals.md.
+# enabled_portals = ["linkedin", "infojobs"]

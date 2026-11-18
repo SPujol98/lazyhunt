@@ -1,0 +1,30 @@
+{
+  "cards": [
+    {
+      "id": "f1a2b3",
+      "title": "Backend Engineer",
+      "company": "Empresa Ejemplo Uno",
+      "location": "Barcelona",
+      "link": "https://www.jobfluent.com/jobs/backend-engineer-barcelona-f1a2b3"
+    },
+    {
+      "id": "c4d5e6",
+      "title": "Python Developer",
+      "company": "Empresa Ejemplo Dos",
+      "location": "Barcelona",
+      "link": "https://www.jobfluent.com/jobs/python-developer-barcelona-c4d5e6"
+    },
+    {
+      "id": "d0e1f2",
+      "title": "Fullstack Developer",
+      "company": "Empresa Ejemplo Cuatro",
+      "location": "Barcelona",
+      "link": "https://www.jobfluent.com/jobs/fullstack-developer-barcelona-d0e1f2"
+    }
+  ],
+  "no_results_text": "No zzqxjkvw jobs found in Barcelona",
+  "urls": [
+    "https://www.jobfluent.com/jobs-barcelona?q=python",
+    "https://www.jobfluent.com/jobs/backend-engineer-barcelona-f1a2b3"
+  ]
+}

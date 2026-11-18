@@ -1,0 +1,28 @@
+Full-Stack Developer, Python and React (remote Spain)
+
+Meridian Booking (meridian-booking.example.com) offers scheduling software for clinics and wellness centres. We are a team of twelve spread across Spain and we want to add a developer who is comfortable on both sides of the stack.
+
+What you will do
+- Implement new features in our React and TypeScript web application every sprint.
+- Build and extend the Python (Django) API that powers the application.
+- Work with PostgreSQL, write tests and take part in code reviews.
+- Collaborate with the designer to improve the user experience.
+
+Requirements
+- 2 years of experience building web applications, with real React experience (hooks, state management, component testing).
+- Good Python knowledge and experience with a web framework.
+- SQL fundamentals and Git.
+- Spanish and English.
+- Formal training in computer science or similar.
+
+Nice to have
+- Experience with CSS frameworks and accessibility.
+- Basic AWS knowledge.
+- Use of AI coding assistants in your daily workflow: we encourage them.
+
+We offer
+- Fully remote work from Spain, flexible hours and a 4.5-day week in summer.
+- 32,000 - 40,000 EUR gross per year.
+- Learning budget and a small team where decisions are made quickly.
+
+Around 60 percent of the work is frontend, so please apply only if you enjoy it.

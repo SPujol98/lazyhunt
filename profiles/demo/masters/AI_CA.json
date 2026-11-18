@@ -1,0 +1,223 @@
+{
+  "variant": "AI_CA",
+  "header": {
+    "name": {
+      "claim_id": "identity-contact",
+      "text": "Alex Rivera"
+    },
+    "tagline": {
+      "claim_id": "identity-linkedin-headline",
+      "text": "AI Engineer | LLMs · RAG · Retrieval Evaluation | Python & SQL"
+    },
+    "contact": [
+      {
+        "claim_id": "identity-contact",
+        "text": "Barcelona, Espanya"
+      },
+      {
+        "claim_id": "identity-phone",
+        "text": "+34 600 000 000"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "alex.rivera@example.com"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "linkedin.com/in/alex-rivera-example"
+      },
+      {
+        "claim_id": "identity-contact",
+        "text": "github.com/example"
+      }
+    ]
+  },
+  "sections": {
+    "summary": {
+      "title": "Perfil Professional",
+      "paragraphs": [
+        {
+          "claim_id": "sum-ai-foundation_ca",
+          "text": "Enginyer júnior de dades i IA amb base en desenvolupament amb Python i SQL, format en un cicle superior de sistemes i en un bootcamp de dades i IA."
+        },
+        {
+          "claim_id": "sum-ai-pipelines_ca",
+          "text": "He construït un sistema RAG de cerca documental amb recuperació híbrida (BM25 i embeddings), avaluat amb recall@5 sobre 150 preguntes, i pipelines de dades per a un client de logística."
+        },
+        {
+          "claim_id": "sum-ai-goal_ca",
+          "text": "Busco un primer rol d'IA aplicada on dur sistemes amb LLM a producció amb rigor d'enginyeria."
+        }
+      ]
+    },
+    "experience": {
+      "title": "Experiència Professional",
+      "entries": [
+        {
+          "title": {
+            "claim_id": "exp-northwind-role",
+            "text": "Enginyer de dades i backend freelance · Northwind Logistics"
+          },
+          "date": "Novembre 2023 – Desembre 2024",
+          "bullets": [
+            {
+              "claim_id": "exp-northwind-platform",
+              "text": "Vaig dissenyar i implementar amb FastAPI i PostgreSQL un servei que ingereix cada dia uns 25.000 enviaments de tres transportistes i calcula la taxa de lliurament a temps per client."
+            },
+            {
+              "claim_id": "exp-northwind-carriers",
+              "text": "Vaig integrar tres APIs de transportistes amb reintents i registre d'errors, de manera que les càrregues nocturnes van fallar menys d'un cop al mes."
+            },
+            {
+              "claim_id": "exp-northwind-dashboards",
+              "text": "Vaig lliurar dashboards amb Plotly per a l'equip d'operacions amb la taxa de lliurament a temps i el volum per ruta."
+            }
+          ]
+        },
+        {
+          "title": {
+            "claim_id": "exp-acme-role",
+            "text": "Desenvolupador de dades júnior (pràctiques FP Dual) · Acme Analytics"
+          },
+          "date": "Octubre 2022 – Juny 2023",
+          "bullets": [
+            {
+              "claim_id": "exp-acme-etl",
+              "text": "Vaig automatitzar amb Python la consolidació setmanal de 14 informes d'Excel en una única taula SQL, estalviant unes 6 hores de feina manual per setmana."
+            },
+            {
+              "claim_id": "exp-acme-quality",
+              "text": "Vaig escriure comprovacions de qualitat de dades en SQL i Python que detectaven duplicats i dates invàlides abans de cada càrrega, i vaig treballar amb Git i revisions de codi."
+            }
+          ]
+        }
+      ]
+    },
+    "projects": {
+      "title": "Projectes",
+      "projects": [
+        {
+          "title": {
+            "claim_id": "proj-rag-overview",
+            "text": "DocSearch: RAG sobre llibres de domini públic"
+          },
+          "url": "https://github.com/example/docsearch-rag",
+          "bullets": [
+            {
+              "claim_id": "proj-rag-overview",
+              "text": "Sistema RAG de preguntes i respostes sobre un corpus de llibres de domini públic, amb FastAPI i un LLM local (Llama 3.2 3B)."
+            },
+            {
+              "claim_id": "proj-rag-hybrid-retrieval",
+              "text": "Recuperació híbrida que combina BM25 i embeddings MiniLM sobre 12.000 fragments amb una puntuació combinada."
+            },
+            {
+              "claim_id": "proj-rag-recall-metrics",
+              "text": "Avaluació amb 150 preguntes escrites a mà: recall@5 de 0,61 amb només BM25 a 0,78 amb la cerca híbrida."
+            }
+          ],
+          "stack": {
+            "claim_id": "skill-bm25",
+            "text": "Python, FastAPI, sentence-transformers, BM25, Llama 3.2"
+          }
+        },
+        {
+          "title": {
+            "claim_id": "proj-metrics-api-overview",
+            "text": "Metrics API: servei REST de KPIs de lliuraments"
+          },
+          "url": "https://github.com/example/metrics-api",
+          "bullets": [
+            {
+              "claim_id": "proj-metrics-api-overview",
+              "text": "Servei REST amb FastAPI, Pydantic i PostgreSQL que exposa KPIs de lliuraments d'un magatzem d'exemple."
+            }
+          ],
+          "stack": {
+            "claim_id": "skill-fastapi",
+            "text": "Python, FastAPI, Pydantic, PostgreSQL, pytest, Docker"
+          }
+        }
+      ]
+    },
+    "education": {
+      "title": "Formació",
+      "entries": [
+        {
+          "title": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "Bootcamp de Dades i IA"
+          },
+          "date": "Febrer 2025 – Juny 2026",
+          "subtitle": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "Northgate Tech Academy"
+          },
+          "description": {
+            "claim_id": "edu-bootcamp-data",
+            "text": "480 hores: Python, pandas, SQL, PyTorch i LLM, amb projectes propis de punta a punta."
+          },
+          "bullets": []
+        },
+        {
+          "title": {
+            "claim_id": "edu-asir",
+            "text": "Tècnic Superior en ASIR"
+          },
+          "date": "2021 – 2023",
+          "subtitle": {
+            "claim_id": "edu-asir",
+            "text": "Institut Example de Barcelona"
+          },
+          "description": {
+            "claim_id": "edu-asir",
+            "text": "Xarxes, Linux, bases de dades i scripting."
+          },
+          "bullets": []
+        }
+      ]
+    },
+    "certifications": {
+      "title": "Certificacions",
+      "certs": [
+        {
+          "claim_id": "edu-sql-course",
+          "text": "Curs de PostgreSQL avançat (plataforma en línia)"
+        }
+      ]
+    },
+    "skills": {
+      "title": "Skills",
+      "skills": [
+        {
+          "label": "Llenguatges de Programació",
+          "items": {
+            "claim_id": "skill-python",
+            "text": "Python, SQL, Bash"
+          }
+        },
+        {
+          "label": "AI / ML",
+          "items": {
+            "claim_id": "skill-llms",
+            "text": "LLMs, RAG, BM25, sentence-transformers, PyTorch (inferència), Transformers"
+          }
+        },
+        {
+          "label": "Eines",
+          "items": {
+            "claim_id": "skill-git",
+            "text": "Git, Linux, Docker, pytest, mypy"
+          }
+        },
+        {
+          "label": "Idiomes",
+          "items": {
+            "claim_id": "lang-catalan",
+            "text": "Castellà (natiu), Anglès (B2/C1), Català (bàsic)"
+          }
+        }
+      ]
+    }
+  }
+}

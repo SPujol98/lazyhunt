@@ -1,0 +1,37 @@
+{
+  "cards": [
+    {
+      "id": "i1111111111111111111111111111aa",
+      "title": "Ingeniero/a de datos (ejemplo uno)",
+      "company": "Empresa Ejemplo Uno S.L.",
+      "location": "Barcelona",
+      "link": "https://www.infojobs.net/barcelona/ingeniero-datos-ejemplo/of-i1111111111111111111111111111aa"
+    },
+    {
+      "id": "i2222222222222222222222222222bb",
+      "title": "Backend Python Developer (ejemplo dos)",
+      "company": "Empresa Ejemplo Dos",
+      "location": "Barcelona",
+      "link": "https://www.infojobs.net/barcelona/backend-python-ejemplo/of-i2222222222222222222222222222bb"
+    },
+    {
+      "id": "i3333333333333333333333333333cc",
+      "title": "Programador web (ejemplo tres)",
+      "company": "Empresa Ejemplo Tres",
+      "location": "Sant Cugat del Vallès",
+      "link": "https://www.infojobs.net/sant-cugat-del-valles/programador-web-ejemplo/of-i3333333333333333333333333333cc"
+    },
+    {
+      "id": "i4444444444444444444444444444dd",
+      "title": "Full Stack Developer (ejemplo cuatro)",
+      "company": "Empresa Ejemplo Cuatro",
+      "location": "Viladecans",
+      "link": "https://www.infojobs.net/viladecans/fullstack-ejemplo/of-i4444444444444444444444444444dd"
+    }
+  ],
+  "no_results_text": "No se han encontrado ofertas que coincidan con tu búsqueda",
+  "urls": [
+    "https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=python&provinceIds=9",
+    "https://www.infojobs.net/barcelona/backend-python-ejemplo/of-i2222222222222222222222222222bb"
+  ]
+}

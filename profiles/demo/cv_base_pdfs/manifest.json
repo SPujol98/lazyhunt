@@ -1,0 +1,33 @@
+{
+  "environment": {
+    "fpdf2": "2.8.8",
+    "fonts": {
+      "carlito/Carlito-Bold.ttf": "bb5d20f79b82599ec72983597437373a80f2d2085fa91fc144fd74e876a594db",
+      "carlito/Carlito-BoldItalic.ttf": "b32928186c119599e03ca6a1ffc680fdcb7fac95772f4b95d989cf6cd3861517",
+      "carlito/Carlito-Italic.ttf": "0b019225e58d702bfedcbd35c21696769f8ee115cb6343f84c2f240312450d1c",
+      "carlito/Carlito-Regular.ttf": "f6418f708baede9789daef5d458c0f53d2a888af9820e8062934e504fedc6595"
+    }
+  },
+  "variants": {
+    "AI_ES": {
+      "file": "CV_AI_Engineer_Alex_Rivera.pdf",
+      "sha256": "cb91e7d95aea17b0f5eecf455b96b0564dfa08a61dcf03cd4a73dc3be987e9bd"
+    },
+    "AI_EN": {
+      "file": "CV_AI_Engineer_Alex_Rivera_EN.pdf",
+      "sha256": "13cf1e657249f5a68469a2f78cf965a9cc3f649a614200d9a0bb8fc58930c363"
+    },
+    "AI_CA": {
+      "file": "CV_AI_Engineer_Alex_Rivera_CA.pdf",
+      "sha256": "2c4c7961b762acefe16924eeeb2496d54dc03907a4f2beb6fb1b965918aa142e"
+    },
+    "BACKEND_ES": {
+      "file": "CV_Backend_Developer_Python_Alex_Rivera.pdf",
+      "sha256": "5061042b866063b1bc59d9622e6fc39468b9ebdc09a1914edb25ac629720fb0c"
+    },
+    "BACKEND_EN": {
+      "file": "CV_Backend_Developer_Python_Alex_Rivera_EN.pdf",
+      "sha256": "52c25538a7a406ea7aad5dc2939f9ece8a20fc40352a947e73f3b0e42ea74f70"
+    }
+  }
+}

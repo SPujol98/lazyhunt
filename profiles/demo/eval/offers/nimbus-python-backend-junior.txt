@@ -1,0 +1,29 @@
+Python Backend Developer - Junior/Mid (Barcelona)
+
+Nimbus Ledger (nimbus-ledger.example.com) builds invoicing software for freelancers and very small companies. Our engineering team is based in Barcelona and we are growing the backend squad.
+
+Your day to day
+- Design and maintain REST APIs in Python with FastAPI.
+- Model data in PostgreSQL, write migrations and optimise slow queries.
+- Write automated tests with pytest and keep the CI pipeline green.
+- Integrate third-party services (payments, e-mail, accounting exports).
+- Take part in code reviews and in weekly planning.
+
+Requirements
+- 1 to 3 years of professional experience with Python backends (internships and freelance work count).
+- Good knowledge of SQL and relational modelling.
+- Git, Docker and basic Linux skills.
+- Spanish and English; Catalan is a plus.
+- A degree or higher vocational diploma in computer science, or similar training.
+
+Nice to have
+- Metrics and observability (Prometheus, Grafana).
+- Experience with message queues.
+
+What we offer
+- Hybrid model in our Barcelona office: three days on site, two remote.
+- Salary 30,000 - 38,000 EUR gross per year depending on experience.
+- Health insurance, flexible hours and a yearly training budget.
+- A calm engineering culture without on-call duties for juniors.
+
+Please apply with your CV. We will reply to every application within two weeks, and the first interview is a relaxed technical conversation about a project you built.

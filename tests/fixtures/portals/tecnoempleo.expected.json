@@ -1,0 +1,30 @@
+{
+  "cards": [
+    {
+      "id": "rf-a1b2c3d4e5f6a1b2c3d4",
+      "title": "Fullstack Python Developer (ejemplo uno)",
+      "company": "Empresa Ejemplo Uno",
+      "location": "Barcelona",
+      "link": "https://www.tecnoempleo.com/fullstack-python-ejemplo-uno/api-rest/rf-a1b2c3d4e5f6a1b2c3d4"
+    },
+    {
+      "id": "rf-b2c3d4e5f6a1b2c3d4e5",
+      "title": "Backend Python Engineer (ejemplo dos)",
+      "company": "Empresa Ejemplo Dos",
+      "location": "100% remoto",
+      "link": "https://www.tecnoempleo.com/backend-python-ejemplo-dos/etl-aws/rf-b2c3d4e5f6a1b2c3d4e5"
+    },
+    {
+      "id": "rf-d4e5f6a1b2c3d4e5f6a1",
+      "title": "Python Developer (ejemplo cuatro)",
+      "company": "Empresa Ejemplo Cuatro",
+      "location": "Madrid",
+      "link": "https://www.tecnoempleo.com/python-developer-ejemplo-cuatro/django/rf-d4e5f6a1b2c3d4e5f6a1"
+    }
+  ],
+  "no_results_text": "No hemos encontrado ofertas de empleo para zzqxjkvw",
+  "urls": [
+    "https://www.tecnoempleo.com/ofertas-trabajo/?te=python&pr=240",
+    "https://www.tecnoempleo.com/fullstack-python-ejemplo-uno/api-rest/rf-a1b2c3d4e5f6a1b2c3d4"
+  ]
+}
