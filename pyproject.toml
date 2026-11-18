@@ -10,7 +10,7 @@ dependencies = [
     "pypdf>=4.3",
     "pydantic>=2.14.3",
     "pydantic-settings>=2.4",
-    "python-telegram-bot[job-queue]>=21.4",
+    "python-telegram-bot[job-queue]>=22.8",
     "google-auth-oauthlib>=1.5.0",
     "google-api-python-client>=2.201.0",
 ]
