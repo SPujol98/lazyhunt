@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" width="1200" height="330" role="img" aria-labelledby="t d">
+  <title id="t">How a new offer flows through lazyhunt</title>
+  <desc id="d">Five steps: the extension reads your saved searches in your own browser tab; offers cross a loopback bridge on 127.0.0.1 with a shared secret; deterministic gates and the AI judge score them against your verified claims; a card arrives in Telegram; a CV and cover letter are built only from facts in your profile.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1B1830"/><stop offset="1" stop-color="#2C2445"/></linearGradient>
+    <style>
+      .h{font:700 19px system-ui,-apple-system,&quot;Segoe UI&quot;,Roboto,&quot;Helvetica Neue&quot;,Arial,sans-serif;fill:#FBEBD0}
+      .b{font:400 14.5px system-ui,-apple-system,&quot;Segoe UI&quot;,Roboto,&quot;Helvetica Neue&quot;,Arial,sans-serif;fill:#C9BFE0}
+      .n{font:800 15px system-ui,-apple-system,&quot;Segoe UI&quot;,Roboto,&quot;Helvetica Neue&quot;,Arial,sans-serif;fill:#1B1830}
+      .cap{font:600 15px system-ui,-apple-system,&quot;Segoe UI&quot;,Roboto,&quot;Helvetica Neue&quot;,Arial,sans-serif;fill:#F4B860;letter-spacing:2px}
+    </style>
+  </defs>
+  <rect width="1200" height="330" rx="24" fill="url(#bg)"/>
+  <text x="40" y="50" class="cap">HOW A NEW OFFER FLOWS</text>
+  <text x="1160" y="50" class="b" text-anchor="end">local by design: only the AI provider you chose and Telegram sit outside your machine</text>
+  <path id="rail" d="M138.0 150 H1062.0" stroke="#4A3F66" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+  <circle cx="138.0" cy="150" r="5" fill="#F4B860" opacity=".9"><animateMotion dur="6s" repeatCount="indefinite" path="M0 0 H924"/></circle>
+  <g>
+    <rect x="40.0" y="80" width="196" height="214" rx="18" fill="#251F3B" stroke="#F4B860" stroke-opacity=".45" stroke-width="1.5"/>
+    <circle cx="138.0" cy="150" r="44" fill="#1B1830" stroke="#F4B860" stroke-width="2"/>
+    <g transform="translate(138.0 150)"><rect x="-26" y="-20" width="52" height="40" rx="6" fill="none" stroke="#F4B860" stroke-width="3"/><path d="M-26 -9 H26" stroke="#F4B860" stroke-width="3"/><circle cx="-19" cy="-14.5" r="2" fill="#F4B860"/><circle cx="-12" cy="-14.5" r="2" fill="#F4B860"/><rect x="-18" y="-2" width="24" height="5" rx="2.5" fill="#F4B860"/><rect x="-18" y="8" width="34" height="5" rx="2.5" fill="#F4B860" opacity=".55"/></g>
+    <circle cx="64.0" cy="104" r="13" fill="#F4B860"/><text x="64.0" y="109.5" class="n" text-anchor="middle">1</text>
+    <text x="138.0" y="228" class="h" text-anchor="middle">Your browser tab</text>
+    <text x="138.0" y="254" class="b" text-anchor="middle">Extension reads your</text>
+    <text x="138.0" y="274" class="b" text-anchor="middle">saved searches</text>
+  </g>
+  <path d="M246.5 142 L258.5 150 L246.5 158" fill="none" stroke="#F4B860" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g>
+    <rect x="271.0" y="80" width="196" height="214" rx="18" fill="#251F3B" stroke="#C9BFE0" stroke-opacity=".45" stroke-width="1.5"/>
+    <circle cx="369.0" cy="150" r="44" fill="#1B1830" stroke="#C9BFE0" stroke-width="2"/>
+    <g transform="translate(369.0 150)"><rect x="-20" y="-6" width="40" height="30" rx="6" fill="none" stroke="#C9BFE0" stroke-width="3"/><path d="M-12 -6 V-14 a12 12 0 0 1 24 0 V-6" fill="none" stroke="#C9BFE0" stroke-width="3"/><circle cx="0" cy="7" r="4" fill="#C9BFE0"/><path d="M0 9 V16" stroke="#C9BFE0" stroke-width="3" stroke-linecap="round"/></g>
+    <circle cx="295.0" cy="104" r="13" fill="#C9BFE0"/><text x="295.0" y="109.5" class="n" text-anchor="middle">2</text>
+    <text x="369.0" y="228" class="h" text-anchor="middle">Loopback bridge</text>
+    <text x="369.0" y="254" class="b" text-anchor="middle">127.0.0.1 only,</text>
+    <text x="369.0" y="274" class="b" text-anchor="middle">shared secret</text>
+  </g>
+  <path d="M477.5 142 L489.5 150 L477.5 158" fill="none" stroke="#F4B860" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g>
+    <rect x="502.0" y="80" width="196" height="214" rx="18" fill="#251F3B" stroke="#7FC28A" stroke-opacity=".45" stroke-width="1.5"/>
+    <circle cx="600.0" cy="150" r="44" fill="#1B1830" stroke="#7FC28A" stroke-width="2"/>
+    <g transform="translate(600.0 150)"><path d="M0 -22 V20 M-22 20 H22" stroke="#7FC28A" stroke-width="3" stroke-linecap="round"/><path d="M-24 -14 H24" stroke="#7FC28A" stroke-width="3" stroke-linecap="round"/><path d="M-24 -14 L-32 4 H-16Z M24 -14 L16 4 H32Z" fill="none" stroke="#7FC28A" stroke-width="2.5" stroke-linejoin="round"/><circle cx="0" cy="-22" r="3.5" fill="#7FC28A"/></g>
+    <circle cx="526.0" cy="104" r="13" fill="#7FC28A"/><text x="526.0" y="109.5" class="n" text-anchor="middle">3</text>
+    <text x="600.0" y="228" class="h" text-anchor="middle">Gates + AI judge</text>
+    <text x="600.0" y="254" class="b" text-anchor="middle">Scored 0-100 against</text>
+    <text x="600.0" y="274" class="b" text-anchor="middle">your verified claims</text>
+  </g>
+  <path d="M708.5 142 L720.5 150 L708.5 158" fill="none" stroke="#F4B860" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g>
+    <rect x="733.0" y="80" width="196" height="214" rx="18" fill="#251F3B" stroke="#8EC5E8" stroke-opacity=".45" stroke-width="1.5"/>
+    <circle cx="831.0" cy="150" r="44" fill="#1B1830" stroke="#8EC5E8" stroke-width="2"/>
+    <g transform="translate(831.0 150)"><path d="M-24 -4 L24 -22 L14 22 L2 8 L-8 16 L-6 2Z" fill="none" stroke="#8EC5E8" stroke-width="3" stroke-linejoin="round"/><path d="M-6 2 L24 -22" stroke="#8EC5E8" stroke-width="2.5"/></g>
+    <circle cx="757.0" cy="104" r="13" fill="#8EC5E8"/><text x="757.0" y="109.5" class="n" text-anchor="middle">4</text>
+    <text x="831.0" y="228" class="h" text-anchor="middle">Telegram card</text>
+    <text x="831.0" y="254" class="b" text-anchor="middle">Score, verdict and</text>
+    <text x="831.0" y="274" class="b" text-anchor="middle">buttons, on your phone</text>
+  </g>
+  <path d="M939.5 142 L951.5 150 L939.5 158" fill="none" stroke="#F4B860" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g>
+    <rect x="964.0" y="80" width="196" height="214" rx="18" fill="#251F3B" stroke="#F29B83" stroke-opacity=".45" stroke-width="1.5"/>
+    <circle cx="1062.0" cy="150" r="44" fill="#1B1830" stroke="#F29B83" stroke-width="2"/>
+    <g transform="translate(1062.0 150)"><path d="M-18 -24 H8 L18 -14 V24 H-18Z" fill="none" stroke="#F29B83" stroke-width="3" stroke-linejoin="round"/><path d="M8 -24 V-14 H18" fill="none" stroke="#F29B83" stroke-width="2.5"/><rect x="-11" y="-8" width="20" height="4" rx="2" fill="#F29B83"/><rect x="-11" y="1" width="22" height="4" rx="2" fill="#F29B83" opacity=".6"/><rect x="-11" y="10" width="14" height="4" rx="2" fill="#F29B83" opacity=".6"/></g>
+    <circle cx="988.0" cy="104" r="13" fill="#F29B83"/><text x="988.0" y="109.5" class="n" text-anchor="middle">5</text>
+    <text x="1062.0" y="228" class="h" text-anchor="middle">CV and letter</text>
+    <text x="1062.0" y="254" class="b" text-anchor="middle">Built only from facts</text>
+    <text x="1062.0" y="274" class="b" text-anchor="middle">in your profile</text>
+  </g>
+</svg>

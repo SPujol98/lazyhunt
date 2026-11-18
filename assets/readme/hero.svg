@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-labelledby="t d">
+  <title id="t">lazyhunt</title>
+  <desc id="d">A relaxed sloth lies in a hammock at dusk, watching job offers drift past through binoculars. Next to it: lazyhunt, the job hunt that does the scrolling for you.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1830"/>
+      <stop offset="0.65" stop-color="#2C2445"/>
+      <stop offset="1" stop-color="#4A2F4A"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFD58A"/>
+      <stop offset="0.6" stop-color="#F4A940"/>
+      <stop offset="1" stop-color="#F4A940" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cloth" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E8893A"/>
+      <stop offset="1" stop-color="#F4B860"/>
+    </linearGradient>
+    <clipPath id="panel"><rect width="1200" height="440" rx="28"/></clipPath>
+    <style>
+      .ttl{font:800 80px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;fill:#FBEBD0;letter-spacing:-2px}
+      .tag{font:600 25px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;fill:#F4B860}
+      .sub{font:400 17px system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;fill:#C9BFE0}
+      .card text{font:700 15px ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+      .drift{animation:drift 7s ease-in-out infinite}
+      .drift2{animation:drift 9s ease-in-out infinite reverse}
+      .zz{animation:zz 4s ease-in-out infinite}
+      @keyframes drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+      @keyframes zz{0%,100%{opacity:.25}50%{opacity:.9}}
+      @media (prefers-reduced-motion:reduce){.drift,.drift2,.zz{animation:none}}
+    </style>
+  </defs>
+
+  <g clip-path="url(#panel)">
+    <rect width="1200" height="440" fill="url(#sky)"/>
+    <!-- stars -->
+    <g fill="#FBEBD0">
+      <circle cx="70" cy="50" r="1.6" opacity=".7"/><circle cx="180" cy="95" r="1.2" opacity=".5"/>
+      <circle cx="300" cy="40" r="1.8" opacity=".8"/><circle cx="420" cy="80" r="1.1" opacity=".5"/>
+      <circle cx="610" cy="35" r="1.4" opacity=".6"/><circle cx="760" cy="70" r="1.2" opacity=".5"/>
+      <circle cx="905" cy="30" r="1.7" opacity=".7"/><circle cx="1040" cy="60" r="1.2" opacity=".5"/>
+      <circle cx="1150" cy="110" r="1.5" opacity=".6"/><circle cx="560" cy="120" r="1" opacity=".4"/>
+    </g>
+    <!-- setting sun -->
+    <circle cx="330" cy="372" r="190" fill="url(#sun)" opacity=".45"/>
+    <!-- distant hills -->
+    <path d="M0 360 C150 320 260 340 380 330 C520 318 640 350 800 340 C960 330 1080 300 1200 320 L1200 440 L0 440Z" fill="#3A2846"/>
+    <path d="M0 395 C200 370 420 392 620 382 C820 372 1000 395 1200 380 L1200 440 L0 440Z" fill="#2A1F38"/>
+
+    <!-- palm trunks -->
+    <path d="M92 400 C98 320 104 240 122 168" stroke="#6B4A36" stroke-width="16" fill="none" stroke-linecap="round"/>
+    <path d="M548 400 C540 320 530 240 508 168" stroke="#6B4A36" stroke-width="16" fill="none" stroke-linecap="round"/>
+    <!-- palm fronds -->
+    <g fill="#4E8A55">
+      <path d="M122 168 C90 130 50 128 22 150 C60 140 90 150 122 168Z"/>
+      <path d="M122 168 C110 118 130 86 168 72 C142 100 134 130 122 168Z"/>
+      <path d="M122 168 C150 136 196 132 226 150 C186 146 156 152 122 168Z"/>
+      <path d="M122 168 C96 150 70 166 58 196 C80 176 100 170 122 168Z"/>
+      <path d="M508 168 C540 130 580 128 608 150 C570 140 540 150 508 168Z"/>
+      <path d="M508 168 C520 118 500 86 462 72 C488 100 496 130 508 168Z"/>
+      <path d="M508 168 C480 136 434 132 404 150 C444 146 474 152 508 168Z"/>
+      <path d="M508 168 C534 150 560 166 572 196 C550 176 530 170 508 168Z"/>
+    </g>
+    <g fill="#6FAE6A" opacity=".8">
+      <path d="M122 168 C100 140 72 140 50 152 C78 148 100 156 122 168Z"/>
+      <path d="M508 168 C530 140 558 140 580 152 C552 148 530 156 508 168Z"/>
+    </g>
+
+    <!-- hammock ropes -->
+    <path d="M124 200 L168 236" stroke="#E9D6B4" stroke-width="3"/>
+    <path d="M506 200 L462 236" stroke="#E9D6B4" stroke-width="3"/>
+    <!-- hammock cloth -->
+    <path d="M168 236 C220 312 410 312 462 236 C420 268 210 268 168 236Z" fill="url(#cloth)"/>
+    <path d="M200 262 C260 296 370 296 430 262" stroke="#FBEBD0" stroke-width="3" fill="none" opacity=".55"/>
+    <path d="M186 248 C250 290 380 290 446 248" stroke="#B9602A" stroke-width="2" fill="none" opacity=".6"/>
+
+    <!-- sloth -->
+    <g>
+      <!-- body -->
+      <ellipse cx="300" cy="250" rx="96" ry="34" fill="#9A7656"/>
+      <ellipse cx="290" cy="244" rx="70" ry="20" fill="#B08B68" opacity=".7"/>
+      <!-- dangling arm over the edge -->
+      <path d="M230 262 C222 288 214 306 206 318" stroke="#8A6749" stroke-width="16" stroke-linecap="round" fill="none"/>
+      <path d="M200 316 l-4 12 M206 319 l-1 13 M212 318 l2 12" stroke="#3B2A22" stroke-width="3" stroke-linecap="round"/>
+      <!-- hammock lip over body -->
+      <path d="M190 258 C250 286 380 286 440 258 C430 276 400 290 315 292 C240 292 205 280 190 258Z" fill="url(#cloth)"/>
+      <!-- head -->
+      <circle cx="396" cy="214" r="38" fill="#9A7656"/>
+      <ellipse cx="400" cy="218" rx="29" ry="25" fill="#E9D3B0"/>
+      <!-- eye patches with one relaxed closed eye -->
+      <path d="M378 210 C384 200 396 206 394 216 C390 224 378 222 378 210Z" fill="#4A3428"/>
+      <path d="M382 213 C385 216 389 216 391 213" stroke="#FBEBD0" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="402" cy="230" rx="7" ry="4.5" fill="#3B2A22"/>
+      <path d="M392 240 C398 246 408 246 413 240" stroke="#3B2A22" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <!-- binoculars held to the right eye -->
+      <path d="M352 238 C370 236 392 226 410 214" stroke="#8A6749" stroke-width="15" stroke-linecap="round" fill="none"/>
+      <g transform="rotate(-18 432 206)">
+        <rect x="410" y="190" width="44" height="18" rx="6" fill="#2B2A36"/>
+        <rect x="410" y="210" width="44" height="18" rx="6" fill="#2B2A36"/>
+        <rect x="406" y="203" width="10" height="12" rx="3" fill="#4A4858"/>
+        <circle cx="456" cy="199" r="8" fill="#F4B860"/>
+        <circle cx="456" cy="219" r="8" fill="#F4B860"/>
+        <circle cx="458" cy="197" r="2.5" fill="#FFF3DA"/>
+        <circle cx="458" cy="217" r="2.5" fill="#FFF3DA"/>
+      </g>
+      <!-- ear -->
+      <circle cx="368" cy="190" r="6" fill="#7E5E43"/>
+    </g>
+    <!-- binocular sight line -->
+    <path d="M478 186 C520 150 560 128 600 116" stroke="#F4B860" stroke-width="2" stroke-dasharray="3 9" fill="none" opacity=".7" stroke-linecap="round"/>
+
+    <!-- drifting offer cards -->
+    <g class="card drift">
+      <rect x="590" y="70" width="132" height="44" rx="10" fill="#FBEBD0"/>
+      <rect x="602" y="82" width="54" height="7" rx="3.5" fill="#6B5A80"/>
+      <rect x="602" y="95" width="36" height="7" rx="3.5" fill="#B7AACB"/>
+      <rect x="668" y="78" width="44" height="28" rx="8" fill="#4E8A55"/>
+      <text x="690" y="97" text-anchor="middle" fill="#FBEBD0">87</text>
+    </g>
+    <g class="card drift2" opacity=".7">
+      <rect x="440" y="26" width="112" height="38" rx="9" fill="#E3D8EF"/>
+      <rect x="451" y="37" width="44" height="6" rx="3" fill="#6B5A80"/>
+      <rect x="451" y="48" width="30" height="6" rx="3" fill="#B7AACB"/>
+      <rect x="506" y="32" width="38" height="26" rx="7" fill="#9B5A5A"/>
+      <text x="525" y="50" text-anchor="middle" fill="#FBEBD0">41</text>
+    </g>
+
+    <!-- zzz -->
+    <g class="zz" fill="#C9BFE0" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-weight="700">
+      <text x="340" y="176" font-size="16">z</text>
+      <text x="326" y="158" font-size="20">z</text>
+      <text x="310" y="136" font-size="25">z</text>
+    </g>
+
+    <!-- title block -->
+    <text x="672" y="196" class="ttl">lazyhunt</text>
+    <text x="676" y="240" class="tag">The job hunt that does the scrolling.</text>
+    <text x="676" y="272" class="tag" style="fill:#FBEBD0">You stay in the hammock.</text>
+    <text x="676" y="318" class="sub">Self-hosted · runs in your own browser tab · Telegram-first</text>
+    <text x="676" y="344" class="sub">Never invents experience you don't have.</text>
+  </g>
+</svg>
