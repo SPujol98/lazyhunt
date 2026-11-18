@@ -144,7 +144,7 @@ Open your bot in Telegram and send `/help`. If it answers with the list of comma
 Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Manfred, Adzuna and foorilla.
 
 <p align="center">
-  <img src="assets/readme/screenshots/extension-options.png" alt="The extension's Options page: portal switches with InfoJobs, Indeed and Tecnoempleo enabled, and a search named AI Engineer Barcelona with its keywords, location, filter profile and portals." width="100%"><br>
+  <img src="assets/readme/screenshots/extension-options.png" alt="The extension's Options page: every portal switch off by default except foorilla, and a search named AI Engineer remote with its keywords, filter profile and portals." width="100%"><br>
   <sub>Options: enable portals, then add searches. (Demo data.)</sub>
 </p>
 
@@ -156,7 +156,7 @@ You do not have to wait for the schedule:
 - paste any offer link into Telegram with `/analyze <url>`.
 
 <p align="center">
-  <img src="assets/readme/screenshots/extension-popup.png" alt="The extension's toolbar popup: status Active, last round 12 minutes ago, six searches being watched with the jobs found on each, and the Check now, Pause and Options buttons." width="300"><br>
+  <img src="assets/readme/screenshots/extension-popup.png" alt="The extension's toolbar popup: status Active, last round 12 minutes ago, three searches being watched with the jobs found on each, and the Check now, Pause and Options buttons." width="300"><br>
   <sub>The toolbar popup: what is being watched and a <b>Check now</b> button. (Demo data.)</sub>
 </p>
 
