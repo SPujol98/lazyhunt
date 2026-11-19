@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-19
+
+### Added
+
+- "🗑 Don't use" button on proposed cover letters: removes the letter and its sources from the chat.
+- Follow-up drafts show where to send them ("📧 Send to: …" and where the address comes from); an address is never invented.
+- Cover letters get a deterministic quality score (florid phrases, intensifiers, sentence length, must-have coverage, length, grounding); a letter below 70 is rewritten once and the better one is kept. The score and the must-haves it does not mention are shown with the letter.
+
+### Changed
+
+- Plainer cover-letter style: short, specific first-person sentences without superlatives or "passion" language.
+- Two `/help` button descriptions are shorter, to fit the new button within Telegram's message limit.
+
 ## [0.4.2] - 2026-11-19
 
 ### Fixed
@@ -78,7 +91,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/SPujol98/lazyhunt/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/SPujol98/lazyhunt/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/SPujol98/lazyhunt/compare/v0.3.0...v0.4.0

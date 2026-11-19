@@ -40,7 +40,9 @@ class _Msg:
     async def reply_text(self, text: str, reply_markup: object = None) -> None:
         self.replies.append((text, reply_markup))
 
-    async def reply_document(self, document: object, filename: str | None = None) -> None:
+    async def reply_document(
+        self, document: object, filename: str | None = None
+    ) -> None:
         self.documents.append(filename)
 
 
@@ -76,7 +78,10 @@ def test_press_sends_progress_then_the_letter_with_a_use_button(tmp_path: Path) 
     assert replies[1][0].startswith("✉️ Carta") and ES_LETTER in replies[1][0]
     assert all(len(text) <= 4096 for text, _ in replies)
     # The button carries the generation (1 = first press) to reject stale picks.
-    assert _buttons(replies[1][1]) == {"✅ Usar esta": f"clc:{oid}:1:a"}  # type: ignore[arg-type]
+    assert _buttons(replies[1][1]) == {
+        "✅ Usar esta": f"clc:{oid}:1:a",
+        "🗑 No usar": f"cld:{oid}",
+    }  # type: ignore[arg-type]
     # No researched facts (no web search): the owner is told paragraph 2 is thin.
     assert "No encontré datos fiables de la empresa" in replies[2][0]
     assert len(replies) == 3  # no warnings for a clean letter

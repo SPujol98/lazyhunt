@@ -17,6 +17,7 @@ no bot-side session state is needed):
 - ``sal:{offer_id}``                     on-demand salary web research
 - ``cl:{offer_id}``                      write the two cover-letter versions
 - ``clc:{offer_id}:{gen}:{a|b}``         store the chosen cover-letter version
+- ``cld:{offer_id}``                     delete a proposed letter (and its sources) from the chat
 
 LANGUAGE NOTE: every user-facing string lives in :mod:`cva.i18n.notifier`
 (``notifier.*`` keys; button labels the help documents are the
@@ -45,6 +46,7 @@ from cva.i18n import CATALOGS, LANGS, LEGACY_LANG, Lang, t
 from cva.llm import LlmResponseError
 from cva.match import MatchResult
 from cva.match.apply_instructions import KIND_EMOJI, ApplyInstruction
+from cva.match.followup import Recipient
 from cva.match.interview_prep import PREP_ESTADOS, STAGE_LABEL, CompanyFact
 from cva.match.judge import OfferJudgment
 from cva.match.salary_reference import eur_text
@@ -59,6 +61,7 @@ from cva.tracker import (
 
 if TYPE_CHECKING:
     from cva.gmail.sync import Proposal as GmailProposal
+    from cva.match.letter_quality import LetterQuality
     from cva.service import JobService
 
 AN = "an"
@@ -71,6 +74,7 @@ SENT = "sent"
 SAL = "sal"
 CL = "cl"
 CLC = "clc"
+CLD = "cld"  # "Don't use": remove a proposed letter from the chat
 OUT = "out"  # open the outcome menu of a sent offer
 OE = "oe"  # record an outcome estado
 GM = "gm"  # Gmail proposal actions: gm:<y|o|i>:<gmail message id>
@@ -751,6 +755,19 @@ def cover_letter_message(label: str, text: str) -> str:
     return f"{label}\n\n{text}"[:_TELEGRAM_LIMIT]
 
 
+def letter_quality_line(quality: "LetterQuality | None", *, lang: Lang) -> str:
+    """One short line with the letter's deterministic quality score and the
+    offer must-haves it does not mention ("" when there is no score)."""
+    if quality is None:
+        return ""
+    line = t("notifier.letter_quality", lang, score=str(quality.score))
+    if quality.missing:
+        line += t(
+            "notifier.letter_quality_missing", lang, items=", ".join(quality.missing)
+        )
+    return line
+
+
 def cover_letter_sources_message(
     facts: Sequence[CompanyFact], *, lang: Lang = LEGACY_LANG
 ) -> str:
@@ -764,14 +781,17 @@ def cover_letter_sources_message(
 def cover_letter_keyboard(
     offer_id: int, version: str, generation: int, *, lang: Lang = LEGACY_LANG
 ) -> InlineKeyboardMarkup:
-    """The single [✅ Use this one] action of one generated version (with its generation)."""
+    """[✅ Use this one] (with its generation) and [🗑 Don't use] of one generated version."""
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
                     _button("use_this", lang),
                     callback_data=f"{CLC}:{offer_id}:{generation}:{version}",
-                )
+                ),
+                InlineKeyboardButton(
+                    _button("dont_use", lang), callback_data=f"{CLD}:{offer_id}"
+                ),
             ]
         ]
     )
@@ -1179,6 +1199,17 @@ def _followup_offer_label(offer: OfferRow, lang: Lang) -> str:
     )
 
 
+def _recipient_line(recipient: Recipient, lang: Lang) -> str:
+    if recipient.address is None or recipient.source is None:
+        return t("notifier.followup_to_none", lang)
+    return t(
+        "notifier.followup_to",
+        lang,
+        address=recipient.address,
+        source=t(f"notifier.followup_to.{recipient.source}", lang),
+    )
+
+
 def followup_message(
     offer: OfferRow,
     *,
@@ -1187,8 +1218,10 @@ def followup_message(
     draft: str | None,
     warnings: Sequence[str],
     lang: Lang = LEGACY_LANG,
+    recipient: Recipient | None = None,
 ) -> str:
-    """Follow-up reminder with the draft. Nothing is sent for the owner."""
+    """Follow-up reminder with the draft (and, when resolved, whom to send it
+    to). Nothing is sent for the owner."""
     lines = [
         t(
             "notifier.followup_head",
@@ -1197,8 +1230,10 @@ def followup_message(
             label=_followup_offer_label(offer, lang),
         ),
         t("notifier.followup_silent", lang, days=_days_plain(days_silent, lang)),
-        "",
     ]
+    if recipient is not None:
+        lines.append(_recipient_line(recipient, lang))
+    lines.append("")
     if draft is None:
         lines.append(t("notifier.followup_no_draft", lang))
     else:

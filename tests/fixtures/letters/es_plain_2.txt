@@ -1,0 +1,14 @@
+Hola equipo de Brisa Data,
+
+Buscáis a alguien que convierta consultas SQL en paneles que use el equipo comercial. Lo he hecho dos veces.
+
+En mi último proyecto pasé un informe de Excel a un panel con SQL y Metabase. El informe tardaba dos días en prepararse. El panel se actualiza solo cada mañana.
+
+Antes trabajé en sistemas, así que conozco las copias de seguridad y los permisos de una base de datos. Eso ayuda cuando un panel lee datos de producción.
+
+La oferta menciona dbt. Lo he usado en un proyecto personal con doce modelos, no en una empresa. Lo digo para que sepáis desde dónde empiezo.
+
+Puedo enseñaros el panel y las consultas que hay detrás. Una llamada corta basta.
+
+Un saludo,
+Alex Rivera

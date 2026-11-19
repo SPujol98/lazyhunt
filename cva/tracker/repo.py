@@ -1082,6 +1082,15 @@ class OfferRepository:
         self._conn.commit()
         return cursor.rowcount == 1
 
+    def gmail_senders_for_offer(self, offer_id: int) -> list[str]:
+        """Senders of the Gmail messages matched to ``offer_id``, newest first."""
+        rows = self._conn.execute(
+            "SELECT sender FROM gmail_messages WHERE offer_id = ? "
+            "ORDER BY received_at DESC, created_at DESC",
+            (offer_id,),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
     def get_gmail_proposal(self, message_id: str) -> GmailProposalRow | None:
         """The stored proposal of a Gmail message, or ``None``."""
         row = self._conn.execute(

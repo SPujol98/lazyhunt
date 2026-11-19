@@ -1,0 +1,14 @@
+Hola equipo de Orbita Labs,
+
+Vuestra oferta pide Python, PostgreSQL y APIs REST para el servicio de pedidos. Es lo que he hecho este último año.
+
+En Metrics API construí un servicio con FastAPI y PostgreSQL. Lo dejé con tests al 91 % y lo probé con pruebas de carga. Sé dónde se rompe una API cuando sube el tráfico.
+
+También mantuve las cargas nocturnas de un cliente de logística. Cada mañana revisaba los fallos y los corregía antes de las nueve. Eso me enseñó a escribir código que otra persona pueda operar.
+
+No he trabajado con Kafka, que aparece como deseable. Sí he montado colas con Redis para reintentar tareas fallidas, y puedo enseñaros cómo lo hice.
+
+Si os encaja, os enseño el repositorio de Metrics API en una llamada de veinte minutos.
+
+Un saludo,
+Alex Rivera

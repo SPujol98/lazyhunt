@@ -1,0 +1,12 @@
+{
+  "es_florid_1.txt": {"language": "es", "kind": "florid", "requirements": ["Python", "PostgreSQL", "APIs REST"], "florid": ["me complace", "en el dinámico mundo", "apasionada", "de vanguardia", "sinergias", "siguiente nivel", "aportar valor"]},
+  "es_florid_2.txt": {"language": "es", "kind": "florid", "requirements": ["SQL", "Metabase", "dbt"], "florid": ["me apasiona", "apasionante", "valor añadido", "orientada a resultados", "siguiente nivel"]},
+  "es_florid_3.txt": {"language": "es", "kind": "florid", "requirements": ["RAG", "Python", "evaluación"], "florid": ["me dirijo a ustedes", "apasionado", "de vanguardia", "perfil versátil", "candidato ideal"]},
+  "es_plain_1.txt": {"language": "es", "kind": "plain", "requirements": ["Python", "PostgreSQL", "APIs REST"], "florid": []},
+  "es_plain_2.txt": {"language": "es", "kind": "plain", "requirements": ["SQL", "Metabase", "dbt"], "florid": []},
+  "es_plain_3.txt": {"language": "es", "kind": "plain", "requirements": ["RAG", "Python", "evaluación"], "florid": []},
+  "en_florid_1.txt": {"language": "en", "kind": "florid", "requirements": ["Python", "PostgreSQL", "REST APIs"], "florid": ["i am thrilled", "passionate", "cutting-edge", "leveraging", "perfect fit", "next level"]},
+  "en_florid_2.txt": {"language": "en", "kind": "florid", "requirements": ["RAG", "Python", "evaluation"], "florid": ["i am excited to apply", "passionate", "results-oriented", "spearhead", "testament to", "embark"]},
+  "en_plain_1.txt": {"language": "en", "kind": "plain", "requirements": ["Python", "PostgreSQL", "REST APIs"], "florid": []},
+  "en_plain_2.txt": {"language": "en", "kind": "plain", "requirements": ["RAG", "Python", "evaluate"], "florid": []}
+}

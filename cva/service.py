@@ -77,8 +77,13 @@ from cva.match.cover_letter import (
     normalize_company,
     owner_name,
 )
-from cva.match.extraction import ExtractionCache, extract
-from cva.match.followup import FollowupDraft, generate_followup
+from cva.match.extraction import ExtractionCache, cache_key, extract
+from cva.match.followup import (
+    FollowupDraft,
+    Recipient,
+    generate_followup,
+    resolve_recipient,
+)
 from cva.match.gates import gate_reason, run_gates
 from cva.match.interview_prep import (
     STAGES,
@@ -1168,6 +1173,15 @@ class JobService:
                     days.append(date.fromisoformat(stamp[:10]))
         return max(days) if days else self._now().date()
 
+    def followup_recipient(self, offer: OfferRow) -> Recipient:
+        """Where to send the follow-up of ``offer`` (never invents an address)."""
+        return resolve_recipient(
+            contact=offer.contacto,
+            senders=self._repo.gmail_senders_for_offer(offer.id),
+            offer_text=offer.source_data,
+            lang=self._lang,
+        )
+
     async def followup_draft(
         self, offer_id: int, *, days_silent: int, number: int
     ) -> FollowupDraft:
@@ -1422,11 +1436,23 @@ class JobService:
                 persona=self._prefs.cover_letter,
                 families=self._prefs.families,
                 ui_lang=self._lang,
+                offer_requirements=self._cached_must_haves(text),
             )
             result = replace(result, generation=self._letter_gen.get(offer_id, 0) + 1)
             self._letter_gen[offer_id] = result.generation
             self._last_letters[offer_id] = result
             return result
+
+    def _cached_must_haves(self, text: str) -> list[str]:
+        """The offer's must-have requirement names from the cached extraction
+        (the analysis already made it); no LLM call, ``[]`` when not cached."""
+        model = self._extraction_model or getattr(self._llm, "model", None)
+        if not model:
+            return []
+        extraction = self._cache.get(cache_key(text, model))
+        if extraction is None:
+            return []
+        return [r.name for r in extraction.requirements if r.must_have]
 
     async def _letter_facts(self, company: str, position: str) -> list[CompanyFact]:
         """Verified (URL-backed) facts about ``company``, cached for 30 days.

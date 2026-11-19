@@ -1,0 +1,14 @@
+Dear Kestrel Analytics team,
+
+The role asks for RAG over internal documents and a way to evaluate retrieval. I did that in DocSearch.
+
+I compared two kinds of search on 150 hand-written questions. Hybrid retrieval lifted recall from 0.61 to 0.78. I measure before I change anything.
+
+I wrote the service in Python with FastAPI and shipped it with Docker. The tests run on every change.
+
+I have not run a RAG system for many users at once. I have watched real loads every night for a year, and I want to take that step with a team that already does it.
+
+I can show you the question set and the results in a thirty minute session.
+
+Best regards,
+Alex Rivera

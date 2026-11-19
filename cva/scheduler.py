@@ -231,6 +231,7 @@ async def _send_followups(
                     draft=draft.text,
                     warnings=draft.warnings,
                     lang=lang,
+                    recipient=service.followup_recipient(item.offer),
                 )
             stored = service.followup_chunks(item) if resume is not None else None
             parts = stored if stored is not None else chunk_message(text)

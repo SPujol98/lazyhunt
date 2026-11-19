@@ -20,7 +20,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal, Protocol
+from typing import TYPE_CHECKING, Final, Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -34,6 +34,9 @@ from cva.match.persona import CoverLetterPersona
 from cva.match.persona_defaults import OWNER_COVER_LETTER_PERSONA
 from cva.profile_identity import DEFAULT_IDENTITY, Identity
 from cva.profile_persona import LetterBase
+
+if TYPE_CHECKING:  # letter_quality imports this module
+    from cva.match.letter_quality import LetterQuality
 
 _logger = logging.getLogger(__name__)
 
@@ -101,6 +104,78 @@ BANNED_PHRASES: Final[tuple[str, ...]] = (
     "sinergies",
     "em dirigeixo a vosaltres",
     "entorn dinàmic",
+)
+
+# Florid, AI-sounding phrases that lower the letter quality score
+# (``cva/match/letter_quality.py``) on top of BANNED_PHRASES. They are soft:
+# listed in the letter-parts prompt and scored, but not hard validator failures
+# (follow-ups and the legacy letter keep using only BANNED_PHRASES).
+FLORID_PHRASES: Final[tuple[str, ...]] = (
+    # Spanish
+    "me complace",
+    "en el dinámico mundo",
+    "en el mundo actual",
+    "siguiente nivel",
+    "sinergia",
+    "de vanguardia",
+    "innovador",
+    "innovadora",
+    "apasionante",
+    "emocionante",
+    "estoy emocionado",
+    "estoy emocionada",
+    "gran entusiasmo",
+    "firmemente convencido",
+    "firmemente convencida",
+    "plenamente convencido",
+    "plenamente convencida",
+    "aportar valor",
+    "marcar la diferencia",
+    "sin duda",
+    "sumergirme",
+    "en constante evolución",
+    "excelencia",
+    "candidato ideal",
+    "candidata ideal",
+    "encaja perfectamente",
+    "amplia experiencia",
+    "sólida experiencia",
+    "empresa líder",
+    # English
+    "thrilled",
+    "excited",
+    "eager to",
+    "passion",
+    "innovative",
+    "next level",
+    "game-changer",
+    "world-class",
+    "make a difference",
+    "meaningful difference",
+    "adding value",
+    "add value",
+    "driving innovation",
+    "spearhead",
+    "seamless",
+    "leveraging",
+    "i am confident that",
+    "perfect fit",
+    "ideal candidate",
+    "extensive experience",
+    "strong background",
+    "landscape",
+    "my journey",
+    "throughout my journey",
+    "embark",
+    "thrive in",
+    "invaluable",
+    # Catalan
+    "apassionat",
+    "apassionada",
+    "m'emociona",
+    "següent nivell",
+    "aportar valor afegit",
+    "de primer nivell",
 )
 
 _LANGUAGE_NAME: Final[dict[str, str]] = {
@@ -604,6 +679,8 @@ class CoverLetterResult:
     register: Register = "cercano"
     facts: list[CompanyFact] = field(default_factory=list)
     thin_company: bool = True  # no researched facts: paragraph 2 rests on the offer
+    # Deterministic quality score of the delivered letter (letter_quality.py).
+    quality: "LetterQuality | None" = None
 
 
 def normalize_company(name: str) -> str:
@@ -840,12 +917,17 @@ def _letter_system_prompt(career_change: str) -> str:
         "6. No self-adjectives (motivated, proactive, passionate, motivado, "
         "proactivo...): show the trait with a fact instead.\n"
         "7. Mirror 2-4 terms of the offer verbatim, only the ones the claims back.\n"
-        "8. Sound human: at least one sentence of 6 words or fewer across the "
-        "parts and at most two of more than 25 words; at most one triad ('X, Y and "
-        "Z' list); never 'no solo ... sino' / 'not only ... but also'. Never use an "
-        "em dash, and never an en dash as punctuation.\n"
-        "9. Do NOT use clichés such as: "
-        + ", ".join(f'"{phrase}"' for phrase in BANNED_PHRASES)
+        "8. Plain style: short, specific sentences in the first person (mostly "
+        "8-18 words), each carrying a concrete fact: a project name, a tool or a "
+        "number from the claims. No superlatives or intensifiers (muy, realmente, "
+        "increíble, very, truly, highly...), no 'passion', 'excited' or "
+        "'entusiasmo' language, no rhetorical openings or questions. Sound human: "
+        "at least one sentence of 6 words or fewer across the parts and at most "
+        "two of more than 25 words; at most one triad ('X, Y and Z' list); never "
+        "'no solo ... sino' / 'not only ... but also'. Never use an em dash, and "
+        "never an en dash as punctuation.\n"
+        "9. Do NOT use clichés or florid phrases such as: "
+        + ", ".join(f'"{phrase}"' for phrase in (*BANNED_PHRASES, *FLORID_PHRASES))
         + " or similar.\n"
         "10. If the application instructions ask for something specific (start "
         "date, salary expectations, portfolio...), mention it only when the claims "
@@ -939,6 +1021,39 @@ async def _review_parts(
     return revised.model_copy(update={"tone": parts.tone})
 
 
+_QUALITY_REWRITE_TASK: Final[str] = (
+    "QUALITY REWRITE: the parts below read as florid or generic. Rewrite them in "
+    "a plain, specific first-person style: short sentences, concrete project "
+    "names and numbers from the claims, no superlatives, no intensifiers, no "
+    "'passion' language, no rhetorical openings. Keep every rule above, the "
+    "same facts and the word budgets. Fix these findings:\n"
+)
+
+
+async def _quality_rewrite(
+    llm: _JsonLlm,
+    system: str,
+    user: str,
+    parts: LetterParts,
+    feedback: Sequence[str],
+) -> LetterParts | None:
+    """One bounded rewrite with the quality findings; ``None`` on any failure."""
+    rewrite_user = (
+        f"{user}\n\n{_QUALITY_REWRITE_TASK}"
+        + "\n".join(f"- {line}" for line in feedback)
+        + f"\n\nCurrent parts:\n{parts.model_dump_json()}\n\n"
+        "Return the same JSON with the rewritten parts."
+    )
+    try:
+        rewritten = await llm.json_completion(system, rewrite_user, LetterParts)
+    except Exception:  # a rewrite failure must never reach the owner
+        _logger.warning(
+            "cover letter quality rewrite failed; keeping the draft", exc_info=True
+        )
+        return None
+    return rewritten.model_copy(update={"tone": parts.tone})
+
+
 async def generate_cover_letter(
     llm: _JsonLlm,
     *,
@@ -956,6 +1071,7 @@ async def generate_cover_letter(
     persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
     families: FamilyRegistry = BUILTIN_REGISTRY,
     ui_lang: Lang = LEGACY_LANG,
+    offer_requirements: Sequence[str] = (),
 ) -> CoverLetterResult:
     """Generate the parts, assemble the letter; one validated retry, then warn.
 
@@ -963,7 +1079,20 @@ async def generate_cover_letter(
     revision replaces them only when it passes validation. The fixed base text
     never goes through the model. The retry prompt gets the problems in
     Spanish (:data:`FEEDBACK_LANG`); the returned warnings are in ``ui_lang``.
+
+    Quality gate: the letter is scored by :func:`letter_quality`
+    (``offer_requirements`` are the offer's must-have names, for coverage).
+    Below :data:`QUALITY_THRESHOLD`, ONE extra rewrite gets the findings, and
+    the better-scoring version is kept, provided the rewrite does not add
+    validator problems. The score is returned as ``result.quality``.
     """
+    # Local import: letter_quality imports this module.
+    from cva.match.letter_quality import (
+        QUALITY_THRESHOLD,
+        LetterQuality,
+        letter_quality,
+    )
+
     system, user = build_letter_parts_prompt(
         offer_text=offer_text,
         title=title,
@@ -1005,6 +1134,49 @@ async def generate_cover_letter(
                 parts, problems = revised, []
             else:
                 _logger.info("cover letter revision failed validation; kept original")
+    register = normalize_register(parts.tone)
+    exempt = (
+        render_salutation(base, language, company, register),
+        base.paragraph1,
+        base.pick(base.closing, base.closing_formal, register),
+        base.signoff,
+    )
+    grounding = "\n".join(
+        (
+            claims_digest,
+            title,
+            company,
+            offer_text,
+            *(f"{item.fact} {item.source_url}" for item in facts),
+            *exempt,
+        )
+    )
+
+    def _quality(candidate: LetterParts) -> LetterQuality:
+        return letter_quality(
+            assemble_letter(base, candidate, language=language, company=company),
+            offer_requirements=offer_requirements,
+            language=language,
+            grounding=grounding,
+            exempt=exempt,
+        )
+
+    quality = _quality(parts)
+    if quality.score < QUALITY_THRESHOLD:
+        rewritten = await _quality_rewrite(llm, system, user, parts, quality.feedback())
+        if rewritten is not None:
+            rewritten_problems = _check(rewritten)
+            rewritten_quality = _quality(rewritten)
+            if rewritten_quality.score > quality.score and len(
+                rewritten_problems
+            ) <= len(problems):
+                parts, problems, quality = (
+                    rewritten,
+                    rewritten_problems,
+                    rewritten_quality,
+                )
+            else:
+                _logger.info("cover letter quality rewrite not better; kept the draft")
     warnings = (
         validate_parts(parts, base, language=language, company=company, lang=ui_lang)
         if problems
@@ -1016,4 +1188,5 @@ async def generate_cover_letter(
         register=normalize_register(parts.tone),
         facts=list(facts),
         thin_company=not facts,
+        quality=quality,
     )

@@ -12,6 +12,7 @@ import io
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,7 @@ from cva.notifier import (
     BEACON_RESUME,
     CL,
     CLC,
+    CLD,
     FU,
     GM,
     OE,
@@ -100,6 +102,7 @@ from cva.notifier import (
     discard_message,
     discard_no_send_message,
     failure_reason,
+    letter_quality_line,
     next_lang,
     next_role,
     no_cv_reply,
@@ -979,8 +982,14 @@ def _cover_letter_asked(service: JobService, offer_id: int) -> bool:
         return False
 
 
+_LETTER_EXTRAS_KEY = "letter_extras"
+
+
 async def _write_cover_letters_and_reply(
-    service: JobService, reply, offer_id: int
+    service: JobService,
+    reply,
+    offer_id: int,
+    extras: dict[tuple[int, int], list[int]] | None = None,
 ) -> None:
     """ "✉️ Carta de presentación" press: two plain-text versions, each with a
     [✅ Usar esta] button. Any failure replies (UI language) and stores nothing."""
@@ -991,17 +1000,53 @@ async def _write_cover_letters_and_reply(
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
         await reply.reply_text(t("bot.letter_failed", lang, reason=_reason(exc, lang)))
         return
-    await reply.reply_text(
+    letter = await reply.reply_text(
         cover_letter_message(t("bot.letter_label", lang), result.text),
         reply_markup=cover_letter_keyboard(offer_id, "a", result.generation, lang=lang),
     )
-    await reply.reply_text(cover_letter_sources_message(result.facts, lang=lang))
-    if result.warnings:
+    followers = [
         await reply.reply_text(
-            t("bot.letter_warnings", lang)
-            + "\n"
-            + "\n".join(f"- {warning}" for warning in result.warnings)
+            "\n".join(
+                filter(
+                    None,
+                    (
+                        cover_letter_sources_message(result.facts, lang=lang),
+                        letter_quality_line(result.quality, lang=lang),
+                    ),
+                )
+            )
         )
+    ]
+    if result.warnings:
+        followers.append(
+            await reply.reply_text(
+                t("bot.letter_warnings", lang)
+                + "\n"
+                + "\n".join(f"- {warning}" for warning in result.warnings)
+            )
+        )
+    # "Don't use" removes the letter plus the messages sent right after it; the
+    # ids live in memory only (nothing about a proposed letter is persisted).
+    letter_id = getattr(letter, "message_id", None)
+    if extras is not None and isinstance(letter_id, int):
+        extras[(int(getattr(letter, "chat_id", 0)), letter_id)] = [
+            m for f in followers if isinstance(m := getattr(f, "message_id", None), int)
+        ]
+
+
+async def _dismiss_letter(query, context: ContextTypes.DEFAULT_TYPE, lang: str) -> None:
+    """ "🗑 Don't use": delete the letter message and its sources/warnings."""
+    message = query.message
+    extras = context.bot_data.setdefault(_LETTER_EXTRAS_KEY, {})
+    follower_ids = extras.pop((message.chat_id, message.message_id), [])
+    try:
+        await context.bot.delete_message(message.chat_id, message.message_id)
+    except Exception:  # noqa: BLE001 — too old (>48 h) or already gone
+        await message.reply_text(t("bot.letter_dismiss_failed", lang))
+        return
+    for follower_id in follower_ids:
+        with suppress(Exception):
+            await context.bot.delete_message(message.chat_id, follower_id)
 
 
 async def _research_salary_and_reply(service: JobService, reply, offer_id: int) -> None:
@@ -1311,7 +1356,14 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _research_salary_and_reply(service, query.message, offer_id)
     elif kind == CL and parts and (offer_id := _parse_id(parts[0])) is not None:
         card = await _resend_card_below(service, query.message, offer_id)
-        await _write_cover_letters_and_reply(service, card, offer_id)
+        await _write_cover_letters_and_reply(
+            service,
+            card,
+            offer_id,
+            context.bot_data.setdefault(_LETTER_EXTRAS_KEY, {}),
+        )
+    elif kind == CLD and len(parts) == 1 and _parse_id(parts[0]) is not None:
+        await _dismiss_letter(query, context, ui)
     elif (
         kind == CLC
         and len(parts) == 3

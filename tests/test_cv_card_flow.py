@@ -277,6 +277,7 @@ class _Letters:
     facts: tuple[()] = ()
     generation = 1
     warnings: tuple[str, ...] = ()
+    quality = None  # no score: no quality line (telegram-improvements I3)
 
 
 def _press_letter(tmp_path, *, delete_error=None, fail=False):  # type: ignore[no-untyped-def]

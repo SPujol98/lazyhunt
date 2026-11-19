@@ -1,0 +1,14 @@
+Dear Orbita Labs team,
+
+Your posting asks for Python, PostgreSQL and REST APIs for the order service. That is what I built last year.
+
+In Metrics API I wrote a FastAPI service on PostgreSQL. It has 91% test coverage and I load tested it. I know where an API breaks when traffic grows.
+
+I also kept a logistics client's nightly loads running. Every morning I checked the failures and fixed them before nine. That taught me to write code someone else can operate.
+
+I have not used Kafka, which you list as a plus. I have built Redis queues that retry failed jobs, and I can show you how.
+
+If it helps, I can walk you through the Metrics API repository in a twenty minute call.
+
+Best regards,
+Alex Rivera

@@ -108,6 +108,7 @@ BUTTONS: Final[tuple[str, ...]] = (
     "salary",
     "cover_letter",
     "use_this",
+    "dont_use",
     "discard",
     "mark_sent",
     "redo_cv",

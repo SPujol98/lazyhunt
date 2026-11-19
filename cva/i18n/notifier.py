@@ -9,6 +9,8 @@ cannot drift. Placeholders named ``days`` are pre-rendered by ``cva.notifier``
 from typing import Final
 
 EN: Final[dict[str, str]] = {
+    "notifier.letter_quality": "🧪 Letter quality: {score}/100",
+    "notifier.letter_quality_missing": " · not mentioned: {items}",
     # --- shared words -----------------------------------------------------------
     "notifier.no_title": "(untitled)",
     "notifier.no_company": "(no company)",
@@ -159,6 +161,11 @@ EN: Final[dict[str, str]] = {
     ),
     "notifier.followup_draft": "Draft (send it yourself if it fits):",
     "notifier.followup_review": "⚠️ Review the draft:",
+    "notifier.followup_to": "📧 Send to: {address} ({source})",
+    "notifier.followup_to.contact": "contact saved on the offer",
+    "notifier.followup_to.gmail": "latest email from the company",
+    "notifier.followup_to.offer": "address in the offer",
+    "notifier.followup_to_none": "📧 No address known: answer through the portal.",
     "notifier.followup_proposal": (
         "🔕 {label}\n"
         "{days} without a reply and you already sent 2 follow-ups. "
@@ -223,6 +230,8 @@ EN: Final[dict[str, str]] = {
 }
 
 ES: Final[dict[str, str]] = {
+    "notifier.letter_quality": "🧪 Calidad de la carta: {score}/100",
+    "notifier.letter_quality_missing": " · no menciona: {items}",
     # --- shared words -----------------------------------------------------------
     "notifier.no_title": "(sin título)",
     "notifier.no_company": "(sin empresa)",
@@ -375,6 +384,11 @@ ES: Final[dict[str, str]] = {
     ),
     "notifier.followup_draft": "Borrador (envíalo tú si te encaja):",
     "notifier.followup_review": "⚠️ Revisa el borrador:",
+    "notifier.followup_to": "📧 Enviar a: {address} ({source})",
+    "notifier.followup_to.contact": "contacto guardado en la oferta",
+    "notifier.followup_to.gmail": "último correo de la empresa",
+    "notifier.followup_to.offer": "dirección de la oferta",
+    "notifier.followup_to_none": "📧 Sin dirección conocida: respóndele por el portal.",
     "notifier.followup_proposal": (
         "🔕 {label}\n"
         "{days} sin respuesta y ya hiciste 2 seguimientos. "

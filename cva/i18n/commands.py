@@ -157,7 +157,9 @@ EN: Final[dict[str, str]] = {
         'sources) ("(requested)" = the offer asks for a letter).'
     ),
     "commands.button.use_this.label": "✅ Use this one",
-    "commands.button.use_this.what": "below the letter: saves it on the offer.",
+    "commands.button.use_this.what": "saves the letter on the offer.",
+    "commands.button.dont_use.label": "🗑 Don't use",
+    "commands.button.dont_use.what": "removes the letter from the chat.",
     "commands.button.discard.label": "🗑 Discard",
     "commands.button.discard.what": (
         "discards the offer; if it already has a CV, no submission is recorded."
@@ -185,16 +187,13 @@ EN: Final[dict[str, str]] = {
     ),
     "commands.button.followup_sent.label": "✅ Sent",
     "commands.button.followup_sent.what": (
-        "on a follow-up reminder: records that you sent the message yourself "
-        "(2 at most)."
+        "on a follow-up: records that you sent the message yourself (2 at most)."
     ),
     "commands.button.followup_skip.label": "⏭️ Skip",
-    "commands.button.followup_skip.what": (
-        "on a follow-up reminder: postpones it 7 days."
-    ),
+    "commands.button.followup_skip.what": ("on a follow-up: postpones it 7 days."),
     "commands.button.followup_no_reply.label": "🔕 No response",
     "commands.button.followup_no_reply.what": (
-        "on a follow-up reminder: marks the offer as no response."
+        "on a follow-up: marks the offer as no response."
     ),
     "commands.button.star_add.label": "➕ Experience or project",
     "commands.button.star_add.what": (
@@ -364,7 +363,9 @@ ES: Final[dict[str, str]] = {
         '("(la piden)" = la oferta pide carta).'
     ),
     "commands.button.use_this.label": "✅ Usar esta",
-    "commands.button.use_this.what": "debajo de la carta: la guarda en la oferta.",
+    "commands.button.use_this.what": "guarda la carta en la oferta.",
+    "commands.button.dont_use.label": "🗑 No usar",
+    "commands.button.dont_use.what": "quita la carta del chat.",
     "commands.button.discard.label": "🗑 Descartar",
     "commands.button.discard.what": (
         "descarta la oferta; si ya hay CV, no se registra envío."
@@ -392,16 +393,13 @@ ES: Final[dict[str, str]] = {
     ),
     "commands.button.followup_sent.label": "✅ Enviado",
     "commands.button.followup_sent.what": (
-        "en un recordatorio de seguimiento: anota que enviaste tú el "
-        "mensaje (máximo 2)."
+        "en un seguimiento: anota que enviaste tú el mensaje (máximo 2)."
     ),
     "commands.button.followup_skip.label": "⏭️ Saltar",
-    "commands.button.followup_skip.what": (
-        "en un recordatorio de seguimiento: lo pospone 7 días."
-    ),
+    "commands.button.followup_skip.what": ("en un seguimiento: lo pospone 7 días."),
     "commands.button.followup_no_reply.label": "🔕 Sin respuesta",
     "commands.button.followup_no_reply.what": (
-        "en un recordatorio de seguimiento: marca la oferta como sin respuesta."
+        "en un seguimiento: marca la oferta como sin respuesta."
     ),
     "commands.button.star_add.label": "➕ Experiencia o proyecto",
     "commands.button.star_add.what": (

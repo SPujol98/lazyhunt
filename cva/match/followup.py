@@ -6,12 +6,19 @@ was sent (posting and cover letter) plus the owner's verified claims. The
 deterministic validators are the cover-letter ones, adapted to a shorter range.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from pydantic import BaseModel
 
+from cva.gmail.matching import ATS_LABELS, _registrable_label, _split_sender
 from cva.i18n import LEGACY_LANG, Lang
+from cva.match.apply_instructions import (
+    _EMAIL_IGNORED_LOCALS,
+    _EMAIL_RE,
+    detect_apply_instructions,
+)
 from cva.match.cover_letter import BANNED_PHRASES, FEEDBACK_LANG, validate_text
 
 MIN_WORDS: Final[int] = 60
@@ -169,3 +176,62 @@ async def generate_followup(
             first.text, validate_followup(first.text, language, ui_lang)
         )
     return FollowupDraft(second.text, validate_followup(second.text, language, ui_lang))
+
+
+# --- recipient of the follow-up (never invented) -------------------------------
+_UNUSABLE_LOCAL_PARTS: Final[tuple[str, ...]] = (
+    "protection",
+    "privacy",
+    "cookie",
+    "noreply",
+    "no-reply",
+    "donotreply",
+    "dpo",
+)
+
+
+@dataclass(frozen=True)
+class Recipient:
+    """Where the owner should send the follow-up; ``address`` is ``None`` when
+    no real address is known (answer through the portal)."""
+
+    address: str | None
+    source: Literal["contact", "gmail", "offer"] | None = None
+
+
+def _usable(address: str) -> bool:
+    local = address.lower().split("@", 1)[0]
+    return local not in _EMAIL_IGNORED_LOCALS and not any(
+        part in local for part in _UNUSABLE_LOCAL_PARTS
+    )
+
+
+def _first_usable(text: str) -> str | None:
+    for found in _EMAIL_RE.finditer(text):
+        address = found.group(0).rstrip(".")
+        if _usable(address):
+            return address
+    return None
+
+
+def resolve_recipient(
+    *,
+    contact: str | None,
+    senders: Sequence[str],
+    offer_text: str | None,
+    lang: Lang = LEGACY_LANG,
+) -> Recipient:
+    """Contact column, else the latest non-ATS Gmail sender (``senders`` newest
+    first), else an address in the offer's apply instructions, else none."""
+    if (address := _first_usable(contact or "")) is not None:
+        return Recipient(address, "contact")
+    for sender in senders:
+        _display, domain = _split_sender(sender)
+        if _registrable_label(domain) in ATS_LABELS:
+            continue
+        if (address := _first_usable(sender)) is not None:
+            return Recipient(address, "gmail")
+    for step in detect_apply_instructions(offer_text or "", lang):
+        if step.kind == "email" and step.value and _usable(step.value):
+            return Recipient(step.value, "offer")
+    return Recipient(None)

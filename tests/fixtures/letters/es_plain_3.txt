@@ -1,0 +1,14 @@
+Estimado equipo de selección de Kestrel Analytics:
+
+El puesto pide RAG sobre documentos internos y evaluación de la recuperación. En DocSearch hice justo eso.
+
+Comparé dos tipos de búsqueda con 150 preguntas escritas a mano. La recuperación híbrida subió el recall de 0,61 a 0,78. Medir antes de cambiar es la parte que más cuido.
+
+Escribí el servicio en Python con FastAPI y lo desplegué con Docker. Los tests corren en cada cambio.
+
+Aún no he llevado un RAG a muchos usuarios a la vez. He vigilado cargas reales cada noche durante un año, y quiero dar ese paso con un equipo que ya lo hace.
+
+Puedo enseñarles el conjunto de preguntas y los resultados en una sesión de treinta minutos.
+
+Atentamente,
+Alex Rivera
