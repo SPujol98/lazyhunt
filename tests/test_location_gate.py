@@ -267,3 +267,35 @@ def test_usa_in_the_structured_location_still_counts() -> None:
 )
 def test_hybrid_wording_vs_remote(text: str, location: str, verdict: str) -> None:
     assert location_gate(text, location).verdict == verdict
+
+
+# --- remote mentioned only as a perk (live miss, 2026-11-19) ----------------
+
+_PERK_OFFER = (
+    "Ingeniero/a de Sistemas Agénticos (AI Agent Engineer – Python)\n"
+    "locations\nMADRID\ntime type\nTiempo completo\n"
+    "Apostamos por la flexibilidad laboral-personal. (Sistema de vacaciones por "
+    "puntos, teletrabajo y flexibilidad).\nInvertimos en la formación."
+)
+
+
+def test_teletrabajo_listed_among_perks_is_not_a_remote_role() -> None:
+    """A Madrid offer that lists 'teletrabajo' among its benefits passed as
+    remote; a perk mention counts as hybrid, so outside the region it fails."""
+    result = location_gate(_PERK_OFFER, "Madrid")
+    assert result.verdict == "FAIL"
+
+
+def test_strong_remote_among_perks_is_still_remote() -> None:
+    text = "Puesto en Madrid.\nBeneficios: 100% teletrabajo, seguro médico y flexibilidad."
+    assert location_gate(text, "Madrid").verdict == "PASS"
+
+
+def test_remote_sentence_next_to_a_benefits_sentence_is_still_remote() -> None:
+    text = "Puesto en remoto desde cualquier ciudad de España.\nBeneficios: seguro médico y flexibilidad."
+    assert location_gate(text, "Madrid").verdict == "PASS"
+
+
+def test_perk_teletrabajo_inside_the_region_still_passes() -> None:
+    text = "Oficina en Barcelona.\n(Sistema de vacaciones por puntos, teletrabajo y flexibilidad)."
+    assert location_gate(text, "Barcelona").verdict == "PASS"

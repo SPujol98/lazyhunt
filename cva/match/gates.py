@@ -544,6 +544,27 @@ _REMOTE: Final[re.Pattern[str]] = re.compile(
     r"telework\w*|work(?:ing)?\s+from\s+home|wfh|a\s+distancia|"
     r"trabajo\s+desde\s+casa|desde\s+casa)\b"
 )
+# Benefit words: a remote mention in the same clause as these is a perk
+# ("vacaciones por puntos, teletrabajo y flexibilidad"), not the work mode.
+_PERKS: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:beneficios?|ventajas|flexibilidad|vacaciones|seguro|"
+    r"conciliaci\w*|retribuci\w*|wellbeing|benefits?|perks?|"
+    r"holidays?|insurance|tickets?)\b"
+)
+# ...unless the clause states the work mode itself ("Modalidad de teletrabajo").
+_MODE_WORDS: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:modalidad|puesto|posicion|position|role|work\s+mode)\b"
+)
+_CLAUSE_END: Final[re.Pattern[str]] = re.compile(r"[.;\n]")
+
+
+def _clause(folded: str, start: int, end: int) -> str:
+    """The sentence or list line around ``[start, end)``."""
+    left = max((m.end() for m in _CLAUSE_END.finditer(folded, 0, start)), default=0)
+    right_m = _CLAUSE_END.search(folded, end)
+    return folded[left : right_m.start() if right_m else len(folded)]
+
+
 _STRONG_REMOTE: Final[re.Pattern[str]] = re.compile(
     rf"\b(?:100\s*%?\s*(?:remot\w*|teletrabaj\w*)|full(?:y)?{_SEP}remote|"
     rf"(?:totalmente|completamente){_SEP}remot\w*|teletrabajo{_SEP}(?:total|completo)|"
@@ -719,7 +740,16 @@ def location_gate(
     remote = _non_negated(_REMOTE, folded)
     kept = {m.span() for m in remote}
     negated_remote = [m for m in _REMOTE.finditer(folded) if m.span() not in kept]
-    hybrid = _non_negated(_HYBRID, folded)
+    # A plain remote mention among benefits is a perk (hybrid), not the mode.
+    perk_remote = [
+        m
+        for m in remote
+        if _PERKS.search(clause := _clause(folded, *m.span()))
+        and not _STRONG_REMOTE.search(clause)
+        and not _MODE_WORDS.search(clause)
+    ]
+    remote = [m for m in remote if m not in perk_remote]
+    hybrid = _non_negated(_HYBRID, folded) + perk_remote
     office = _non_negated(_OFFICE, folded, skip_ctx=True)
     strong_remote = bool(_non_negated(_STRONG_REMOTE, folded))
     segments = _spans(folded)

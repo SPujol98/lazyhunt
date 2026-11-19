@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-19
+
+### Fixed
+
+- An offer outside your home region that lists "teletrabajo" only among its benefits ("vacaciones, teletrabajo y flexibilidad") is no longer treated as a remote role by the location gate.
+
 ## [0.4.1] - 2026-11-19
 
 ### Fixed
@@ -72,7 +78,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/SPujol98/lazyhunt/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/SPujol98/lazyhunt/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/SPujol98/lazyhunt/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SPujol98/lazyhunt/compare/v0.2.0...v0.3.0
