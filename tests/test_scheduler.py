@@ -144,6 +144,7 @@ def make_service(
     conn: sqlite3.Connection,
     fetcher: RecordingFetcher,
     clock: Callable[[], datetime],
+    ui_language: Literal["en", "es"] = "es",
 ) -> JobService:
     from cva.claimsdb import load_claims
     from cva.match import OfferExtraction
@@ -172,6 +173,7 @@ def make_service(
         global_daily_cap=10,
         now_fn=clock,
         jitter_fn=ZERO_JITTER,
+        ui_language=ui_language,
     )
 
 

@@ -53,24 +53,30 @@ it never overwrites a value without asking.
 1. **Prerequisites.** It checks Python, `uv`, and `claude` (`claude --version`
    and `claude auth status`; only the "logged in" yes/no is read). If
    `claude` is missing or logged out it tells you how to fix it and goes on.
-2. **AI provider.** `claude_code` by default. For `anthropic` or
+2. **Bot language.** `auto` (default: your system language, Spanish if it
+   starts with `es`, English otherwise), `en` or `es` to force one: the
+   language of the Telegram bot, the command line and the dashboard, saved as
+   `ui_language`. CVs and
+   letters keep following each offer's language. To change it later, edit
+   `ui_language` in `config.local.toml` (or run the wizard again).
+3. **AI provider.** `claude_code` by default. For `anthropic` or
    `openai_compatible`, add the API key to `.env` yourself.
-3. **Telegram.** Create a bot: open [@BotFather](https://t.me/BotFather),
+4. **Telegram.** Create a bot: open [@BotFather](https://t.me/BotFather),
    send `/newbot` and follow the steps; paste the token it gives you (the
    input is hidden). Get your numeric user id from
    [@userinfobot](https://t.me/userinfobot); the bot answers only that id.
-4. **Bridge secret.** A long random secret is generated for the extension.
-5. **Profile directory.** Default `profiles/me` (gitignored). Choose a
+5. **Bridge secret.** A long random secret is generated for the extension.
+6. **Profile directory.** Default `profiles/me` (gitignored). Choose a
    skeleton with placeholders to fill in, or a copy of the fictional demo
    profile to try things first. An existing directory is never touched.
-6. **Gmail.** Only a pointer to [gmail.md](gmail.md); it stays off.
+7. **Gmail.** Only a pointer to [gmail.md](gmail.md); it stays off.
 
 Where things go:
 
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET` |
-| `config.local.toml` | `llm_provider`, `owner_telegram_id`, `profile_dir` |
+| `config.local.toml` | `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir` |
 | `profiles/me/` | your profile |
 
 Both files are gitignored. Secrets are read from the environment only;
@@ -82,7 +88,8 @@ values put in TOML files are ignored. Manual setup is still possible: copy
 Open `profiles/me/README.md` and work through its checklist. The essentials
 are `claims.json` (your verified facts: only these can appear in a CV or a
 letter), `profile.toml`, `preferences.toml` and your base CVs. The fictional
-`profiles/demo` is the reference for every file's format.
+`profiles/demo` is the reference for every file's format; the
+[profiles README](../profiles/README.md) shows the whole layout.
 To search for kinds of job other than the built-in AI and backend ones, add
 your own role families: [role-families.md](role-families.md).
 
@@ -108,8 +115,8 @@ uv run bot.py
 
 Send `/help` to your bot in Telegram. Paste an offer link with
 `/analyze <url>` to get your first score card, or wait for the extension's
-next round (every 60 minutes by default). `/pausa` stops every automatic task
-at once.
+next round (every 60 minutes by default). `/pause` stops every automatic task
+at once (`/pausa` in Spanish; both work).
 
 To run it as a service, see [deploy/README.md](../deploy/README.md).
 

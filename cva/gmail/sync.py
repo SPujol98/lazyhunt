@@ -44,6 +44,7 @@ from cva.gmail.client import (
     GmailMessage,
 )
 from cva.gmail.matching import match_offer
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.llm import LlmClient
 from cva.tracker import OfferRepository
 
@@ -78,25 +79,17 @@ _TERMINAL: Final[frozenset[str]] = frozenset(
     {"rechazada", "retirada", "aceptada", "descartada"}
 )
 
-AUTH_WARNING: Final[str] = (
-    "⚠️ Gmail: la autorización ha caducado o se ha revocado, así que no puedo "
-    "leer tu correo.\nEn tu PC ejecuta:\n"
-    f"{AUTH_COMMAND}\n"
-    "y copia el token al PC del bot (ver docs/gmail.md). No volveré a avisar "
-    "hasta que vuelva a funcionar."
-)
 
-WINDOW_WARNING: Final[str] = (
-    "⚠️ Gmail: hay tanto correo reciente que no cabe en una sola lectura. Lo "
-    "voy revisando por tramos en las próximas sincronizaciones (no se pierde "
-    "nada). No volveré a avisar por esto."
-)
-OUTAGE_WARNING: Final[str] = (
-    "⚠️ Gmail: no puedo clasificar tus correos porque el LLM no responde "
-    f"desde hace {OUTAGE_NOTICE_RUNS} sincronizaciones seguidas. Sigo "
-    "reintentando; no se descarta ningún correo. No volveré a avisar hasta que "
-    "vuelva a funcionar."
-)
+def auth_warning(lang: Lang = LEGACY_LANG) -> str:
+    return t("panel.gmail.auth_warning", lang, command=AUTH_COMMAND)
+
+
+def window_warning(lang: Lang = LEGACY_LANG) -> str:
+    return t("panel.gmail.window_warning", lang)
+
+
+def outage_warning(lang: Lang = LEGACY_LANG) -> str:
+    return t("panel.gmail.outage_warning", lang, runs=OUTAGE_NOTICE_RUNS)
 
 
 def should_propose(current: str, proposed: str) -> bool:
@@ -174,7 +167,9 @@ class GmailSync:
         llm: LlmClient,
         poll_minutes: int = 60,
         now_fn: Callable[[], datetime] | None = None,
+        lang: Lang = LEGACY_LANG,
     ) -> None:
+        self._lang = lang
         self._repo = repo
         self._client = client
         self._llm = llm
@@ -227,7 +222,7 @@ class GmailSync:
     async def _warn_auth_once(
         self, send_warning: Callable[[str], Awaitable[None]]
     ) -> None:
-        await self._warn_once(AUTH_WARNED_KEY, AUTH_WARNING, send_warning)
+        await self._warn_once(AUTH_WARNED_KEY, auth_warning(self._lang), send_warning)
 
     def _clear_guard(self, key: str) -> None:
         if self._repo.get_state(key):
@@ -247,7 +242,9 @@ class GmailSync:
             runs = 1
         self._repo.set_state(OUTAGES_KEY, str(runs))
         if runs >= OUTAGE_NOTICE_RUNS:
-            await self._warn_once(OUTAGE_WARNED_KEY, OUTAGE_WARNING, send_warning)
+            await self._warn_once(
+                OUTAGE_WARNED_KEY, outage_warning(self._lang), send_warning
+            )
 
     async def _poll_once(
         self,
@@ -348,7 +345,9 @@ class GmailSync:
                         }
                     ),
                 )
-            await self._warn_once(WINDOW_WARNED_KEY, WINDOW_WARNING, send_warning)
+            await self._warn_once(
+                WINDOW_WARNED_KEY, window_warning(self._lang), send_warning
+            )
             return SyncResult("ok", proposed)
         if not progressed and walk is None:
             # Only an unbounded listing proves nothing newer is pending; a

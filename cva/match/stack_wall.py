@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from cva.i18n import Lang, t
 from cva.match.extraction import OfferExtraction
 
 # label -> whole-word pattern. "Go" is ambiguous in prose ("go to market"), so
@@ -61,13 +62,31 @@ class StackWallPrefs:
 
 DEFAULT_STACK_WALL_PREFS: Final[StackWallPrefs] = StackWallPrefs()
 
+_STORED_LANG: Final[Lang] = "es"
+# The stored template turned into a parser: "stack principal (label), no (core)".
+_STORED_RE: Final[re.Pattern[str]] = re.compile(
+    "^"
+    + "(?P<label>.+?)".join(
+        re.escape(part)
+        for part in t("bot.stack_wall", _STORED_LANG, label="\x00", core="\x01").split(
+            "\x00"
+        )
+    ).replace(re.escape("\x01"), "(?P<core>.+)")
+    + "$"
+)
+
 
 def stack_wall_reason(
     extraction: OfferExtraction,
     text: str,
     prefs: StackWallPrefs = DEFAULT_STACK_WALL_PREFS,
 ) -> str | None:
-    """Short Spanish wall reason, or ``None`` when the offer is not walled."""
+    """Short wall reason, or ``None`` when the offer is not walled.
+
+    The reason is STORED (``MatchResult.stack_wall``, judge walls), so it is
+    always the Spanish text; :func:`stack_wall_display` shows it in the UI
+    language.
+    """
     core = prefs.core_language
     core_pattern = LANGUAGE_PATTERNS[core]
     walled = {
@@ -96,4 +115,15 @@ def stack_wall_reason(
     if not dominant:
         return None
     _, label = max(dominant)
-    return f"stack principal {label}, no {core}"
+    return t("bot.stack_wall", _STORED_LANG, label=label, core=core)
+
+
+def stack_wall_display(reason: str, lang: Lang) -> str:
+    """The stored (Spanish) stack-wall ``reason`` shown in ``lang``; any other
+    text is returned unchanged."""
+    if lang == _STORED_LANG:
+        return reason
+    found = _STORED_RE.match(reason)
+    if found is None:
+        return reason
+    return t("bot.stack_wall", lang, label=found["label"], core=found["core"])

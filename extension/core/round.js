@@ -2,7 +2,7 @@
 // over the planned beacons in a single hidden tab, then one write of the
 // round's state. Only one round runs at a time per service worker instance.
 
-import { t } from '../i18n.js';
+import { t, applyUiLanguage } from '../i18n.js';
 import { normalizeProfile, resolveFamilies, resolveTitleFilters } from '../filter.js';
 import { autoBeaconId, normalizeSearches } from '../searches.js';
 import { reportScan, fetchBotConfig } from './bot_bridge.js';
@@ -69,7 +69,7 @@ async function recoverPortalSeenStateOnce() {
 const ROUND_KEYS = [
   'settings', 'beacons', 'searches', 'enabledPortals', 'titleFilter', 'titleFilterBackend',
   'profileTitleFilters', 'profileFamilies', 'familyTitleFilters',
-  'seenJobs', 'detailAttempts', 'recoveringBeacons', 'lastCheck', 'stats',
+  'seenJobs', 'detailAttempts', 'recoveringBeacons', 'lastCheck', 'stats', 'uiLanguage',
 ];
 
 // Auto beacon id -> the family of its search, normalized against the
@@ -96,6 +96,7 @@ function withFamily(beacon, state) {
 
 async function loadRoundState() {
   const data = await readKeys(ROUND_KEYS);
+  await applyUiLanguage(data.uiLanguage);
   const families = resolveFamilies(data);
   return {
     ...data,

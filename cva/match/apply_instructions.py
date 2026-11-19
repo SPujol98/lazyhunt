@@ -15,6 +15,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from cva.i18n import LEGACY_LANG, Lang, t
+
 Kind = Literal[
     "email",
     "phone",
@@ -47,7 +49,7 @@ class ApplyInstruction:
     """One extra application step found in the offer text."""
 
     kind: str
-    label: str  # short Spanish explanation for the owner
+    label: str  # short explanation for the owner, in the UI language
     snippet: str  # verbatim excerpt, whitespace-collapsed, <= ~120 chars
     value: str | None = None  # extracted email / phone / reference
 
@@ -143,9 +145,10 @@ _APPLY_TARGET = (
     r"|portal de (?:empleo|candidat|talento)|infojobs|" + _ATS + r")"
 )
 
+# kind -> (label id, pattern); the owner-facing label is ``bot.apply.<id>``.
 _PATTERNS: Final[dict[str, tuple[str, re.Pattern[str]]]] = {
     "external_apply": (
-        "Hay que aplicar fuera de LinkedIn (web/portal de la empresa)",
+        "external_apply",
         re.compile(
             r"gestionadas fuera de linkedin"
             r"|(?:solicitar|aplicar|apply)(?: en| on| at)? (?:el )?(?:sitio web|the company web ?site|company web ?site)(?: de la empresa)?"
@@ -161,14 +164,14 @@ _PATTERNS: Final[dict[str, tuple[str, re.Pattern[str]]]] = {
         ),
     ),
     "cover_letter": (
-        "Piden carta de presentación",
+        "cover_letter",
         re.compile(
             r"carta de (?:presentacion?|motivacio[n]?)|cover letter"
             r"|motivation(?:al)? letter|letter of motivation|lettre de motivation"
         ),
     ),
     "salary_expectations": (
-        "Piden pretensiones salariales",
+        "salary_expectations",
         re.compile(
             r"pretensi(?:ones|ons) (?:salariales|economicas)|expectativas? (?:salariales?|economicas?)"
             r"|expectatives salarials|salary (?:expectations?|requirements?)"
@@ -177,7 +180,7 @@ _PATTERNS: Final[dict[str, tuple[str, re.Pattern[str]]]] = {
         ),
     ),
     "start_date": (
-        "Piden fecha de incorporación / disponibilidad",
+        "start_date",
         re.compile(
             r"fecha de (?:incorporacion|inicio)"
             r"|disponibilidad (?:de |para )?(?:incorporacion|incorporarte|empezar|comenzar)"
@@ -188,7 +191,7 @@ _PATTERNS: Final[dict[str, tuple[str, re.Pattern[str]]]] = {
         ),
     ),
     "portfolio": (
-        "Piden portfolio / GitHub / ejemplos de código",
+        "portfolio",
         re.compile(
             r"\b(?:adjunta|adjunt[ae]s?|incluye|incluir|envia|enviad|comparte|aporta|indica|send"
             r"|include|attach|share|provide|submit|add)\b[^.!?\n]{0,50}?"
@@ -217,12 +220,11 @@ _MAX_PER_VALUE_KIND: Final[int] = 2
 
 _NEGATION_RE = re.compile(r"(?:\bno |\bsin |\bwithout |\bnot |\bnon[- ])\S*\s*\S*\s*$")
 
-_LABELS: Final[dict[str, str]] = {
-    "email_cv": "Enviar el CV también por email",
-    "email_contact": "La oferta da un email de contacto",
-    "phone": "La oferta da un teléfono / WhatsApp de contacto",
-    "reference_code": "Piden indicar la referencia de la oferta",
-}
+
+def _label(label_id: str, lang: Lang) -> str:
+    """The owner-facing label of a finding (``bot.apply.<id>``) in ``lang``."""
+    return t(f"bot.apply.{label_id}", lang)
+
 
 _ORDER: Final[tuple[str, ...]] = (
     "email",
@@ -239,7 +241,9 @@ _ORDER: Final[tuple[str, ...]] = (
 # LinkedIn Premium UI chrome ("Create cover letter BETA") survives when the
 # owner pastes the whole job page; a "create/crear" right before the match is
 # that button, not the offer asking for anything.
-_UI_CHROME_RE = re.compile(r"\b(?:create|crear|crea|generar|generate)\s+(?:una\s+|a\s+)?$")
+_UI_CHROME_RE = re.compile(
+    r"\b(?:create|crear|crea|generar|generate)\s+(?:una\s+|a\s+)?$"
+)
 
 
 def _negated(folded: str, start: int) -> bool:
@@ -250,7 +254,7 @@ def _ui_chrome(folded: str, start: int) -> bool:
     return bool(_UI_CHROME_RE.search(folded[max(0, start - 20) : start]))
 
 
-def _emails(text: str, folded: str) -> list[ApplyInstruction]:
+def _emails(text: str, folded: str, lang: Lang) -> list[ApplyInstruction]:
     found: list[ApplyInstruction] = []
     seen: set[str] = set()
     for m in _EMAIL_RE.finditer(text):
@@ -265,10 +269,8 @@ def _emails(text: str, folded: str) -> list[ApplyInstruction]:
         ):
             continue
         seen.add(key)
-        label = (
-            _LABELS["email_cv"]
-            if _CV_VERB_RE.search(before[-60:])
-            else _LABELS["email_contact"]
+        label = _label(
+            "email_cv" if _CV_VERB_RE.search(before[-60:]) else "email_contact", lang
         )
         found.append(
             ApplyInstruction(
@@ -278,7 +280,7 @@ def _emails(text: str, folded: str) -> list[ApplyInstruction]:
     return found
 
 
-def _phones(text: str, folded: str) -> list[ApplyInstruction]:
+def _phones(text: str, folded: str, lang: Lang) -> list[ApplyInstruction]:
     found: list[ApplyInstruction] = []
     seen: set[str] = set()
     for m in _PHONE_RE.finditer(text):
@@ -291,29 +293,37 @@ def _phones(text: str, folded: str) -> list[ApplyInstruction]:
         seen.add(number)
         found.append(
             ApplyInstruction(
-                "phone", _LABELS["phone"], _snippet(text, m.start(), m.end()), number
+                "phone",
+                _label("phone", lang),
+                _snippet(text, m.start(), m.end()),
+                number,
             )
         )
     return found
 
 
-def detect_apply_instructions(text: str) -> list[ApplyInstruction]:
-    """Return the extra application steps the offer asks for (capped, deduped)."""
+def detect_apply_instructions(
+    text: str, lang: Lang = LEGACY_LANG
+) -> list[ApplyInstruction]:
+    """Return the extra application steps the offer asks for (capped, deduped);
+    labels in the UI language ``lang``."""
     if not text:
         return []
     folded = _fold(text)
     by_kind: dict[str, list[ApplyInstruction]] = {
         # Per-value kinds are capped so a footer full of addresses cannot
         # push the instruction kinds (start date, cover letter…) past the cap.
-        "email": _emails(text, folded)[:_MAX_PER_VALUE_KIND],
-        "phone": _phones(text, folded)[:_MAX_PER_VALUE_KIND],
+        "email": _emails(text, folded, lang)[:_MAX_PER_VALUE_KIND],
+        "phone": _phones(text, folded, lang)[:_MAX_PER_VALUE_KIND],
     }
-    for kind, (label, pattern) in _PATTERNS.items():
+    for kind, (label_id, pattern) in _PATTERNS.items():
         for m in pattern.finditer(folded):
             if _negated(folded, m.start()) or _ui_chrome(folded, m.start()):
                 continue
             by_kind[kind] = [
-                ApplyInstruction(kind, label, _snippet(text, m.start(), m.end()))
+                ApplyInstruction(
+                    kind, _label(label_id, lang), _snippet(text, m.start(), m.end())
+                )
             ]
             break
     for m in _REFERENCE_RE.finditer(folded):
@@ -323,7 +333,7 @@ def detect_apply_instructions(text: str) -> list[ApplyInstruction]:
         by_kind["reference_code"] = [
             ApplyInstruction(
                 "reference_code",
-                _LABELS["reference_code"],
+                _label("reference_code", lang),
                 _snippet(
                     text, m.start(), value_match.end() if value_match else m.end()
                 ),

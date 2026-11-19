@@ -10,6 +10,8 @@ environment only — never from either TOML file. Any ``CVA_<FIELD>``
 environment variable overrides both TOML layers.
 """
 
+import locale
+import os
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -22,6 +24,7 @@ from pydantic_settings import (
 )
 
 from cva.cvgen.fonts import DEFAULT_CV_FONT, CvFont
+from cva.i18n import Lang
 from cva.ingest.sources import SOURCES
 
 _SECRET_TOML_KEYS: frozenset[str] = frozenset(
@@ -73,6 +76,24 @@ DEFAULT_ANTHROPIC_MODEL: Final[str] = "claude-sonnet-4-5"
 
 # Default notify gate of the backend profile; JobService shares it.
 DEFAULT_BACKEND_THRESHOLD: Final[int] = 50
+
+
+def system_ui_language() -> Lang:
+    """The UI language of the system locale (``ui_language = "auto"``).
+
+    ``LC_ALL``, ``LC_MESSAGES`` and ``LANG`` are checked in that order (first
+    non-empty wins), then ``locale.getlocale()``. A value starting with ``es``
+    gives ``"es"``; anything else, or no locale at all, gives ``"en"``.
+    """
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return "es" if value.lower().startswith("es") else "en"
+    try:
+        value = locale.getlocale()[0] or ""
+    except (ValueError, TypeError):
+        value = ""
+    return "es" if value.lower().startswith("es") else "en"
 
 
 class Settings(BaseSettings):
@@ -252,6 +273,23 @@ class Settings(BaseSettings):
     # only where cvgen/fonts/calibri*.ttf exist). Any other value is a clear
     # startup validation error.
     cv_font: CvFont = DEFAULT_CV_FONT
+
+    # Language of everything the user reads in Telegram, the CLI and the HTML
+    # panel (bot-i18n): "auto" (default) follows the system locale (``es*`` ->
+    # "es", anything else "en"); "en" / "es" force it. "auto" is resolved ONCE
+    # here (default factory + before-validator), so the field stays a resolved
+    # ``Lang`` for every consumer. Documents (CVs, cover letters, follow-up
+    # drafts) keep following the offer's language. Any other value is a clear
+    # startup validation error. Env: CVA_UI_LANGUAGE.
+    ui_language: Lang = Field(default_factory=system_ui_language)
+
+    @field_validator("ui_language", mode="before")
+    @classmethod
+    def _auto_ui_language_is_the_system_locale(cls, value: Any) -> Any:
+        """``"auto"`` (any case) resolves to the system locale at load."""
+        if isinstance(value, str) and value.strip().lower() == "auto":
+            return system_ui_language()
+        return value
 
     @field_validator("enabled_portals")
     @classmethod

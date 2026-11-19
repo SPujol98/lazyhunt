@@ -18,9 +18,13 @@ no bot-side session state is needed):
 - ``cl:{offer_id}``                      write the two cover-letter versions
 - ``clc:{offer_id}:{gen}:{a|b}``         store the chosen cover-letter version
 
-LANGUAGE NOTE: user-facing message strings are Spanish on purpose — the bot's
-end user is the Spanish-speaking owner. Module code, comments, and identifiers
-are English (artifact language contract).
+LANGUAGE NOTE: every user-facing string lives in :mod:`cva.i18n.notifier`
+(``notifier.*`` keys; button labels the help documents are the
+``commands.button.<id>.label`` keys). Public builders take ``lang`` (the UI
+language; ``cv_keyboard`` calls it ``ui_lang`` because its ``lang`` is the CV
+language) and default to ``LEGACY_LANG`` until the bot wires
+``Settings.ui_language``. Callback data never depends on the language and
+stored values (estados, statuses) stay data; only their display is translated.
 """
 
 import html
@@ -37,6 +41,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from cva.beacons import BeaconPausedAlert
 from cva.commands import help_text
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, Family, FamilyRegistry
+from cva.i18n import CATALOGS, LANGS, LEGACY_LANG, Lang, t
 from cva.llm import LlmResponseError
 from cva.match import MatchResult
 from cva.match.apply_instructions import KIND_EMOJI, ApplyInstruction
@@ -88,6 +93,48 @@ _ROUND_DISCARD_LINES: Final[int] = 25
 _ROUND_BLOCK_LINES: Final[int] = 5
 
 
+def _button(button_id: str, lang: Lang, **values: str) -> str:
+    """Label of a card button the help documents (shared ``commands`` catalog)."""
+    return t(f"commands.button.{button_id}.label", lang, **values)
+
+
+def _days_word(days: int, lang: Lang) -> str:
+    return t("notifier.days.one" if days == 1 else "notifier.days.other", lang, n=days)
+
+
+def _days_plain(days: int, lang: Lang) -> str:
+    key = "notifier.days_plain.one" if days == 1 else "notifier.days_plain.other"
+    return t(key, lang, n=days)
+
+
+def _more(n: int, lang: Lang) -> str:
+    return t("notifier.more", lang, n=n)
+
+
+def _no_title(lang: Lang) -> str:
+    return t("notifier.no_title", lang)
+
+
+def _no_company(lang: Lang) -> str:
+    return t("notifier.no_company", lang)
+
+
+def _no_position(lang: Lang) -> str:
+    return t("notifier.no_position", lang)
+
+
+def outcome_label(estado: str, lang: Lang = LEGACY_LANG) -> str:
+    """Button/display label of a post-send estado (``estado`` itself if unknown)."""
+    key = f"notifier.outcome.{estado}"
+    return t(key, lang) if key in CATALOGS[lang] else estado
+
+
+def _estado_display(estado: str, lang: Lang) -> str:
+    """The stored estado as the user reads it (data when it has no entry)."""
+    key = f"notifier.estado.{estado}"
+    return t(key, lang) if key in CATALOGS[lang] else estado
+
+
 def next_lang(
     role: str, lang: str, *, families: FamilyRegistry = BUILTIN_REGISTRY
 ) -> str:
@@ -118,11 +165,11 @@ def _family_lang(family: Family, lang: str) -> str:
     return lang
 
 
-def unknown_role_message(role: str, default_label: str) -> str:
+def unknown_role_message(
+    role: str, default_label: str, *, lang: Lang = LEGACY_LANG
+) -> str:
     """Note on an old card button whose CV role the profile no longer has."""
-    return (
-        f"⚠️ La variante {role} ya no está en tu perfil: uso {default_label}."
-    )
+    return t("notifier.unknown_role", lang, role=role, default_label=default_label)
 
 
 def canonical_job_url(job_id: str) -> str:
@@ -138,6 +185,7 @@ def new_job_message(
     job_id: str,
     threshold: int,
     url: str | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """New-job card: title · company · age · canonical link + threshold context.
 
@@ -145,10 +193,14 @@ def new_job_message(
     canonical URL line; ``None`` keeps the legacy LinkedIn-shape default
     (``canonical_job_url``) — every existing caller stays byte-identical.
     """
-    return (
-        f"🔔 {title or '(sin título)'} · {company or '(sin empresa)'} · {age}\n"
-        f"{url if url is not None else canonical_job_url(job_id)}\n"
-        f"Umbral Top-Choice: {threshold}"
+    return t(
+        "notifier.new_job",
+        lang,
+        title=title or _no_title(lang),
+        company=company or _no_company(lang),
+        age=age,
+        url=url if url is not None else canonical_job_url(job_id),
+        threshold=threshold,
     )
 
 
@@ -160,23 +212,29 @@ class SentMessage(NamedTuple):
     message_id: int
 
 
-ALSO_ON_PREFIX: Final[str] = "📍 También en: "
+ALSO_ON_PREFIX: Final[str] = t("notifier.also_on", "es")
 
 
 def with_also_on(
-    text: str, labels: Sequence[str], *, parse_mode: str | None = None
+    text: str,
+    labels: Sequence[str],
+    *,
+    parse_mode: str | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """``text`` ending with ONE ``📍 También en: A, B`` line (none when no labels).
 
-    Any earlier También-en line is replaced, never stacked. Labels are
-    HTML-escaped when the card is sent with ``parse_mode="HTML"``.
+    Any earlier also-on line, in either language (the card may predate a
+    language change), is replaced, never stacked. Labels are HTML-escaped when
+    the card is sent with ``parse_mode="HTML"``.
     """
     lines = text.split("\n")
-    if lines and lines[-1].startswith(ALSO_ON_PREFIX):
+    prefixes = tuple(t("notifier.also_on", code) for code in LANGS)
+    if lines and lines[-1].startswith(prefixes):
         lines.pop()
     if labels:
         shown = [html.escape(x) if parse_mode == "HTML" else x for x in labels]
-        lines.append(ALSO_ON_PREFIX + ", ".join(shown))
+        lines.append(t("notifier.also_on", lang) + ", ".join(shown))
     return "\n".join(lines)
 
 
@@ -197,25 +255,32 @@ def keyboard_from_json(text: str | None) -> InlineKeyboardMarkup | None:
         return None
 
 
-def new_job_keyboard(job_id: str) -> InlineKeyboardMarkup:
-    """Notification keyboard: the single ``[Analizar]`` action."""
+def new_job_keyboard(job_id: str, *, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
+    """Notification keyboard: the single ``[Analyze]`` action."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔎 Analizar", callback_data=f"{AN}:{job_id}")]]
+        [
+            [
+                InlineKeyboardButton(
+                    _button("analyze", lang), callback_data=f"{AN}:{job_id}"
+                )
+            ]
+        ]
     )
 
 
 _TELEGRAM_LIMIT: Final[int] = 4096
-_APPLY_WARNING_HEADER: Final[str] = "⚠️ Ojo: esta oferta pide algo más al aplicar"
 
 
-def apply_warning_block(findings: Sequence[ApplyInstruction]) -> str:
+def apply_warning_block(
+    findings: Sequence[ApplyInstruction], *, lang: Lang = LEGACY_LANG
+) -> str:
     """Warning block for extra application steps; ``""`` when none.
 
     Cards are plain text (no ``parse_mode``), so snippets are NOT escaped.
     """
     if not findings:
         return ""
-    lines = [_APPLY_WARNING_HEADER]
+    lines = [t("notifier.apply_warning_header", lang)]
     for item in findings:
         value = f": {item.value}" if item.value else ""
         lines.append(
@@ -224,14 +289,16 @@ def apply_warning_block(findings: Sequence[ApplyInstruction]) -> str:
     return "\n".join(lines)
 
 
-def with_apply_warnings(text: str, findings: Sequence[ApplyInstruction]) -> str:
+def with_apply_warnings(
+    text: str, findings: Sequence[ApplyInstruction], *, lang: Lang = LEGACY_LANG
+) -> str:
     """Append the warning block after a blank line, within Telegram's limit.
 
     Returns ``text`` byte-identical when there are no findings. Whole bullet
     lines are dropped from the end until the card fits; if not even the
     header fits, the card is returned unchanged.
     """
-    block = apply_warning_block(findings)
+    block = apply_warning_block(findings, lang=lang)
     if not block:
         return text
     lines = block.split("\n")
@@ -256,12 +323,12 @@ _DEADLINE_CARD_DAYS: Final[int] = 7
 _STALE_POSTING_DAYS: Final[int] = 30
 
 
-def _days_word(days: int) -> str:
-    return "1 día" if days == 1 else f"{days} días"
-
-
 def date_card_lines(
-    fecha_publicacion: str | None, fecha_limite: str | None, today: date
+    fecha_publicacion: str | None,
+    fecha_limite: str | None,
+    today: date,
+    *,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Urgency lines for a card (``""`` when none applies).
 
@@ -275,48 +342,63 @@ def date_card_lines(
             deadline = date.fromisoformat(fecha_limite)
             left = (deadline - today).days
             if left == 0:
-                lines.append("⏰ Cierra hoy")
+                lines.append(t("notifier.deadline_today", lang))
             elif 0 < left <= _DEADLINE_CARD_DAYS:
-                lines.append(f"⏰ Cierra en {_days_word(left)} ({deadline:%d/%m})")
+                lines.append(
+                    t(
+                        "notifier.deadline_in",
+                        lang,
+                        days=_days_word(left, lang),
+                        date=f"{deadline:%d/%m}",
+                    )
+                )
     if fecha_publicacion:
         with suppress(ValueError):
             age = (today - date.fromisoformat(fecha_publicacion)).days
             if age > _STALE_POSTING_DAYS:
-                lines.append(f"🕰️ Publicada hace {age} días (puede estar cerrada)")
+                lines.append(
+                    t("notifier.stale_posting", lang, days=_days_plain(age, lang))
+                )
     return "\n".join(lines)
 
 
 _DEADLINE_ALERT_MAX_LINES: Final[int] = 15
 
 
-def _deadline_entry(row: OfferRow, today: date) -> str:
-    when = "hoy"
+def _deadline_entry(row: OfferRow, today: date, lang: Lang) -> str:
+    when = t("notifier.deadline_when_today", lang)
     with suppress(ValueError, TypeError):
         left = (date.fromisoformat(row.fecha_limite or "") - today).days
-        when = "hoy" if left <= 0 else f"en {_days_word(left)}"
-    entry = (
-        f"• {row.posicion or '(sin título)'} · {row.empresa or '(sin empresa)'}"
-        f" — cierra {when}"
+        if left > 0:
+            when = t("notifier.deadline_when_in", lang, days=_days_word(left, lang))
+    entry = t(
+        "notifier.deadline_entry",
+        lang,
+        position=row.posicion or _no_title(lang),
+        company=row.empresa or _no_company(lang),
+        when=when,
     )
     if row.url_oferta:
         entry += f"\n  {row.url_oferta}"
     return entry
 
 
-def deadline_alert_batch(rows: Sequence[OfferRow], today: date) -> tuple[str, int]:
+def deadline_alert_batch(
+    rows: Sequence[OfferRow], today: date, *, lang: Lang = LEGACY_LANG
+) -> tuple[str, int]:
     """Owner alert text plus how many leading rows it actually lists.
 
     At most ``_DEADLINE_ALERT_MAX_LINES`` entries and always under the Telegram
     limit (a "… y N más" footer is reserved). The caller marks only the listed
     rows as alerted; the rest go out in the next message.
     """
-    head = "⏰ Ofertas por cerrar que aún no has enviado:"
-    footer_room = len("\n… y 9999 más")
+    head = t("notifier.deadline_alert_head", lang)
+    footer_room = len("\n" + _more(9999, lang))
     lines = [head]
     size = len(head)
     listed = 0
     for row in rows[:_DEADLINE_ALERT_MAX_LINES]:
-        entry = _deadline_entry(row, today)
+        entry = _deadline_entry(row, today, lang)
         if listed and size + 1 + len(entry) + footer_room > _TELEGRAM_LIMIT:
             break
         lines.append(entry[: _TELEGRAM_LIMIT - size - 1 - footer_room])
@@ -324,20 +406,26 @@ def deadline_alert_batch(rows: Sequence[OfferRow], today: date) -> tuple[str, in
         listed += 1
     extra = len(rows) - listed
     if extra > 0:
-        lines.append(f"… y {extra} más")
+        lines.append(_more(extra, lang))
     return "\n".join(lines), listed
 
 
-def deadline_alert_message(rows: Sequence[OfferRow], today: date) -> str:
+def deadline_alert_message(
+    rows: Sequence[OfferRow], today: date, *, lang: Lang = LEGACY_LANG
+) -> str:
     """Daily owner alert: un-sent offers closing soon (never past)."""
-    return deadline_alert_batch(rows, today)[0]
+    return deadline_alert_batch(rows, today, lang=lang)[0]
 
 
 def with_card_extras(
-    text: str, salary_line: str, findings: Sequence[ApplyInstruction]
+    text: str,
+    salary_line: str,
+    findings: Sequence[ApplyInstruction],
+    *,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Salary line first (short, fixed), then the droppable apply warnings."""
-    return with_apply_warnings(with_salary_line(text, salary_line), findings)
+    return with_apply_warnings(with_salary_line(text, salary_line), findings, lang=lang)
 
 
 def breakdown_message(
@@ -347,33 +435,44 @@ def breakdown_message(
     url: str | None = None,
     apply_findings: Sequence[ApplyInstruction] = (),
     salary_line: str = "",
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Score vs threshold + per-requirement ✓/~/✗ lines with literal evidence.
 
     ``url`` (notification-pacing D6): the canonical offer URL line appended
     right after the header; ``None`` keeps the legacy shape (no URL line).
     """
-    verdict = (
-        "supera el umbral ✅"
+    verdict = t(
+        "notifier.breakdown_above"
         if result.score >= result.threshold
-        else "no supera el umbral (Top-Choice) ❌"
+        else "notifier.breakdown_below",
+        lang,
     )
     lines = [
-        (
-            f"📊 Oferta #{offer_id} — puntuación {result.score}/100 "
-            f"(umbral {result.threshold}): {verdict}"
+        t(
+            "notifier.breakdown_head",
+            lang,
+            offer_id=offer_id,
+            score=result.score,
+            threshold=result.threshold,
+            verdict=verdict,
         ),
     ]
     if url is not None:
         lines.append(url)
     lines.append("")
     for match in result.breakdown:
-        weight = "imprescindible" if match.requirement.must_have else "deseable"
+        weight = t(
+            "notifier.weight_must"
+            if match.requirement.must_have
+            else "notifier.weight_nice",
+            lang,
+        )
         lines.append(
             f"{match.status} {match.requirement.name} ({weight}) — "
             f"«{match.requirement.evidence}»"
         )
-    return with_card_extras("\n".join(lines), salary_line, apply_findings)
+    return with_card_extras("\n".join(lines), salary_line, apply_findings, lang=lang)
 
 
 def borderline_message(
@@ -385,6 +484,7 @@ def borderline_message(
     url: str,
     apply_findings: Sequence[ApplyInstruction] = (),
     salary_line: str = "",
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Gray-zone card: compact near-miss notice for manual review.
 
@@ -392,13 +492,16 @@ def borderline_message(
     "close to Top-Choice" (score in ``[threshold - gray_zone, threshold)``);
     the full evidence stays exclusive to the breakdown card.
     """
-    text = (
-        f"🟡 {title or '(sin título)'} · {company or '(sin empresa)'} — "
-        f"puntuación {score}/100 (umbral {threshold})\n"
-        f"{url}\n"
-        "Cerca del umbral Top-Choice: revísala y genera tu CV si encaja."
+    text = t(
+        "notifier.borderline",
+        lang,
+        title=title or _no_title(lang),
+        company=company or _no_company(lang),
+        score=score,
+        threshold=threshold,
+        url=url,
     )
-    return with_card_extras(text, salary_line, apply_findings)
+    return with_card_extras(text, salary_line, apply_findings, lang=lang)
 
 
 class DiscardedOffer(NamedTuple):
@@ -436,8 +539,8 @@ class DuplicateOffer(NamedTuple):
     url: str | None
 
 
-def _offer_label(title: str | None, url: str | None) -> str:
-    safe = html.escape(title or "(sin título)", quote=True)
+def _offer_label(title: str | None, url: str | None, lang: Lang) -> str:
+    safe = html.escape(title or _no_title(lang), quote=True)
     if url is None:
         return safe
     return f'<a href="{html.escape(url, quote=True)}">{safe}</a>'
@@ -458,6 +561,7 @@ def round_summary_message(
     closed_offers: Sequence[ClosedOffer] = (),
     duplicates: int = 0,
     duplicate_offers: Sequence[DuplicateOffer] = (),
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Per-payload round summary (round-summary amendment; HTML-mode text).
 
@@ -474,48 +578,46 @@ def round_summary_message(
     ``url`` renders the escaped title with no anchor.
     """
     safe_beacon = html.escape(beacon, quote=True)
-    lines = [f"📊 Ronda '{safe_beacon}': {analyzed} analizadas"]
-    lines.append(
-        f"🟢 {above} sobre el umbral · 🟡 {gray} en zona gris · "
-        f"⚪ {below} descartadas por umbral"
-    )
+    lines = [t("notifier.round_head", lang, beacon=safe_beacon, analyzed=analyzed)]
+    lines.append(t("notifier.round_counts", lang, above=above, gray=gray, below=below))
     if walled > 0:
-        lines.append(f"🧱 {walled} descartadas por muro (stack, elegibilidad o idioma)")
+        lines.append(t("notifier.round_walled", lang, n=walled))
         for wall in walled_offers[:_ROUND_BLOCK_LINES]:
-            company = html.escape(wall.company or "(sin empresa)", quote=True)
+            company = html.escape(wall.company or _no_company(lang), quote=True)
             reason = html.escape(wall.reason, quote=True)
             lines.append(
-                f"· {reason} — {_offer_label(wall.title, wall.url)} @ {company}"
+                f"· {reason} — {_offer_label(wall.title, wall.url, lang)} @ {company}"
             )
         hidden_walls = len(walled_offers) - _ROUND_BLOCK_LINES
         if hidden_walls > 0:
-            lines.append(f"… y {hidden_walls} más")
+            lines.append(_more(hidden_walls, lang))
     if closed > 0:
-        lines.append(f"🔒 {closed} ofertas cerradas (descartadas sin analizar)")
+        lines.append(t("notifier.round_closed", lang, n=closed))
         for gone in closed_offers[:_ROUND_BLOCK_LINES]:
-            company = html.escape(gone.company or "(sin empresa)", quote=True)
-            lines.append(f"· {_offer_label(gone.title, gone.url)} @ {company}")
+            company = html.escape(gone.company or _no_company(lang), quote=True)
+            lines.append(f"· {_offer_label(gone.title, gone.url, lang)} @ {company}")
         hidden_closed = len(closed_offers) - _ROUND_BLOCK_LINES
         if hidden_closed > 0:
-            lines.append(f"… y {hidden_closed} más")
+            lines.append(_more(hidden_closed, lang))
     if duplicates > 0:
-        lines.append(f"♻️ {duplicates} duplicadas (ya vistas en otra fuente)")
+        lines.append(t("notifier.round_duplicates", lang, n=duplicates))
         for dup in duplicate_offers[:_ROUND_BLOCK_LINES]:
-            company = html.escape(dup.company or "(sin empresa)", quote=True)
+            company = html.escape(dup.company or _no_company(lang), quote=True)
             lines.append(
-                f"· {_offer_label(dup.title, dup.url)} @ {company} → #{dup.original_id}"
+                f"· {_offer_label(dup.title, dup.url, lang)} @ {company} "
+                f"→ #{dup.original_id}"
             )
         hidden_dups = duplicates - min(len(duplicate_offers), _ROUND_BLOCK_LINES)
         if hidden_dups > 0:
-            lines.append(f"… y {hidden_dups} más")
+            lines.append(_more(hidden_dups, lang))
     if pending > 0:
-        lines.append(f"♻️ {pending} pendientes de reintento")
+        lines.append(t("notifier.round_pending", lang, n=pending))
     if below > 0:
-        lines.append("Descartadas (score — título — empresa):")
+        lines.append(t("notifier.round_discarded_head", lang))
         shown = discarded[:_ROUND_DISCARD_LINES]
         for offer in shown:
-            title = html.escape(offer.title or "(sin título)", quote=True)
-            company = html.escape(offer.company or "(sin empresa)", quote=True)
+            title = html.escape(offer.title or _no_title(lang), quote=True)
+            company = html.escape(offer.company or _no_company(lang), quote=True)
             label = (
                 f'<a href="{html.escape(offer.url, quote=True)}">{title}</a>'
                 if offer.url is not None
@@ -524,7 +626,7 @@ def round_summary_message(
             lines.append(f"· {offer.score}/100 — {label} @ {company}")
         hidden = len(discarded) - len(shown)
         if hidden > 0:
-            lines.append(f"… y {hidden} más")
+            lines.append(_more(hidden, lang))
     return "\n".join(lines)
 
 
@@ -534,11 +636,11 @@ _VERDICT_EMOJI: Final[dict[str, str]] = {
     "discard": "⛔",
 }
 
-_VERDICT_LABEL: Final[dict[str, str]] = {
-    "apply": "aplicar",
-    "apply_with_caveats": "aplicar con matices",
-    "discard": "descartar",
-}
+
+def _verdict_label(verdict: str, lang: Lang) -> str:
+    key = f"notifier.verdict.{verdict}"
+    return t(key, lang) if key in CATALOGS[lang] else verdict
+
 
 _JUDGE_FIT_LINES: Final[int] = 3
 
@@ -552,6 +654,7 @@ def judge_breakdown_message(
     judge_fallback: bool = False,
     apply_findings: Sequence[ApplyInstruction] = (),
     salary_line: str = "",
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Judge card (``match_mode`` hybrid/judge, design llm-offer-judge).
 
@@ -566,46 +669,53 @@ def judge_breakdown_message(
     transparency (the owner can still see every ✓/~/✗ line).
     """
     if judgment is None:
-        text = breakdown_message(result, offer_id, url=url)
+        text = breakdown_message(result, offer_id, url=url, lang=lang)
         if judge_fallback:
-            text += "\n⚠️ El juicio LLM falló; se muestra el score por palabras clave."
+            text += "\n" + t("notifier.judge_fallback", lang)
         if result.stack_wall:
-            text += f"\n🚫 Muro: {result.stack_wall}"
+            text += "\n" + t("notifier.wall", lang, reason=result.stack_wall)
         for gate in result.gates:
             if gate.verdict == "FAIL":
-                text += f"\n🚫 Muro: {gate.reason}"
+                text += "\n" + t("notifier.wall", lang, reason=gate.reason)
             elif gate.verdict == "FLAG":
                 text += f"\n⚠️ {gate.reason}"
-        return with_card_extras(text, salary_line, apply_findings)
+        return with_card_extras(text, salary_line, apply_findings, lang=lang)
     emoji = _VERDICT_EMOJI.get(judgment.verdict, "❔")
-    label = _VERDICT_LABEL.get(judgment.verdict, judgment.verdict)
+    label = _verdict_label(judgment.verdict, lang)
     lines = [
-        f"{emoji} Oferta #{offer_id} — puntuación {judgment.score}/100 ({label})",
+        t(
+            "notifier.judge_head",
+            lang,
+            emoji=emoji,
+            offer_id=offer_id,
+            score=judgment.score,
+            label=label,
+        ),
     ]
     if url is not None:
         lines.append(url)
-    lines.append(f"Rol principal: {judgment.core_role}")
-    lines.append(f"CV base sugerido: {judgment.cv_base}")
+    lines.append(t("notifier.judge_role", lang, role=judgment.core_role))
+    lines.append(t("notifier.judge_cv_base", lang, cv_base=judgment.cv_base))
     if judgment.fit:
-        lines.append("Fit principal:")
+        lines.append(t("notifier.judge_fit", lang))
         for item in judgment.fit[:_JUDGE_FIT_LINES]:
             lines.append(f"· {item.requirement} ({', '.join(item.claim_ids)})")
     if judgment.walls:
-        lines.append("Muros:")
+        lines.append(t("notifier.judge_walls", lang))
         for wall in sorted(judgment.walls, key=lambda w: not w.hard):
             marker = "🚫" if wall.hard else "⚠️"
             lines.append(f"{marker} {wall.text}")
     lines.append("")
     lines.append(judgment.rationale)
     lines.append("")
-    lines.append("Detalle por palabra clave:")
-    lines.append(breakdown_message(result, offer_id))
-    return with_card_extras("\n".join(lines), salary_line, apply_findings)
+    lines.append(t("notifier.judge_keyword_detail", lang))
+    lines.append(breakdown_message(result, offer_id, lang=lang))
+    return with_card_extras("\n".join(lines), salary_line, apply_findings, lang=lang)
 
 
-def _salary_button_row(offer_id: int) -> list[InlineKeyboardButton]:
+def _salary_button_row(offer_id: int, lang: Lang) -> list[InlineKeyboardButton]:
     return [
-        InlineKeyboardButton("💶 Investigar salario", callback_data=f"{SAL}:{offer_id}")
+        InlineKeyboardButton(_button("salary", lang), callback_data=f"{SAL}:{offer_id}")
     ]
 
 
@@ -615,9 +725,11 @@ def asks_cover_letter(findings: Sequence[ApplyInstruction]) -> bool:
 
 
 def _cover_letter_button_row(
-    offer_id: int, *, asked: bool = False
+    offer_id: int, lang: Lang, *, asked: bool = False
 ) -> list[InlineKeyboardButton]:
-    label = "✉️ Carta de presentación" + (" (la piden)" if asked else "")
+    label = _button("cover_letter", lang) + (
+        t("notifier.cover_letter_asked", lang) if asked else ""
+    )
     return [InlineKeyboardButton(label, callback_data=f"{CL}:{offer_id}")]
 
 
@@ -626,28 +738,25 @@ def cover_letter_message(label: str, text: str) -> str:
     return f"{label}\n\n{text}"[:_TELEGRAM_LIMIT]
 
 
-def cover_letter_sources_message(facts: Sequence[CompanyFact]) -> str:
+def cover_letter_sources_message(
+    facts: Sequence[CompanyFact], *, lang: Lang = LEGACY_LANG
+) -> str:
     """The researched company facts with their URLs, or the "thin paragraph" notice."""
     if not facts:
-        return (
-            "ℹ️ No encontré datos fiables de la empresa: el párrafo 2 se apoya "
-            "solo en la oferta y queda más genérico. Revísalo antes de usarla."
-        )
+        return t("notifier.cover_sources_none", lang)
     lines = "\n".join(f"- {item.fact}\n  {item.source_url}" for item in facts)
-    return f"🔎 Fuentes de la empresa (usadas en el párrafo 2):\n{lines}"[
-        :_TELEGRAM_LIMIT
-    ]
+    return t("notifier.cover_sources", lang, lines=lines)[:_TELEGRAM_LIMIT]
 
 
 def cover_letter_keyboard(
-    offer_id: int, version: str, generation: int
+    offer_id: int, version: str, generation: int, *, lang: Lang = LEGACY_LANG
 ) -> InlineKeyboardMarkup:
-    """The single [✅ Usar esta] action of one generated version (with its generation)."""
+    """The single [✅ Use this one] action of one generated version (with its generation)."""
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "✅ Usar esta",
+                    _button("use_this", lang),
                     callback_data=f"{CLC}:{offer_id}:{generation}:{version}",
                 )
             ]
@@ -655,22 +764,19 @@ def cover_letter_keyboard(
     )
 
 
-def no_cv_line(label: str) -> str:
+def no_cv_line(label: str, *, lang: Lang = LEGACY_LANG) -> str:
     """One-line note for portals applied to with their own profile (no CV)."""
-    return f"📨 {label}: se aplica con tu perfil del portal (sin CV)"
+    return t("notifier.no_cv_line", lang, label=label)
 
 
-def no_cv_reply(label: str) -> str:
-    """Answer to a stale "Generar CV" press on such a portal's card."""
-    return (
-        f"ℹ️ Esta oferta es de {label}: se aplica con tu perfil del portal, "
-        "no hace falta CV."
-    )
+def no_cv_reply(label: str, *, lang: Lang = LEGACY_LANG) -> str:
+    """Answer to a stale "Generate CV" press on such a portal's card."""
+    return t("notifier.no_cv_reply", lang, label=label)
 
 
-def with_no_cv_line(text: str, label: str) -> str:
+def with_no_cv_line(text: str, label: str, *, lang: Lang = LEGACY_LANG) -> str:
     """Append the one-line note on cards of portals applied to without a CV."""
-    return f"{text}\n{no_cv_line(label)}"
+    return f"{text}\n{no_cv_line(label, lang=lang)}"
 
 
 def cv_keyboard(
@@ -681,8 +787,11 @@ def cv_keyboard(
     cover_letter_asked: bool = False,
     cv_needed: bool = True,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    ui_lang: Lang = LEGACY_LANG,
 ) -> InlineKeyboardMarkup:
     """Generate-CV keyboard: action + Lang/Variant toggles + Mark sent + Discard.
+
+    ``lang`` is the CV language of the toggle; ``ui_lang`` the interface's.
 
     ``cv_needed=False`` (portal applied to with its own profile) drops the
     Generate row and the Lang/Variant toggles; the rest stays.
@@ -699,16 +808,17 @@ def cv_keyboard(
         [
             [
                 InlineKeyboardButton(
-                    "📄 Generar CV", callback_data=f"{CV}:{offer_id}:{role}:{lang}"
+                    _button("generate_cv", ui_lang),
+                    callback_data=f"{CV}:{offer_id}:{role}:{lang}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    f"Idioma: {lang.upper()}",
+                    _button("language", ui_lang, langs=lang.upper()),
                     callback_data=f"{LANG}:{offer_id}:{role}:{lang}",
                 ),
                 InlineKeyboardButton(
-                    f"Variante: {family.label}",
+                    _button("variant", ui_lang, labels=family.label),
                     callback_data=f"{VARIANT}:{offer_id}:{role}:{lang}",
                 ),
             ],
@@ -719,16 +829,16 @@ def cv_keyboard(
     return InlineKeyboardMarkup(
         [
             *cv_rows,
-            _salary_button_row(offer_id),
-            _cover_letter_button_row(offer_id, asked=cover_letter_asked),
+            _salary_button_row(offer_id, ui_lang),
+            _cover_letter_button_row(offer_id, ui_lang, asked=cover_letter_asked),
             [
                 # Applying without a generated CV (a base CV, or a portal that
                 # needs none): mark it sent straight from the card.
                 InlineKeyboardButton(
-                    "✅ Marcar enviada", callback_data=f"{SENT}:{offer_id}"
+                    _button("mark_sent", ui_lang), callback_data=f"{SENT}:{offer_id}"
                 ),
                 InlineKeyboardButton(
-                    "🗑 Descartar", callback_data=f"{DISCARD}:{offer_id}"
+                    _button("discard", ui_lang), callback_data=f"{DISCARD}:{offer_id}"
                 ),
             ],
         ]
@@ -741,11 +851,12 @@ def sent_keyboard(
     *,
     cover_letter_asked: bool = False,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> InlineKeyboardMarkup:
-    """Post-generation keyboard: [Marcar enviada] + [🗑 Descartar].
+    """Post-generation keyboard: [Mark as sent] + [🗑 Discard].
 
     With the delivered ``cv_base`` (e.g. ``BACKEND_EN``) a second row offers
-    [🔄 Rehacer CV]: it re-runs that same variant through the regular ``cv:``
+    [🔄 Redo CV]: it re-runs that same variant through the regular ``cv:``
     callback, so a CV made before a base-CV change can be rebuilt with the
     new version. Legacy ``DS_*`` rows map to AI; a role the profile no longer
     declares to the default family (in a language it has).
@@ -753,25 +864,27 @@ def sent_keyboard(
     rows = [
         [
             InlineKeyboardButton(
-                "✅ Marcar enviada", callback_data=f"{SENT}:{offer_id}"
+                _button("mark_sent", lang), callback_data=f"{SENT}:{offer_id}"
             ),
-            InlineKeyboardButton("🗑 Descartar", callback_data=f"{DISC}:{offer_id}"),
+            InlineKeyboardButton(
+                _button("discard", lang), callback_data=f"{DISC}:{offer_id}"
+            ),
         ]
     ]
     if cv_base and "_" in cv_base:
-        role, lang = cv_base.rsplit("_", 1)
+        role, cv_lang = cv_base.rsplit("_", 1)
         family = families.resolve(role)
-        lang = _family_lang(family, lang.lower())
+        cv_lang = _family_lang(family, cv_lang.lower())
         rows.append(
             [
                 InlineKeyboardButton(
-                    "🔄 Rehacer CV",
-                    callback_data=f"{CV}:{offer_id}:{family.role}:{lang}",
+                    _button("redo_cv", lang),
+                    callback_data=f"{CV}:{offer_id}:{family.role}:{cv_lang}",
                 )
             ]
         )
-    rows.append(_salary_button_row(offer_id))
-    rows.append(_cover_letter_button_row(offer_id, asked=cover_letter_asked))
+    rows.append(_salary_button_row(offer_id, lang))
+    rows.append(_cover_letter_button_row(offer_id, lang, asked=cover_letter_asked))
     return InlineKeyboardMarkup(rows)
 
 
@@ -782,6 +895,7 @@ def cv_ready_message(
     url: str | None = None,
     apply_findings: Sequence[ApplyInstruction] = (),
     salary_line: str = "",
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Delivery card once the validated PDF exists (validators passed).
 
@@ -791,51 +905,61 @@ def cv_ready_message(
     offer link) is appended when known so the owner can open the offer
     before marking it sent.
     """
-    pages_fragment = f" ({pages} pág.)" if pages is not None else ""
-    link_fragment = f"\n🔗 Oferta: {url}" if url else ""
-    text = (
-        f"📄 CV listo: {pdf_path}{pages_fragment}. "
-        f"Márcalo como enviada cuando lo envíes.{link_fragment}"
+    pages_fragment = (
+        t("notifier.cv_ready_pages", lang, pages=pages) if pages is not None else ""
     )
-    return with_card_extras(text, salary_line, apply_findings)
+    link_fragment = t("notifier.cv_ready_link", lang, url=url) if url else ""
+    text = t(
+        "notifier.cv_ready",
+        lang,
+        path=pdf_path,
+        pages=pages_fragment,
+        link=link_fragment,
+    )
+    return with_card_extras(text, salary_line, apply_findings, lang=lang)
 
 
-SALARY_UNAVAILABLE_MESSAGE: Final[str] = (
-    "💶 Investigación salarial no disponible con este proveedor."
-)
+SALARY_UNAVAILABLE_MESSAGE: Final[str] = t("notifier.salary_unavailable", "es")
 _SALARY_SOURCES_SHOWN: Final[int] = 5
 _SALARY_NOTES_MAX: Final[int] = 500
 
 
-def salary_research_message(outcome: SalaryOutcome) -> str:
-    """Telegram reply for the "Investigar salario" button (plain text)."""
+def salary_research_message(outcome: SalaryOutcome, *, lang: Lang = LEGACY_LANG) -> str:
+    """Telegram reply for the "Research salary" button (plain text)."""
     if outcome.status == "unavailable":
-        return SALARY_UNAVAILABLE_MESSAGE
+        return t("notifier.salary_unavailable", lang)
     subject = f"{outcome.company} · {outcome.position}"
     where = f"{outcome.city} · {outcome.level}"
     cached = (
-        f"\n(resultado guardado de hoy, {outcome.checked_at}; no se repite la búsqueda)"
+        t("notifier.salary_cached", lang, checked_at=outcome.checked_at)
         if outcome.cached
         else ""
     )
     research = outcome.research
     if outcome.status == "no_data" or research is None:
-        return (
-            f"💶 Sin datos fiables de salario para {subject} ({where}). "
-            f"No se encontraron fuentes publicadas suficientes.{cached}"
+        return t(
+            "notifier.salary_no_data",
+            lang,
+            subject=subject,
+            where=where,
+            cached=cached,
         )
     median = (
-        f" (mediana {eur_text(research.median)} €)"
+        t("notifier.salary_median", lang, median=eur_text(research.median))
         if research.median is not None
         else ""
     )
     lines = [
-        f"💶 Salario investigado — {subject} · {where}{cached}",
-        (
-            f"Rango: {eur_text(research.min or 0)}–{eur_text(research.max or 0)} "
-            f"€ brutos/año{median} · confianza {research.confidence}"
+        t("notifier.salary_head", lang, subject=subject, where=where, cached=cached),
+        t(
+            "notifier.salary_range",
+            lang,
+            min=eur_text(research.min or 0),
+            max=eur_text(research.max or 0),
+            median=median,
+            confidence=research.confidence,
         ),
-        "Fuentes:",
+        t("notifier.salary_sources", lang),
     ]
     for source in research.sources[:_SALARY_SOURCES_SHOWN]:
         detail = ", ".join(
@@ -846,92 +970,127 @@ def salary_research_message(outcome: SalaryOutcome) -> str:
         label = f"{source.publisher} ({detail})" if detail else source.publisher
         lines.append(f"· {label} {source.url}")
     if research.notes:
-        lines.append(f"Notas: {research.notes[:_SALARY_NOTES_MAX]}")
-    lines.append("⚠️ Estimación a partir de fuentes web; no es un dato de la empresa.")
+        lines.append(
+            t("notifier.salary_notes", lang, notes=research.notes[:_SALARY_NOTES_MAX])
+        )
+    lines.append(t("notifier.salary_disclaimer", lang))
     return "\n".join(lines)[:_TELEGRAM_LIMIT]
 
 
+# Spanish display labels (the legacy default); ``outcome_label(estado, lang)``
+# serves every language.
 OUTCOME_LABELS: Final[dict[str, str]] = {
-    "screening": "📞 Screening",
-    "entrevista_tecnica": "💻 Entrevista técnica",
-    "entrevista_final": "🏁 Entrevista final",
-    "oferta": "🎉 Oferta",
-    "aceptada": "✅ Aceptada",
-    "rechazada": "❌ Rechazada",
-    "sin_respuesta": "🤐 Sin respuesta",
-    "retirada": "↩️ Retirada",
+    estado: outcome_label(estado, "es") for estado in OUTCOME_ESTADOS
 }
-OUTCOME_NOTE_PROMPT: Final[str] = (
-    "¿Quieres añadir una nota (feedback)? Escríbela o /skip"
-)
+OUTCOME_NOTE_PROMPT: Final[str] = t("notifier.outcome_note_prompt", "es")
 
 
-def prep_button(offer_id: int) -> InlineKeyboardButton:
+def outcome_note_prompt(lang: Lang = LEGACY_LANG) -> str:
+    """Ask for an optional feedback note after an outcome is recorded."""
+    return t("notifier.outcome_note_prompt", lang)
+
+
+def _stage_label(stage: str, lang: Lang) -> str:
+    key = f"notifier.stage.{stage}"
+    return t(key, lang) if key in CATALOGS[lang] else STAGE_LABEL.get(stage, stage)
+
+
+def prep_button(offer_id: int, *, lang: Lang = LEGACY_LANG) -> InlineKeyboardButton:
     return InlineKeyboardButton(
-        "🎯 Preparar entrevista", callback_data=f"{PREP}:{offer_id}"
+        _button("prep", lang), callback_data=f"{PREP}:{offer_id}"
     )
 
 
-def prep_keyboard(offer_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[prep_button(offer_id)]])
+def prep_keyboard(offer_id: int, *, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[prep_button(offer_id, lang=lang)]])
 
 
-def prep_stage_keyboard(offer_id: int, default: str) -> InlineKeyboardMarkup:
+def prep_stage_keyboard(
+    offer_id: int, default: str, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     """Stage choice for a prep pack; the suggested stage carries a ⭐."""
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    f"⭐ {label}" if stage == default else label,
+                    f"⭐ {_stage_label(stage, lang)}"
+                    if stage == default
+                    else _stage_label(stage, lang),
                     callback_data=f"{PREP}:{offer_id}:{stage}",
                 )
-                for stage, label in STAGE_LABEL.items()
+                for stage in STAGE_LABEL
             ]
         ]
     )
 
 
-def outcome_keyboard(offer_id: int, estado: str | None = None) -> InlineKeyboardMarkup:
+def outcome_keyboard(
+    offer_id: int, estado: str | None = None, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     """One button per post-send estado (two per row); interview estados add
-    the "Preparar entrevista" button."""
+    the "Prepare interview" button."""
     buttons = [
         InlineKeyboardButton(
-            OUTCOME_LABELS[estado], callback_data=f"{OE}:{offer_id}:{estado}"
+            outcome_label(option, lang), callback_data=f"{OE}:{offer_id}:{option}"
         )
-        for estado in OUTCOME_ESTADOS
+        for option in OUTCOME_ESTADOS
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     if estado in PREP_ESTADOS:
-        rows.append([prep_button(offer_id)])
+        rows.append([prep_button(offer_id, lang=lang)])
     return InlineKeyboardMarkup(rows)
 
 
-def sent_outcome_keyboard(offer_id: int) -> InlineKeyboardMarkup:
-    """Sent-offer card: a single [📝 Resultado] entry to the outcome menu."""
+def sent_outcome_keyboard(
+    offer_id: int, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
+    """Sent-offer card: a single [📝 Outcome] entry to the outcome menu."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("📝 Resultado", callback_data=f"{OUT}:{offer_id}")]]
+        [
+            [
+                InlineKeyboardButton(
+                    _button("outcome", lang), callback_data=f"{OUT}:{offer_id}"
+                )
+            ]
+        ]
     )
 
 
-def outcome_message(offer: OfferRow, events: Sequence[OfferEvent]) -> str:
-    """Header + timeline of an offer's outcome (Spanish)."""
+def outcome_message(
+    offer: OfferRow, events: Sequence[OfferEvent], *, lang: Lang = LEGACY_LANG
+) -> str:
+    """Header + timeline of an offer's outcome."""
     lines = [
-        (
-            f"📝 Resultado de #{offer.id} · {offer.empresa or '(sin empresa)'} · "
-            f"{offer.posicion or '(sin posición)'}"
+        t(
+            "notifier.outcome_head",
+            lang,
+            id=offer.id,
+            company=offer.empresa or _no_company(lang),
+            position=offer.posicion or _no_position(lang),
         ),
-        f"Estado: {offer.estado}"
-        + (f" · enviada {offer.fecha_envio}" if offer.fecha_envio else ""),
+        t("notifier.outcome_state", lang, estado=_estado_display(offer.estado, lang))
+        + (
+            t("notifier.outcome_sent_on", lang, date=offer.fecha_envio)
+            if offer.fecha_envio
+            else ""
+        ),
     ]
     if not events:
-        lines.append("Sin eventos todavía.")
+        lines.append(t("notifier.outcome_no_events", lang))
     for event in events:
         if event.kind == "estado":
-            lines.append(f"{event.at} · estado → {event.estado}")
+            lines.append(
+                t(
+                    "notifier.event_estado",
+                    lang,
+                    at=event.at,
+                    estado=_estado_display(str(event.estado), lang),
+                )
+            )
         elif event.kind == "followup":
-            lines.append(f"{event.at} · seguimiento enviado")
+            lines.append(t("notifier.event_followup", lang, at=event.at))
         else:
-            lines.append(f"{event.at} · nota: {event.note}")
+            lines.append(t("notifier.event_note", lang, at=event.at, note=event.note))
     return "\n".join(lines)
 
 
@@ -961,38 +1120,49 @@ def chunk_message(text: str, limit: int | None = None) -> list[str]:
     return parts
 
 
-def followup_keyboard(offer_id: int) -> InlineKeyboardMarkup:
+def followup_keyboard(
+    offer_id: int, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     """Follow-up reminder: sent by hand / snooze / give up."""
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Enviado", callback_data=f"{FU}:{offer_id}:ok"),
-                InlineKeyboardButton("⏭️ Saltar", callback_data=f"{FU}:{offer_id}:skip"),
                 InlineKeyboardButton(
-                    "🔕 Sin respuesta", callback_data=f"{FU}:{offer_id}:none"
+                    _button("followup_sent", lang), callback_data=f"{FU}:{offer_id}:ok"
+                ),
+                InlineKeyboardButton(
+                    _button("followup_skip", lang),
+                    callback_data=f"{FU}:{offer_id}:skip",
+                ),
+                InlineKeyboardButton(
+                    _button("followup_no_reply", lang),
+                    callback_data=f"{FU}:{offer_id}:none",
                 ),
             ]
         ]
     )
 
 
-def followup_proposal_keyboard(offer_id: int) -> InlineKeyboardMarkup:
-    """Give-up proposal: the single [🔕 Sin respuesta] action."""
+def followup_proposal_keyboard(
+    offer_id: int, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
+    """Give-up proposal: the single [🔕 No response] action."""
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "🔕 Sin respuesta", callback_data=f"{FU}:{offer_id}:none"
+                    _button("followup_no_reply", lang),
+                    callback_data=f"{FU}:{offer_id}:none",
                 )
             ]
         ]
     )
 
 
-def _followup_offer_label(offer: OfferRow) -> str:
+def _followup_offer_label(offer: OfferRow, lang: Lang) -> str:
     return (
-        f"#{offer.id} · {offer.posicion or '(sin posición)'} · "
-        f"{offer.empresa or '(sin empresa)'}"
+        f"#{offer.id} · {offer.posicion or _no_position(lang)} · "
+        f"{offer.empresa or _no_company(lang)}"
     )
 
 
@@ -1003,105 +1173,100 @@ def followup_message(
     number: int,
     draft: str | None,
     warnings: Sequence[str],
+    lang: Lang = LEGACY_LANG,
 ) -> str:
-    """Follow-up reminder with the draft (Spanish). Nothing is sent for the owner."""
+    """Follow-up reminder with the draft. Nothing is sent for the owner."""
     lines = [
-        f"📬 Seguimiento {number} de 2 · {_followup_offer_label(offer)}",
-        f"Llevas {days_silent} días sin noticias desde tu última actividad.",
+        t(
+            "notifier.followup_head",
+            lang,
+            number=number,
+            label=_followup_offer_label(offer, lang),
+        ),
+        t("notifier.followup_silent", lang, days=_days_plain(days_silent, lang)),
         "",
     ]
     if draft is None:
-        lines.append("No he podido preparar un borrador esta vez; escríbelo tú.")
+        lines.append(t("notifier.followup_no_draft", lang))
     else:
-        lines.extend(["Borrador (envíalo tú si te encaja):", "", draft])
+        lines.extend([t("notifier.followup_draft", lang), "", draft])
         if warnings:
             lines.append("")
-            lines.append("⚠️ Revisa el borrador:")
+            lines.append(t("notifier.followup_review", lang))
             lines.extend(f"• {w}" for w in warnings)
     return "\n".join(lines)
 
 
-def followup_proposal_message(offer: OfferRow, *, days_silent: int) -> str:
-    """Proposal to give up after 2 follow-ups and a long silence (Spanish)."""
-    return (
-        f"🔕 {_followup_offer_label(offer)}\n"
-        f"{days_silent} días sin respuesta y ya hiciste 2 seguimientos. "
-        "¿La marco como sin respuesta?"
+def followup_proposal_message(
+    offer: OfferRow, *, days_silent: int, lang: Lang = LEGACY_LANG
+) -> str:
+    """Proposal to give up after 2 follow-ups and a long silence."""
+    return t(
+        "notifier.followup_proposal",
+        lang,
+        label=_followup_offer_label(offer, lang),
+        days=_days_plain(days_silent, lang),
     )
 
 
-def sent_message(offer_id: int, match: int) -> str:
+def sent_message(offer_id: int, match: int, *, lang: Lang = LEGACY_LANG) -> str:
     """Confirmation after ``mark_sent`` (tracker row estado=enviada)."""
-    return f"✅ Oferta #{offer_id} marcada como enviada (match {match})."
+    return t("notifier.sent", lang, offer_id=offer_id, match=match)
 
 
-def discard_message(offer_id: int) -> str:
+def discard_message(offer_id: int, *, lang: Lang = LEGACY_LANG) -> str:
     """Confirmation after the Discard path (no PDF generated)."""
-    return f"🗑 Oferta #{offer_id} descartada. No se generará ningún PDF."
+    return t("notifier.discarded", lang, offer_id=offer_id)
 
 
-def discard_no_send_message() -> str:
+def discard_no_send_message(*, lang: Lang = LEGACY_LANG) -> str:
     """Confirmation after a post-generation discard (estado=descartada,
     no send recorded — ``fecha_envio`` stays NULL so xlsx skips the row)."""
-    return "🗑 Oferta descartada — no se registra envío."
+    return t("notifier.discarded_no_send", lang)
 
 
-def not_found_message() -> str:
+def not_found_message(*, lang: Lang = LEGACY_LANG) -> str:
     """NOT_FOUND (404) on a URL fetch: the offer looks removed/closed, not walled."""
-    return (
-        "🔒 Esa oferta parece haber sido retirada o cerrada (404); "
-        "no hay nada que analizar. Si crees que sigue activa, pega el texto "
-        "con /analyze."
-    )
+    return t("notifier.not_found", lang)
 
 
-def offer_closed_message() -> str:
+def offer_closed_message(*, lang: Lang = LEGACY_LANG) -> str:
     """The offer text says it is closed: discarded without analysis."""
-    return (
-        "🔒 La oferta está cerrada (lo dice el propio texto): descartada, sin analizar."
-    )
+    return t("notifier.offer_closed", lang)
 
 
-def paste_prompt() -> str:
+def paste_prompt(*, lang: Lang = LEGACY_LANG) -> str:
     """WallError degradation (design D3): ask the user to paste the offer."""
-    return (
-        "⚠️ No pude acceder a la oferta (muro/bloqueo). "
-        "Pega el texto de la oferta como mensaje y la analizo."
-    )
+    return t("notifier.paste_prompt", lang)
 
 
-def failure_reason(exc: BaseException | None) -> str:
+def failure_reason(exc: BaseException | None, *, lang: Lang = LEGACY_LANG) -> str:
     """Short chat-facing cause: LLM HTTP failures get a tailored .env hint."""
     if exc is None:
-        return "error desconocido"
+        return t("notifier.failure_unknown", lang)
     text = str(exc).strip() or type(exc).__name__
     if isinstance(exc, LlmResponseError):
         match = search(r"HTTP (\d+)", text)
         cause = (
-            f"el LLM devolvió HTTP {match.group(1)}"
+            t("notifier.failure_http", lang, code=match.group(1))
             if match
-            else f"el LLM falló: {text}"
+            else t("notifier.failure_llm", lang, text=text)
         )
-        return f"{cause} — revisa CVA_LLM_* en .env"
+        return t("notifier.failure_hint", lang, cause=cause)
     return text
 
 
-def analyze_error_message(reason: str) -> str:
+def analyze_error_message(reason: str, *, lang: Lang = LEGACY_LANG) -> str:
     """Failed-analysis card; the paste flow stays armed for a corrected re-paste."""
-    return (
-        f"❌ El análisis falló: {reason} — pega el texto de nuevo cuando lo corrijas."
-    )
+    return t("notifier.analyze_error", lang, reason=reason)
 
 
-def analyze_failure_message(exc: BaseException) -> str:
+def analyze_failure_message(exc: BaseException, *, lang: Lang = LEGACY_LANG) -> str:
     """Failed-analysis card from the exception; HTTP 429 gets a tailored
     wait-and-repaste hint (the retry already ran once and failed)."""
     if isinstance(exc, LlmResponseError) and exc.status == 429:
-        return (
-            "❌ El análisis falló: límite de peticiones del LLM (429) — "
-            "espera unos minutos y vuelve a pegar la oferta."
-        )
-    return analyze_error_message(failure_reason(exc))
+        return t("notifier.analyze_rate_limit", lang)
+    return analyze_error_message(failure_reason(exc, lang=lang), lang=lang)
 
 
 def bridge_auto_failure_message(
@@ -1112,40 +1277,44 @@ def bridge_auto_failure_message(
     job_id: str,
     threshold: int,
     url: str | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
-    """Fallback card for a failed AUTO-analysis (auto-triage D4, Spanish).
+    """Fallback card for a failed AUTO-analysis (auto-triage D4).
 
     The legacy new-job card (so ``[Analizar]`` still completes manually) plus
     one brief cause line via :func:`failure_reason` — NOT
-    :func:`analyze_failure_message`, whose "pega el texto de nuevo" hint is
+    :func:`analyze_failure_message`, whose "paste the text again" hint is
     paste-flow context and wrong here. The offer row is already upserted, so
     a later ``[Analizar]`` press always completes. ``url`` is the per-source
     canonical offer URL (Card-content requirement); ``None`` keeps the
     LinkedIn legacy shape.
     """
-    cause = failure_reason(exc)
+    cause = failure_reason(exc, lang=lang)
     return (
         new_job_message(
             title=title,
             company=company,
-            age="reciente",
+            age=t("notifier.age_recent", lang),
             job_id=job_id,
             threshold=threshold,
             url=url,
+            lang=lang,
         )
         + "\n"
-        + f"⚠️ El análisis automático falló ({cause}). Pulsa Analizar para reintentar."
+        + t("notifier.auto_failure", lang, cause=cause)
     )
 
 
-def backstop_error_message(reason: str) -> str:
+def backstop_error_message(reason: str, *, lang: Lang = LEGACY_LANG) -> str:
     """PTB error-handler card: short note naming what failed."""
-    return f"⚠️ Ha fallado el procesamiento de tu mensaje: {reason}"
+    return t("notifier.backstop", lang, reason=reason)
 
 
-def help_message(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+def help_message(
+    families: FamilyRegistry = BUILTIN_REGISTRY, *, lang: Lang = LEGACY_LANG
+) -> str:
     """``/help`` and ``/start`` text: grouped commands and card buttons."""
-    return help_text(families)
+    return help_text(families, lang)
 
 
 def offer_status_line(
@@ -1153,46 +1322,61 @@ def offer_status_line(
     *,
     also_on: Sequence[str] = (),
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
-    """One /status line: id · estado · match · posición (Spanish); offers of
+    """One /status line: id · estado · match · position; offers of
     a non-default family end with its label, e.g. ``[backend]``."""
     match = row.match  # type: ignore[attr-defined]
     family = families.resolve(families.normalize(getattr(row, "perfil", None)))
     tag = "" if family == families.default else f" [{family.label.lower()}]"
-    line = (
-        f"#{row.id} · {row.estado} · "  # type: ignore[attr-defined]
-        f"match {match if match is not None else '—'} · "
-        f"{row.posicion or '(sin posición)'}{tag}"  # type: ignore[attr-defined]
+    line = t(
+        "notifier.status_line",
+        lang,
+        id=row.id,  # type: ignore[attr-defined]
+        estado=_estado_display(row.estado, lang),  # type: ignore[attr-defined]
+        match=match if match is not None else "—",
+        position=row.posicion or _no_position(lang),  # type: ignore[attr-defined]
+        tag=tag,
     )
     if also_on:
-        line += f" · También en: {', '.join(also_on)}"
+        line += t("notifier.also_on_status", lang) + ", ".join(also_on)
     return line
 
 
-def beacons_list_message(rows: list[BeaconRow]) -> str:
-    """/beacons listing: one status line per beacon (Spanish)."""
+def beacons_list_message(rows: list[BeaconRow], *, lang: Lang = LEGACY_LANG) -> str:
+    """/beacons listing: one status line per beacon."""
     if not rows:
-        return "🔭 No hay beacons configurados."
-    lines = ["🔭 Beacons:"]
+        return t("notifier.beacons_none", lang)
+    lines = [t("notifier.beacons_head", lang)]
     for row in rows:
         lines.append(
-            f"#{row.id} {row.name} · {row.status} · "
-            f"muros: {row.consecutive_walls} · "
-            f"última comprobación: {row.last_checked_at or 'nunca'}"
+            t(
+                "notifier.beacons_line",
+                lang,
+                id=row.id,
+                name=row.name,
+                status=row.status,
+                walls=row.consecutive_walls,
+                last=row.last_checked_at or t("notifier.beacons_never", lang),
+            )
         )
     return "\n".join(lines)
 
 
-def beacon_action_message(action: str, beacon_id: int) -> str:
+def beacon_action_message(
+    action: str, beacon_id: int, *, lang: Lang = LEGACY_LANG
+) -> str:
     """Confirmation for resume/disable (command or inline action)."""
     if action == "resume":
-        return f"✅ Beacon #{beacon_id} reactivado (contador de muros a cero)."
-    return f"⏹ Beacon #{beacon_id} desactivado (no se volverá a comprobar)."
+        return t("notifier.beacon_resumed", lang, beacon_id=beacon_id)
+    return t("notifier.beacon_disabled", lang, beacon_id=beacon_id)
 
 
-def beacon_command_reply(service: "JobService", args: list[str]) -> str:
-    """/beacon resume|disable <id>: parse + dispatch + Spanish reply text."""
-    usage = "Uso: /beacon resume|disable <id>"
+def beacon_command_reply(
+    service: "JobService", args: list[str], *, lang: Lang = LEGACY_LANG
+) -> str:
+    """/beacon resume|disable <id>: parse + dispatch + reply text."""
+    usage = t("notifier.beacon_usage", lang)
     if len(args) != 2 or args[0] not in ("resume", "disable"):
         return usage
     try:
@@ -1205,11 +1389,13 @@ def beacon_command_reply(service: "JobService", args: list[str]) -> str:
         else:
             service.disable_beacon(beacon_id)
     except RepositoryError:
-        return f"⚠️ No existe el beacon #{beacon_id}."
-    return beacon_action_message(args[0], beacon_id)
+        return t("notifier.beacon_missing", lang, beacon_id=beacon_id)
+    return beacon_action_message(args[0], beacon_id, lang=lang)
 
 
-def beacon_callback_reply(service: "JobService", kind: str, raw_id: str) -> str | None:
+def beacon_callback_reply(
+    service: "JobService", kind: str, raw_id: str, *, lang: Lang = LEGACY_LANG
+) -> str | None:
     """Pause-alert inline actions (``beacon_resume:``/``beacon_disable:``).
 
     Returns the confirmation text, or ``None`` for malformed payloads (the
@@ -1227,29 +1413,35 @@ def beacon_callback_reply(service: "JobService", kind: str, raw_id: str) -> str 
         else:
             service.disable_beacon(beacon_id)
     except RepositoryError:
-        return f"⚠️ No existe el beacon #{beacon_id}."
-    return beacon_action_message(kind.removeprefix("beacon_"), beacon_id)
+        return t("notifier.beacon_missing", lang, beacon_id=beacon_id)
+    return beacon_action_message(kind.removeprefix("beacon_"), beacon_id, lang=lang)
 
 
-def beacon_paused_message(alert: BeaconPausedAlert) -> str:
+def beacon_paused_message(alert: BeaconPausedAlert, *, lang: Lang = LEGACY_LANG) -> str:
     """One-shot pause alert text (D3): name, wall count, last wall kind."""
-    return (
-        f"🚨 Beacon «{alert.beacon_name}» pausado tras "
-        f"{alert.consecutive_walls} muros consecutivos "
-        f"(último: {alert.wall_kind})."
+    return t(
+        "notifier.beacon_paused",
+        lang,
+        name=alert.beacon_name,
+        walls=alert.consecutive_walls,
+        kind=alert.wall_kind,
     )
 
 
-def beacon_alert_keyboard(beacon_id: int) -> InlineKeyboardMarkup:
+def beacon_alert_keyboard(
+    beacon_id: int, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     """Pause-alert actions: inline resume / disable (D3)."""
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "▶️ Reactivar", callback_data=f"{BEACON_RESUME}:{beacon_id}"
+                    _button("beacon_resume", lang),
+                    callback_data=f"{BEACON_RESUME}:{beacon_id}",
                 ),
                 InlineKeyboardButton(
-                    "⏹ Desactivar", callback_data=f"{BEACON_DISABLE}:{beacon_id}"
+                    _button("beacon_disable", lang),
+                    callback_data=f"{BEACON_DISABLE}:{beacon_id}",
                 ),
             ]
         ]
@@ -1259,34 +1451,48 @@ def beacon_alert_keyboard(beacon_id: int) -> InlineKeyboardMarkup:
 _GMAIL_SUBJECT_MAX: Final[int] = 120
 
 
-def _estado_text(estado: str) -> str:
+def _estado_text(estado: str, lang: Lang) -> str:
     """Human name of an estado without its emoji ("entrevista técnica")."""
-    label = OUTCOME_LABELS.get(estado, estado)
+    label = outcome_label(estado, lang)
     return (label.split(" ", 1)[1] if " " in label else label).lower()
 
 
-def gmail_proposal_message(proposal: "GmailProposal") -> str:
-    """Spanish proposal text for a detected reply (plain text, no parse mode)."""
+def gmail_proposal_message(
+    proposal: "GmailProposal", *, lang: Lang = LEGACY_LANG
+) -> str:
+    """Proposal text for a detected reply (plain text, no parse mode)."""
     subject = proposal.subject.strip()
     if len(subject) > _GMAIL_SUBJECT_MAX:
         subject = subject[: _GMAIL_SUBJECT_MAX - 1] + "…"
-    estado = _estado_text(proposal.estado)
-    return (
-        f"📧 {proposal.company} · «{subject}»: parece {estado}.\n"
-        f"¿Marcar la oferta #{proposal.offer_id} como {estado}?"
+    estado = _estado_text(proposal.estado, lang)
+    return t(
+        "notifier.gmail_proposal",
+        lang,
+        company=proposal.company,
+        subject=subject,
+        estado=estado,
+        offer_id=proposal.offer_id,
     )
 
 
-def gmail_proposal_keyboard(message_id: str) -> InlineKeyboardMarkup:
-    """[Sí] [Otro estado] [Ignorar] for one Gmail proposal."""
+def gmail_proposal_keyboard(
+    message_id: str, *, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
+    """[Yes] [Other status] [Ignore] for one Gmail proposal."""
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("Sí", callback_data=f"{GM}:y:{message_id}"),
                 InlineKeyboardButton(
-                    "Otro estado", callback_data=f"{GM}:o:{message_id}"
+                    t("notifier.gmail_yes", lang), callback_data=f"{GM}:y:{message_id}"
                 ),
-                InlineKeyboardButton("Ignorar", callback_data=f"{GM}:i:{message_id}"),
+                InlineKeyboardButton(
+                    t("notifier.gmail_other", lang),
+                    callback_data=f"{GM}:o:{message_id}",
+                ),
+                InlineKeyboardButton(
+                    t("notifier.gmail_ignore", lang),
+                    callback_data=f"{GM}:i:{message_id}",
+                ),
             ]
         ]
     )

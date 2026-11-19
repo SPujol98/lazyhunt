@@ -11,7 +11,8 @@ from typing import Final, Protocol
 
 from pydantic import BaseModel
 
-from cva.match.cover_letter import BANNED_PHRASES, validate_text
+from cva.i18n import LEGACY_LANG, Lang
+from cva.match.cover_letter import BANNED_PHRASES, FEEDBACK_LANG, validate_text
 
 MIN_WORDS: Final[int] = 60
 MAX_WORDS: Final[int] = 120
@@ -59,7 +60,7 @@ class FollowupText(BaseModel):
 
 @dataclass(frozen=True)
 class FollowupDraft:
-    """The draft (``None`` when generation failed) plus Spanish warnings."""
+    """The draft (``None`` when generation failed) plus warnings (UI language)."""
 
     text: str | None
     warnings: list[str] = field(default_factory=list)
@@ -71,8 +72,10 @@ class _JsonLlm(Protocol):
     ) -> ModelT: ...
 
 
-def validate_followup(text: str, language: str) -> list[str]:
-    """Spanish problem descriptions for one draft; empty when it is fine."""
+def validate_followup(
+    text: str, language: str, lang: Lang = FEEDBACK_LANG
+) -> list[str]:
+    """Problem descriptions (in ``lang``) for one draft; empty when it is fine."""
     return validate_text(
         text,
         language,
@@ -80,6 +83,7 @@ def validate_followup(text: str, language: str) -> list[str]:
         hard_max=_HARD_MAX_WORDS,
         min_words=MIN_WORDS,
         max_words=MAX_WORDS,
+        lang=lang,
     )
 
 
@@ -129,8 +133,13 @@ async def generate_followup(
     owner_name: str,
     days_silent: int,
     number: int,
+    ui_lang: Lang = LEGACY_LANG,
 ) -> FollowupDraft:
-    """Generate the draft; one validated retry, then warn instead of failing."""
+    """Generate the draft; one validated retry, then warn instead of failing.
+
+    The retry prompt gets the problems in Spanish (``FEEDBACK_LANG``); the
+    returned warnings are in ``ui_lang``.
+    """
     system, user = build_followup_prompt(
         posting_text=posting_text,
         sent_letter=sent_letter,
@@ -156,5 +165,7 @@ async def generate_followup(
     try:
         second = await llm.json_completion(system, retry_user, FollowupText)
     except Exception:  # noqa: BLE001 — any retry failure keeps the usable first draft
-        return FollowupDraft(first.text, problems)
-    return FollowupDraft(second.text, validate_followup(second.text, language))
+        return FollowupDraft(
+            first.text, validate_followup(first.text, language, ui_lang)
+        )
+    return FollowupDraft(second.text, validate_followup(second.text, language, ui_lang))

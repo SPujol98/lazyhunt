@@ -13,7 +13,7 @@ from cva.calibration_ui import (
     reason_keyboard,
 )
 from cva.commands import COMMANDS, menu_commands
-from cva.notifier import OE, help_message
+from cva.notifier import OE, help_message, outcome_note_prompt
 from cva.service import JobService
 from cva.tracker import OfferInput, OfferRepository
 from tests.test_bot import (
@@ -88,7 +88,7 @@ def test_positive_outcome_asks_after_the_note_prompt_without_consuming_it(
     context = FakeContext(service)
     query = _press(context, f"{OE}:{offer_id}:entrevista_tecnica")
 
-    assert query.message.replies[-1] == bot.OUTCOME_NOTE_PROMPT  # prompt stays last
+    assert query.message.replies[-1] == outcome_note_prompt("es")  # prompt stays last
     questions = _questions(query)
     assert len(questions) == 1
     text, markup = questions[0]

@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, get_args
 from cva.beacons.health import AlertClaims, Claim
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.ingest import canonical_url, job_id_from_url, source_from_url
 from cva.ingest.closed import closed_marker
 from cva.ingest.dates import extract_dates
@@ -69,7 +70,12 @@ from cva.notifier import (
 )
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_prefs import ProfilePrefs, TitleFilterPrefs, load_preferences
-from cva.service import DEFAULT_DB_PATH, BridgeJobOutcome, BridgeZone
+from cva.service import (
+    DEFAULT_DB_PATH,
+    BridgeJobOutcome,
+    BridgeZone,
+    display_reason,
+)
 from cva.suggest import suggested_searches_payload
 from cva.title_filter import TitleFilter
 from cva.tracker import OfferInput, OfferRepository, RepositoryError, duplicate_note
@@ -96,6 +102,10 @@ _DRAIN_CHUNK_BYTES: Final[int] = 64 * 1024
 BOT_DATA_KEY: Final[str] = "bridge"
 
 
+# Round-summary reason of a walled offer that came without one.
+_WALL: Final[str] = "muro"
+
+
 class _RoundTally:
     """Per-payload round-summary accumulator (round-summary amendment).
 
@@ -115,14 +125,16 @@ class _RoundTally:
         "discarded",
         "duplicates",
         "gray",
+        "lang",
         "pending",
         "remaining",
         "walled",
         "walled_offers",
     )
 
-    def __init__(self, beacon: str, total: int) -> None:
+    def __init__(self, beacon: str, total: int, lang: Lang = LEGACY_LANG) -> None:
         self.beacon = beacon
+        self.lang: Lang = lang  # Settings.ui_language of the round summary
         self.remaining = total
         self.above = 0
         self.gray = 0
@@ -162,7 +174,7 @@ class _RoundTally:
         elif zone == "walled":
             self.walled += 1
             self.walled_offers.append(
-                WalledOffer(wall_reason or "muro", title, company, url)
+                WalledOffer(wall_reason or _WALL, title, company, url)
             )
         elif zone == "closed":
             self.closed += 1
@@ -388,13 +400,16 @@ def _validated_scan(payload: Any, *, now: datetime | None = None) -> dict[str, A
 
 
 def _record_scan(
-    report: dict[str, Any], repo: OfferRepository, claims: AlertClaims
+    report: dict[str, Any],
+    repo: OfferRepository,
+    claims: AlertClaims,
+    lang: Lang = LEGACY_LANG,
 ) -> list[Claim]:
     """Store the scan and claim the health alerts it makes due (send them after)."""
     repo.record_beacon_scan(**report)
     beacon_id = report["beacon_id"]
     return claims.claim(
-        beacon_id, report["beacon_name"], repo.recent_beacon_scans(beacon_id)
+        beacon_id, report["beacon_name"], repo.recent_beacon_scans(beacon_id), lang
     )
 
 
@@ -421,7 +436,9 @@ def _guarded_inline_text(raw: object) -> str | None:
 _EDIT_TIMEOUT_S: Final[float] = 10.0
 
 
-def _update_also_on(repo: OfferRepository, original_id: int, editor: Any) -> None:
+def _update_also_on(
+    repo: OfferRepository, original_id: int, editor: Any, lang: Lang = LEGACY_LANG
+) -> None:
     """Silently refresh the "También en" line on the original offer's card.
 
     No stored card → nothing to edit. Telegram errors (message too old,
@@ -436,6 +453,7 @@ def _update_also_on(repo: OfferRepository, original_id: int, editor: Any) -> Non
             card.text,
             repo.duplicate_portal_labels(original_id),
             parse_mode=card.parse_mode,
+            lang=lang,
         )
         if text == card.text:
             return
@@ -500,6 +518,7 @@ def _process_payload(
     duplicates: list[DuplicateOffer] | None = None,
     editor: Any = None,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> dict[str, int]:
     """Dedupe + upsert + notify per job (D3/D4); returns the 200 counters.
 
@@ -574,7 +593,7 @@ def _process_payload(
                     )
                 )
             if editor is not None:
-                _update_also_on(repo, original.id, editor)
+                _update_also_on(repo, original.id, editor, lang)
             skipped += 1
             _LOG.info(
                 "bridge cross-source duplicate: #%s duplicates #%s",
@@ -589,12 +608,13 @@ def _process_payload(
                 new_job_message(
                     title=job.get("title"),
                     company=job.get("company"),
-                    age="reciente",
+                    age=t("notifier.age_recent", lang),
                     job_id=job_id,
                     threshold=threshold,
                     url=canonical,
+                    lang=lang,
                 ),
-                new_job_keyboard(job_id),
+                new_job_keyboard(job_id, lang=lang),
             )
         new += 1
     _LOG.info(
@@ -668,13 +688,12 @@ def _make_handler(
     preferences: ProfilePrefs | None = None,
     is_paused: Callable[[], bool] = lambda: False,
     enabled_portals: frozenset[str] | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> type[BaseHTTPRequestHandler]:
     """Handler class closed over the bridge collaborators (no globals)."""
     claims = AlertClaims(repo)  # health alerts in flight (guarded by ``lock``)
     # The profile's role families route beacon offers (role-families T5).
-    families = (
-        preferences.families if preferences is not None else BUILTIN_REGISTRY
-    )
+    families = preferences.families if preferences is not None else BUILTIN_REGISTRY
 
     def _suggested_body() -> dict[str, Any]:
         """Suggested searches; plus the profile's title filters when it has its own."""
@@ -762,7 +781,7 @@ def _make_handler(
                 self._send_json(400, {"error": f"invalid json: {exc}"})
                 return
             with lock:
-                due = _record_scan(report, repo, claims)
+                due = _record_scan(report, repo, claims, lang)
             try:
                 self._send_json(200, {"recorded": True})
                 for claim in due:
@@ -845,6 +864,7 @@ def _make_handler(
                     duplicates=dupes,
                     editor=editor,
                     families=families,
+                    lang=lang,
                 )
             if dropped:
                 result["dropped"] = len(dropped)
@@ -856,7 +876,7 @@ def _make_handler(
                 # created here because only the handler knows the count;
                 # 0 new jobs → no tally → no summary, ever.
                 tally = (
-                    _RoundTally(beacon, len(auto_jobs))
+                    _RoundTally(beacon, len(auto_jobs), lang)
                     if round_summary and auto_jobs
                     else None
                 )
@@ -887,7 +907,9 @@ class _Bridge:
         preferences: ProfilePrefs | None = None,
         paused_default: bool = False,
         enabled_portals: frozenset[str] | None = None,
+        ui_language: Lang = LEGACY_LANG,
     ) -> None:
+        self._lang: Lang = ui_language
         self._paused_default = paused_default
         self._enabled_portals = enabled_portals
         self._claims_path = claims_path
@@ -940,6 +962,7 @@ class _Bridge:
             preferences=self._preferences,
             is_paused=self._is_paused,
             enabled_portals=self._enabled_portals,
+            lang=self._lang,
         )
         self._httpd = ThreadingHTTPServer(("127.0.0.1", self._port), handler)
         thread = threading.Thread(
@@ -1201,6 +1224,12 @@ class _Bridge:
         if analyzed == tally.walled and tally.pending == 0:
             # Nothing scored and nothing retrying (all walled or closed): no noise.
             return
+        walled_offers = [
+            w._replace(reason=display_reason(w.reason, tally.lang))
+            if w.reason != _WALL
+            else w._replace(reason=t("bot.wall", tally.lang))
+            for w in tally.walled_offers
+        ]
         message = round_summary_message(
             beacon=tally.beacon,
             analyzed=analyzed,
@@ -1208,13 +1237,14 @@ class _Bridge:
             gray=tally.gray,
             below=tally.below,
             walled=tally.walled,
-            walled_offers=tally.walled_offers,
+            walled_offers=walled_offers,
             closed=tally.closed,
             closed_offers=tally.closed_offers,
             pending=tally.pending,
             discarded=tally.discarded,
             duplicates=len(tally.duplicates),
             duplicate_offers=tally.duplicates,
+            lang=tally.lang,
         )
         try:
             await self._notify_card(message, None, parse_mode="HTML")
@@ -1305,6 +1335,7 @@ def register(app: Any, settings: Settings, service: "JobService") -> _Bridge | N
             if settings.enabled_portals is None
             else frozenset(settings.enabled_portals)
         ),
+        ui_language=settings.ui_language,
     )
     try:
         bridge.start()

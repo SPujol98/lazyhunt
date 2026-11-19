@@ -1,4 +1,4 @@
-"""Telegram text and keyboards for outcome calibration (Spanish, user-facing).
+"""Telegram text and keyboards for outcome calibration (UI language ``lang``).
 
 Callback payloads are stateless ``cal:<action>:<id>[:<reason>]``:
 ``r`` rejection reason (offer id), ``y``/``n`` approve/decline an example,
@@ -12,7 +12,7 @@ from typing import Final
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from cva.calibration import CalibrationExample, CalibrationSummary
-from cva.notifier import OUTCOME_LABELS
+from cva.i18n import LEGACY_LANG, Lang, t
 
 CAL: Final[str] = "cal"
 
@@ -25,91 +25,104 @@ REASON_LABELS: Final[dict[str, str]] = {
 _LEADING_SYMBOLS: Final[re.Pattern[str]] = re.compile(r"^[^\w]+")
 
 
-def outcome_text(estado: str) -> str:
+def reason_label(reason: str, lang: Lang = LEGACY_LANG) -> str:
+    """The button/label text of a rejection reason id (unknown ids as is)."""
+    return t(f"panel.cal.reason.{reason}", lang) if reason in REASON_LABELS else reason
+
+
+def outcome_text(estado: str, lang: Lang = LEGACY_LANG) -> str:
     """The outcome label without its emoji, lowercased (``entrevista técnica``)."""
-    return _LEADING_SYMBOLS.sub("", OUTCOME_LABELS.get(estado, estado)).lower()
+    try:
+        return t(f"panel.cal.outcome.{estado}", lang)
+    except KeyError:
+        return _LEADING_SYMBOLS.sub("", estado).lower()
 
 
-def _result(example: CalibrationExample) -> str:
-    text = outcome_text(example.outcome)
+def _result(example: CalibrationExample, lang: Lang) -> str:
+    text = outcome_text(example.outcome, lang)
     if example.reason:
-        text += f" ({REASON_LABELS.get(example.reason, example.reason).lower()})"
+        text += f" ({reason_label(example.reason, lang).lower()})"
     return text
 
 
-def question_message(example: CalibrationExample) -> str:
-    return (
-        "🎯 ¿Usar esta oferta para calibrar la nota?\n"
-        f"Nota del bot: {example.score_at_send}/100 · Resultado: {_result(example)}\n"
-        "Solo se usan la nota, el rol y el resultado; nunca el texto de la "
-        "oferta ni tus notas. Puedes quitarla luego en /calibracion."
+def question_message(example: CalibrationExample, lang: Lang = LEGACY_LANG) -> str:
+    return t(
+        "panel.cal.question",
+        lang,
+        score=example.score_at_send,
+        result=_result(example, lang),
     )
 
 
-def question_keyboard(example_id: int) -> InlineKeyboardMarkup:
+def question_keyboard(
+    example_id: int, lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Sí", callback_data=f"{CAL}:y:{example_id}"),
-                InlineKeyboardButton("No", callback_data=f"{CAL}:n:{example_id}"),
+                InlineKeyboardButton(
+                    t("panel.cal.yes", lang), callback_data=f"{CAL}:y:{example_id}"
+                ),
+                InlineKeyboardButton(
+                    t("panel.cal.no", lang), callback_data=f"{CAL}:n:{example_id}"
+                ),
             ]
         ]
     )
 
 
-def reason_message() -> str:
-    return (
-        "🎯 ¿Por qué te rechazaron? Solo si fue por encaje puede servir para "
-        "calibrar la nota."
-    )
+def reason_message(lang: Lang = LEGACY_LANG) -> str:
+    return t("panel.cal.reason_question", lang)
 
 
-def reason_keyboard(offer_id: int) -> InlineKeyboardMarkup:
+def reason_keyboard(offer_id: int, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
     buttons = [
-        InlineKeyboardButton(label, callback_data=f"{CAL}:r:{offer_id}:{reason}")
-        for reason, label in REASON_LABELS.items()
+        InlineKeyboardButton(
+            reason_label(reason, lang), callback_data=f"{CAL}:r:{offer_id}:{reason}"
+        )
+        for reason in REASON_LABELS
     ]
     return InlineKeyboardMarkup([buttons[:2], buttons[2:]])
 
 
 def list_message(
-    examples: Sequence[CalibrationExample], summary: CalibrationSummary
+    examples: Sequence[CalibrationExample],
+    summary: CalibrationSummary,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     if not examples:
-        return (
-            "🎯 No hay ejemplos de calibración activos.\n"
-            "Cuando anotes un resultado con /outcome, el bot te preguntará si "
-            "quieres usarlo para calibrar la nota."
-        )
-    lines = [f"🎯 Ejemplos de calibración activos ({summary.total}):"]
+        return t("panel.cal.empty", lang)
+    lines = [t("panel.cal.list_head", lang, total=summary.total)]
     for example in examples:
         role = f" · {example.core_role}" if example.core_role else ""
         lines.append(
-            f"#{example.offer_id} · nota {example.score_at_send} · "
-            f"{_result(example)}{role}"
+            t(
+                "panel.cal.list_line",
+                lang,
+                id=example.offer_id,
+                score=example.score_at_send,
+                result=_result(example, lang),
+                role=role,
+            )
         )
     lines.extend(
         [
             "",
-            (
-                f"• Positivos (llegaste a entrevista): {summary.positives_below} "
-                "con nota por debajo del umbral."
-            ),
-            (
-                f"• Negativos (rechazo por encaje): {summary.negatives_above} "
-                "con nota por encima del umbral."
-            ),
+            t("panel.cal.positives", lang, count=summary.positives_below),
+            t("panel.cal.negatives", lang, count=summary.negatives_above),
         ]
     )
     return "\n".join(lines)
 
 
-def list_keyboard(examples: Sequence[CalibrationExample]) -> InlineKeyboardMarkup:
+def list_keyboard(
+    examples: Sequence[CalibrationExample], lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    f"🗑 Desactivar (#{example.offer_id})",
+                    t("panel.cal.deactivate", lang, id=example.offer_id),
                     callback_data=f"{CAL}:d:{example.id}",
                 )
             ]

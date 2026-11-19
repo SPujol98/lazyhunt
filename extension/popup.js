@@ -6,7 +6,7 @@
 // storage; its three actions are runtime messages to the service worker
 // (`run-now`, `set-paused`) and opening the options page.
 
-import { t } from './i18n.js';
+import { t, loadUiLanguage } from './i18n.js';
 import { PORTALS, portalFor, portalById } from './portals/registry.js';
 import { expandSearches, resolveEnabledPortals } from './searches.js';
 
@@ -267,7 +267,8 @@ function openOptions() {
   chrome.runtime.openOptionsPage();
 }
 
-function init() {
+async function init() {
+  await loadUiLanguage();
   localizeStatic();
   $('checkNowBtn').addEventListener('click', checkNow);
   $('pauseBtn').addEventListener('click', togglePause);

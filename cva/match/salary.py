@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from cva.i18n import LEGACY_LANG, Lang, t
+
 Period = Literal["annual", "monthly"]
 
 _MIN_ANNUAL: Final[int] = 12_000
@@ -58,7 +60,9 @@ _ANNUAL_RE: Final[re.Pattern[str]] = re.compile(
     r"año|anual|year|yr\b|annual|p\.\s?a\.|\bany\b|/\s*a\b", re.IGNORECASE
 )
 # "(?<!\.)" keeps the ".NET" stack name from reading as net pay.
-_NET_RE: Final[re.Pattern[str]] = re.compile(r"\bnet[oa]s?\b|(?<!\.)\bnet\b", re.IGNORECASE)
+_NET_RE: Final[re.Pattern[str]] = re.compile(
+    r"\bnet[oa]s?\b|(?<!\.)\bnet\b", re.IGNORECASE
+)
 _NEGATIVE_BEFORE_RE: Final[re.Pattern[str]] = re.compile(
     r"bonus|bono\b|signing|ronda|funding|facturaci|revenue|inversi|capital|"
     r"millones|million|raised|\barr\b",
@@ -118,7 +122,9 @@ def _amounts(text: str) -> list[_Amount]:
     return found
 
 
-def _period(text: str, first: _Amount, last: _Amount) -> Period | Literal["hourly"] | None:
+def _period(
+    text: str, first: _Amount, last: _Amount
+) -> Period | Literal["hourly"] | None:
     """Period named around the figures (nearest mention after, then before)."""
     after = text[last.end : last.end + 30]
     before = text[max(0, first.start - 30) : first.start]
@@ -134,7 +140,9 @@ def _period(text: str, first: _Amount, last: _Amount) -> Period | Literal["hourl
     return None
 
 
-def _candidate(text: str, bounds: list[_Amount]) -> PublishedSalary | None:
+def _candidate(
+    text: str, bounds: list[_Amount], lang: Lang = LEGACY_LANG
+) -> PublishedSalary | None:
     first, last = bounds[0], bounds[-1]
     if any(_FOREIGN_CUR_RE.match(text[a.end :]) for a in bounds):
         return None
@@ -160,7 +168,7 @@ def _candidate(text: str, bounds: list[_Amount]) -> PublishedSalary | None:
     if period == "monthly":
         factor = 14 if _PAGAS_14_RE.search(text) else 12
         values = [v * factor for v in values]
-        note = f"mensual x{factor}"
+        note = t("panel.salary.monthly_note", lang, factor=factor)
     elif period is None and any(v < _MIN_ANNUAL for v in values):
         return None  # ambiguous small figure with no stated period
     low, high = min(values), max(values)
@@ -178,8 +186,12 @@ def _candidate(text: str, bounds: list[_Amount]) -> PublishedSalary | None:
     )
 
 
-def extract_published_salary(text: str | None) -> PublishedSalary | None:
-    """First plausible salary in the offer description, or ``None``."""
+def extract_published_salary(
+    text: str | None, *, lang: Lang = LEGACY_LANG
+) -> PublishedSalary | None:
+    """First plausible salary in the offer description, or ``None``.
+
+    ``lang`` is the language of ``PublishedSalary.note`` (the only UI text)."""
     if not text:
         return None
     cut = _SIMILAR_JOBS_RE.search(text)
@@ -191,13 +203,13 @@ def extract_published_salary(text: str | None) -> PublishedSalary | None:
         current = amounts[index]
         nxt = amounts[index + 1] if index + 1 < len(amounts) else None
         if nxt is not None and _CONNECTOR_RE.fullmatch(text[current.end : nxt.start]):
-            found = _candidate(text, [current, nxt])
+            found = _candidate(text, [current, nxt], lang)
             if found is not None:
                 return found
             index += 2
             continue
         if current.has_eur:
-            found = _candidate(text, [current])
+            found = _candidate(text, [current], lang)
             if found is not None:
                 return found
         index += 1

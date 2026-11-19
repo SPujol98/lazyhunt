@@ -30,6 +30,7 @@ import json
 from collections.abc import Sequence
 from typing import Final, NamedTuple
 
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.tracker.repo import BeaconScanRow, OfferRepository
 
 __all__ = [
@@ -107,30 +108,29 @@ def active_conditions(scans: Sequence[BeaconScanRow]) -> set[str]:
     return active
 
 
-def _message(condition: str, name: str) -> str:
+def _message(condition: str, name: str, lang: Lang = LEGACY_LANG) -> str:
     """The Telegram text for ``condition``; thresholds come from the constants."""
     if condition == YIELD_DROP:
-        return (
-            f"⚠️ El beacon «{name}» devolvía ofertas y ahora da 0 "
-            f"({_ZERO_RUN} escaneos seguidos). "
-            "Puede que el portal haya cambiado o la búsqueda esté rota."
-        )
+        return t("panel.health.yield_drop", lang, name=name, runs=_ZERO_RUN)
     if condition == PARSER_BROKEN:
-        return (
-            f"⚠️ El beacon «{name}»: más del {_PARSER_EMPTY_RATIO:.0%} de las "
-            "ofertas llegan sin empresa (¿cambió el HTML del portal?)."
+        return t(
+            "panel.health.parser_broken",
+            lang,
+            name=name,
+            ratio=f"{_PARSER_EMPTY_RATIO:.0%}",
         )
     if condition == UNCONFIRMED_STREAK:
-        return (
-            f"⚠️ El beacon «{name}» lleva {_UNCONFIRMED_RUN} escaneos vacíos "
-            "sin confirmar. Puede ser un bloqueo temporal de LinkedIn o que el "
-            "portal haya cambiado su HTML; ábrelo a mano para comprobarlo."
+        return t(
+            "panel.health.unconfirmed_streak", lang, name=name, runs=_UNCONFIRMED_RUN
         )
     raise ValueError(f"unknown beacon health condition: {condition!r}")
 
 
 def new_alerts(
-    name: str, scans: Sequence[BeaconScanRow], alerted: set[str]
+    name: str,
+    scans: Sequence[BeaconScanRow],
+    alerted: set[str],
+    lang: Lang = LEGACY_LANG,
 ) -> tuple[list[Alert], set[str]]:
     """Evaluate ``scans`` (newest first) against the conditions already alerted.
 
@@ -147,7 +147,7 @@ def new_alerts(
     """
     active = active_conditions(scans)
     fresh = [
-        Alert(c, _message(c, name))
+        Alert(c, _message(c, name, lang))
         for c in CONDITIONS
         if c in active and c not in alerted
     ]
@@ -226,12 +226,16 @@ class AlertClaims:
         self._tokens = itertools.count(1)
 
     def claim(
-        self, beacon_id: str, name: str, scans: Sequence[BeaconScanRow]
+        self,
+        beacon_id: str,
+        name: str,
+        scans: Sequence[BeaconScanRow],
+        lang: Lang = LEGACY_LANG,
     ) -> list[Claim]:
         """Claim the alerts due for ``beacon_id`` given its ``scans`` (newest first)."""
         alerted = load_alerted(self._repo, beacon_id)
         held = {c for b, c in self._pending if b == beacon_id}
-        fresh, standing = new_alerts(name, scans, alerted | held)
+        fresh, standing = new_alerts(name, scans, alerted | held, lang)
         # Episodes that ended are over: forget them, and any claim still in flight.
         for condition in held - standing:
             del self._pending[(beacon_id, condition)]

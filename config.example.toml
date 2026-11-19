@@ -19,6 +19,13 @@ llm_provider = "claude_code"
 # ANTHROPIC_API_KEY happens to be in your environment.
 # claude_code_pass_api_key = false
 
+# --- Interface language ----------------------------------------------------
+# Language of the Telegram bot, the CLI and the HTML panel: "auto" (default,
+# your system language: Spanish if it starts with "es", English otherwise),
+# "en" or "es" to force one. CVs and cover letters keep following each
+# offer's language.
+ui_language = "auto"
+
 # --- Job portals -----------------------------------------------------------
 # A fresh install has every portal OFF: you turn each one on in the browser
 # extension, which shows the portal's terms warning and asks Chrome for

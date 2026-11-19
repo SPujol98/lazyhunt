@@ -260,6 +260,15 @@
   "intervalWarning": {
     "message": "Under 30 minutes portals may throttle or block you."
   },
+  "languageAuto": {
+    "message": "Auto"
+  },
+  "languageAutoTitle": {
+    "message": "Follow the browser language"
+  },
+  "languageLabel": {
+    "message": "Language"
+  },
   "lastScan": {
     "message": "Last scan"
   },

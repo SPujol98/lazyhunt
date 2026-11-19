@@ -25,10 +25,12 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from functools import cache
+from string import Formatter
 from typing import Final, Literal
 
 from pydantic import BaseModel
 
+from cva.i18n import CATALOGS, Lang, join_list, t
 from cva.match.locations import PlaceHit, Region, find_places, fold_place, get_region
 
 Gate = Literal["eligibility", "language", "location"]
@@ -56,14 +58,26 @@ class GatePrefs:
 DEFAULT_GATE_PREFS: Final[GatePrefs] = GatePrefs()
 
 
+# ``GateResult.reason`` is STORED (breakdown_json, judge walls): it is always the
+# Spanish text, whatever ``ui_language`` is. Display code translates it with
+# :func:`gate_reason`; nothing persisted changes.
+_STORED_LANG: Final[Lang] = "es"
+
+
 class GateResult(BaseModel):
-    """One gate outcome. ``reason`` is Spanish (card text); ``evidence`` quotes
+    """One gate outcome. ``reason`` is Spanish (card text, stored as such; use
+    :func:`gate_reason` to show it in the UI language); ``evidence`` quotes
     the offer. PASS carries an empty ``reason``."""
 
     gate: Gate
     verdict: Verdict
     reason: str = ""
     evidence: str = ""
+
+
+def _reason(key: str, **fmt: str) -> str:
+    """The stored (Spanish) reason text for ``key``."""
+    return t(f"panel.gate.{key}", _STORED_LANG, **fmt)
 
 
 def _fold(text: str) -> str:
@@ -231,13 +245,13 @@ def eligibility_gate(text: str) -> GateResult:
             return GateResult(
                 gate="eligibility",
                 verdict="FLAG",
-                reason="Menciona requisito de elegibilidad no UE junto a UE/España: revisa",
+                reason=_reason("eligibility_eu_wording"),
                 evidence=evidence,
             )
         return GateResult(
             gate="eligibility",
             verdict="FAIL",
-            reason="Exige ciudadanía/residencia/permiso de trabajo fuera de la UE",
+            reason=_reason("eligibility_fail"),
             evidence=evidence,
         )
     if negated:
@@ -245,7 +259,7 @@ def eligibility_gate(text: str) -> GateResult:
         return GateResult(
             gate="eligibility",
             verdict="FLAG",
-            reason="Menciona un requisito de elegibilidad no UE con una negación: revisa",
+            reason=_reason("eligibility_negated"),
             evidence=_snippet(text, start, end),
         )
     clearance = [m.span() for pattern in _CLEARANCE for m in pattern.finditer(folded)]
@@ -255,7 +269,7 @@ def eligibility_gate(text: str) -> GateResult:
         return GateResult(
             gate="eligibility",
             verdict="FLAG",
-            reason="Pide habilitación de seguridad (security clearance)",
+            reason=_reason("clearance"),
             evidence=_snippet(text, start, end),
         )
     for pattern in _EU_PASS:
@@ -466,16 +480,14 @@ def _english_above_c1(text: str, folded: str) -> GateResult | None:
             return GateResult(
                 gate="language",
                 verdict="FLAG",
-                reason="Pide nivel de inglés por encima de C1 (C2/nativo)",
+                reason=_reason("english_above_c1"),
                 evidence=_snippet(text, *english_hit.span()),
             )
     return None
 
 
 def _join(labels: list[str]) -> str:
-    return (
-        labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " y " + labels[-1]
-    )
+    return join_list(labels, _STORED_LANG)
 
 
 def language_gate(text: str, prefs: GatePrefs = DEFAULT_GATE_PREFS) -> GateResult:
@@ -499,7 +511,7 @@ def language_gate(text: str, prefs: GatePrefs = DEFAULT_GATE_PREFS) -> GateResul
         return GateResult(
             gate="language",
             verdict="FAIL",
-            reason=f"Exige {_join(labels)} (idioma obligatorio fuera de {allowed})",
+            reason=_reason("language_fail", labels=_join(labels), allowed=allowed),
             evidence=_snippet(text, *min(found["FAIL"].values())),
         )
     if found["FLAG"]:
@@ -507,7 +519,7 @@ def language_gate(text: str, prefs: GatePrefs = DEFAULT_GATE_PREFS) -> GateResul
         return GateResult(
             gate="language",
             verdict="FLAG",
-            reason=f"Menciona {_join(labels)} (valorable o sin aclarar): revisa",
+            reason=_reason("language_flag", labels=_join(labels)),
             evidence=_snippet(text, *min(found["FLAG"].values())),
         )
     if "en" in prefs.allowed_languages and prefs.flag_english_above_c1:
@@ -753,18 +765,15 @@ def location_gate(
             if in_seg and not any(seg[0] <= p.span[0] < seg[1] for p in inside):
                 return _result(
                     "FLAG",
-                    f"Remoto con visitas a la oficina fuera de {region.label} ({_shown(in_seg)}): revisa",
+                    _reason(
+                        "remote_visits", region=region.label, places=_shown(in_seg)
+                    ),
                     blob,
                     in_seg[0].span,
                 )
         return GateResult(gate="location", verdict="PASS")
 
-    label = {
-        "onsite": "Presencial",
-        "hybrid": "Híbrido",
-        "mixed": "Remoto con presencialidad",
-        "unknown": "Sin teletrabajo indicado",
-    }[mode]
+    label = _reason(f"mode.{mode}")
     if inside:
         if strong_out:
             gaps_ok = any(
@@ -780,7 +789,11 @@ def location_gate(
             if not gaps_ok:
                 return _result(
                     "FLAG",
-                    f"Varias ubicaciones, alguna fuera de {region.label} ({_shown(strong_out)}): revisa",
+                    _reason(
+                        "several_places",
+                        region=region.label,
+                        places=_shown(strong_out),
+                    ),
                     blob,
                     strong_out[0].span,
                 )
@@ -790,20 +803,30 @@ def location_gate(
         if mode in ("onsite", "hybrid") or (mode == "unknown" and structured_out):
             return _result(
                 "FAIL",
-                f"{label} fuera de {region.label} ({_shown(strong_out)})",
+                _reason(
+                    "mode_outside_fail",
+                    mode=label,
+                    region=region.label,
+                    places=_shown(strong_out),
+                ),
                 blob,
                 strong_out[0].span,
             )
         return _result(
             "FLAG",
-            f"{label} fuera de {region.label} ({_shown(strong_out)}): revisa",
+            _reason(
+                "mode_outside_flag",
+                mode=label,
+                region=region.label,
+                places=_shown(strong_out),
+            ),
             blob,
             strong_out[0].span,
         )
     if outside:
         return _result(
             "FLAG",
-            f"Menciona {_shown(outside)} (fuera de {region.label}) sin aclarar si es el lugar de trabajo: revisa",
+            _reason("mentions_outside", places=_shown(outside), region=region.label),
             blob,
             outside[0].span,
         )
@@ -811,7 +834,7 @@ def location_gate(
         country = _COUNTRY_ONLY.search(folded)
         return _result(
             "FLAG",
-            f"{label} sin ubicación concreta: revisa",
+            _reason("no_place", mode=label),
             blob,
             country.span()
             if country
@@ -829,3 +852,79 @@ def run_gates(
         language_gate(text, prefs),
         location_gate(text, location, prefs),
     ]
+
+
+# --- display translation of the stored reasons -------------------------------
+
+_REASON_KEYS: Final[tuple[str, ...]] = (
+    "eligibility_eu_wording",
+    "eligibility_fail",
+    "eligibility_negated",
+    "clearance",
+    "english_above_c1",
+    "language_fail",
+    "language_flag",
+    "remote_visits",
+    "several_places",
+    "mentions_outside",
+    "no_place",
+    "mode_outside_flag",
+    "mode_outside_fail",
+)
+
+
+def _reverse(prefix: str) -> dict[str, str]:
+    """Spanish text -> catalog key suffix for the ``panel.gate.<prefix>.*`` keys."""
+    start = f"panel.gate.{prefix}."
+    return {
+        text: key[len(start) :]
+        for key, text in CATALOGS[_STORED_LANG].items()
+        if key.startswith(start)
+    }
+
+
+@cache
+def _reason_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
+    patterns = []
+    for key in _REASON_KEYS:
+        template = CATALOGS[_STORED_LANG][f"panel.gate.{key}"]
+        parts = []
+        for literal, field, _, _ in Formatter().parse(template):
+            parts.append(re.escape(literal))
+            if field:
+                parts.append(f"(?P<{field}>.+?)")
+        patterns.append((key, re.compile("^" + "".join(parts) + "$", re.DOTALL)))
+    return tuple(patterns)
+
+
+def gate_reason(reason: str, lang: Lang) -> str:
+    """The stored (Spanish) gate/wall ``reason`` shown in ``lang``.
+
+    Stored reasons stay Spanish; this is display only. Text that is not a gate
+    reason (a stack wall, a judge rationale) is returned unchanged.
+    """
+    if lang == _STORED_LANG or not reason:
+        return reason
+    languages, modes, regions = _reverse("lang"), _reverse("mode"), _reverse("region")
+    for key, pattern in _reason_patterns():
+        found = pattern.match(reason)
+        if found is None:
+            continue
+        fmt = found.groupdict()
+        if "mode" in fmt:
+            if fmt["mode"] not in modes:
+                continue
+            fmt["mode"] = t(f"panel.gate.mode.{modes[fmt['mode']]}", lang)
+        if "region" in fmt and fmt["region"] in regions:
+            fmt["region"] = t(f"panel.gate.region.{regions[fmt['region']]}", lang)
+        if "labels" in fmt:
+            names = re.split(r", | y ", fmt["labels"])
+            fmt["labels"] = join_list(
+                [
+                    t(f"panel.gate.lang.{languages[n]}", lang) if n in languages else n
+                    for n in names
+                ],
+                lang,
+            )
+        return t(f"panel.gate.{key}", lang, **fmt)
+    return reason

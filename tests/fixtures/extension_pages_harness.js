@@ -230,7 +230,15 @@ async function loadPage(htmlRel, store, scenario = {}) {
   doc = buildDocument(html);
   confirms = [];
   globalThis.chrome = b.chrome;
-  globalThis.fetch = scenario.fetch || b.fetch;
+  const baseFetch = scenario.fetch || b.fetch;
+  const localeUrl = /^chrome-extension:\/\/harness-extension-id\/(_locales\/[a-z]+\/messages\.json)$/;
+  // The extension's own catalogues are served from disk, like chrome.runtime.getURL.
+  globalThis.fetch = async (url, ...rest) => {
+    const m = localeUrl.exec(String(url));
+    if (!m) return baseFetch(url, ...rest);
+    const text = fs.readFileSync(path.join(EXTENSION_DIR, m[1]), 'utf8');
+    return { ok: true, status: 200, json: async () => JSON.parse(text), text: async () => text };
+  };
   globalThis.document = doc;
   globalThis.window = globalThis;
   globalThis.confirm = (text) => { confirms.push(String(text)); return scenario.confirmAnswer !== false; };
@@ -841,7 +849,98 @@ async function areaFamilies() {
   check('segment = AI, Backend', segmentButtons().map((n) => n.textContent), ['AI', 'Backend']);
 }
 
+// --- interface language selector (bot-i18n S9) ---------------------------------------
+
+async function areaLanguage() {
+  const en = i18nFrom(catalogue('en'));
+  const es = i18nFrom(catalogue('es'));
+  const settings = { intervalMinutes: 60, paused: false, bridgeUrl: BRIDGE, bridgeSecret: 's' };
+  const base = {
+    settings,
+    beacons: [{ id: 'b1', name: 'Manual', url: 'https://www.linkedin.com/jobs/search/?keywords=x', enabled: true }],
+    enabledPortals: ['linkedin'],
+  };
+  const pressed = () => [...$('languageSegment').querySelectorAll('[data-lang]')].map((n) => [n.getAttribute('data-lang'), n.getAttribute('aria-pressed')]);
+  const langButton = (lang) => $('languageSegment').querySelector(`[data-lang="${lang}"]`);
+  const nav = () => doc.querySelector('nav').getAttribute('aria-label');
+
+  setScenario('language: auto follows chrome.i18n and writes nothing');
+  await loadPage(OPTIONS, base, { lang: 'es' });
+  check('options in the browser language', [doc.documentElement.lang, nav()], ['es', es('navLabel')]);
+  check('auto is pressed', pressed(), [['auto', 'true'], ['en', 'false'], ['es', 'false']]);
+  check('the selector is a labelled group', [$('languageSegment').getAttribute('role'), $('languageSegment').getAttribute('aria-label')], ['group', es('languageLabel')]);
+  check('nothing stored', 'uiLanguage' in b.store, false);
+  await loadPage(POPUP, base, { lang: 'es' });
+  check('popup in the browser language', $('pauseBtn').textContent, es('popupPause'));
+
+  setScenario('language: a forced language wins over the browser language');
+  await loadPage(OPTIONS, { ...base, uiLanguage: 'en' }, { lang: 'es' });
+  check('English forced in a Spanish browser', [doc.documentElement.lang, nav(), pressed()[1]], ['en', en('navLabel'), ['en', 'true']]);
+  await loadPage(OPTIONS, { ...base, uiLanguage: 'es' }, {});
+  check('Spanish forced with no chrome.i18n', [doc.documentElement.lang, nav()], ['es', es('navLabel')]);
+  const toggleEl = doc.querySelector('[data-portal="linkedin"]');
+  check('placeholders resolved like chrome.i18n', toggleEl.getAttribute('aria-label'), es('portalToggleLabel', ['LinkedIn']));
+  await loadPage(POPUP, { ...base, uiLanguage: 'es' }, {});
+  check('popup renders in the stored language', [$('pauseBtn').textContent, $('statusChip').textContent], [es('popupPause'), es('statusActive')]);
+  await loadPage(POPUP, { ...base, uiLanguage: 'nonsense' }, { lang: 'es' });
+  check('an invalid value behaves as auto', $('pauseBtn').textContent, es('popupPause'));
+
+  setScenario('language: clicking a language persists it and re-renders at once');
+  await loadPage(OPTIONS, base, {});
+  await type($('intervalInput'), '45');
+  await click(langButton('es'));
+  check('stored', b.store.uiLanguage, 'es');
+  check('re-rendered in Spanish', [doc.documentElement.lang, nav(), pressed()[2]], ['es', es('navLabel'), ['es', 'true']]);
+  check('portal switch label follows', doc.querySelector('[data-portal="linkedin"]').getAttribute('aria-label'), es('portalToggleLabel', ['LinkedIn']));
+  check('the unsaved edit survives', $('intervalInput').value, '45');
+  await click(langButton('en'));
+  check('back to English', [b.store.uiLanguage, nav()], ['en', en('navLabel')]);
+  await click(langButton('auto'));
+  check('auto stored and the chrome.i18n text returns', [b.store.uiLanguage, pressed()[0]], ['auto', ['auto', 'true']]);
+
+  setScenario('language: export carries a forced language, import restores it, old files still import');
+  const exportJson = async (store) => {
+    await loadPage(OPTIONS, store, {});
+    await click($('exportBtn'));
+    return JSON.parse(doc.blobs[doc.blobs.length - 1]);
+  };
+  const importJson = async (store, config) => {
+    await loadPage(OPTIONS, store, {});
+    let input = null;
+    const create = doc.createElement;
+    doc.createElement = (tag) => { const el = create(tag); if (tag === 'input') input = el; return el; };
+    await click($('importBtn'));
+    input.files = [{ text: async () => JSON.stringify(config) }];
+    input.dispatch('change');
+    await idle();
+  };
+  const exported = await exportJson({ ...base, uiLanguage: 'es' });
+  check('export has the language', exported.uiLanguage, 'es');
+  check('the format is unchanged', [exported.format, exported.version], ['linkedin-beacons-config', 1]);
+  const exportedAuto = await exportJson(base);
+  check('auto export has no language key', 'uiLanguage' in exportedAuto, false);
+  await importJson({ ...base, uiLanguage: 'en' }, exported);
+  check('import stores the file language', b.store.uiLanguage, 'es');
+  check('and the page switched', nav(), es('navLabel'));
+  await importJson({ ...base, uiLanguage: 'en' }, exportedAuto);
+  check('an old export keeps the stored language', b.store.uiLanguage, 'en');
+  check('and still imports', b.store.beacons.length, 1);
+  await importJson({ ...base, uiLanguage: 'en' }, { ...exported, uiLanguage: 'klingon' });
+  check('an invalid language in a file is ignored', b.store.uiLanguage, 'en');
+
+  setScenario('language: t() substitutes like chrome.i18n and falls back');
+  await loadPage(POPUP, { ...base, uiLanguage: 'es' }, { lang: 'en' });
+  const { t, applyUiLanguage } = await import(require('url').pathToFileURL(path.join(EXTENSION_DIR, 'i18n.js')).href);
+  check('one substitution', t('timeAgo', ['5m'], 'x'), es('timeAgo', ['5m']));
+  check('two substitutions', t('beaconJobs', [3, 'ok'], 'x'), es('beaconJobs', [3, 'ok']));
+  check('a missing substitution is empty', t('beaconJobs', [3], 'x'), es('beaconJobs', [3]));
+  check('an unknown key uses the fallback', t('noSuchKey', undefined, 'fb'), 'fb');
+  await applyUiLanguage('auto');
+  check('auto goes back to chrome.i18n', t('timeAgo', ['5m'], 'x'), en('timeAgo', ['5m']));
+}
+
 const AREAS = {
+  language: areaLanguage,
   nobridge: areaNoBridge,
   i18n: areaI18n,
   portals: areaPortals,

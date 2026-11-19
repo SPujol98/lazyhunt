@@ -28,6 +28,8 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Final
 
+from cva.i18n import LEGACY_LANG, Lang, t
+
 _BLACK_FLAG: Final = "\U0001f3f4"
 _CANCEL_TAG: Final = "\U000e007f"
 _VS16: Final = "\ufe0f"
@@ -77,8 +79,8 @@ class GuardReport:
         return self.tampering or bool(self.hidden_text)
 
 
-def warning_line(report: GuardReport | None) -> str:
-    """The single Spanish card line for a flagged report, else ``""``.
+def warning_line(report: GuardReport | None, lang: Lang = LEGACY_LANG) -> str:
+    """The single card line (UI language ``lang``) for a flagged report, else ``""``.
 
     Counts are reported per kind (characters, hidden blocks), never summed;
     the summed count below only drives singular/plural agreement of the verb.
@@ -87,14 +89,17 @@ def warning_line(report: GuardReport | None) -> str:
         return ""
     kinds: list[str] = []
     if report.removed:
-        noun = "carácter invisible" if report.removed == 1 else "caracteres invisibles"
-        kinds.append(f"{report.removed} {noun}")
+        form = "one" if report.removed == 1 else "other"
+        kinds.append(t(f"bot.guard.chars.{form}", lang, n=report.removed))
     if report.hidden_blocks:
-        noun = "bloque oculto" if report.hidden_blocks == 1 else "bloques ocultos"
-        kinds.append(f"{report.hidden_blocks} {noun}")
-    detail = ", ".join(kinds) or "contenido oculto"
-    suffix = "eliminado" if report.removed + report.hidden_blocks <= 1 else "eliminados"
-    return f"\u26a0\ufe0f Texto oculto en la oferta: {detail} ({suffix})"
+        form = "one" if report.hidden_blocks == 1 else "other"
+        kinds.append(t(f"bot.guard.blocks.{form}", lang, n=report.hidden_blocks))
+    detail = ", ".join(kinds) or t("bot.guard.hidden", lang)
+    total = report.removed + report.hidden_blocks
+    suffix = t(
+        "bot.guard.removed.one" if total <= 1 else "bot.guard.removed.other", lang
+    )
+    return t("bot.guard.line", lang, detail=detail, suffix=suffix)
 
 
 def _is_word_char(ch: str) -> bool:

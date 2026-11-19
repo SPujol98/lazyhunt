@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
+### Added
+
+- English Telegram interface, selected with the new `ui_language` setting (`auto`, `en` or `es`; `auto`, the default, follows the system language). It covers messages, buttons, `/help`, the command menu, the HTML dashboard, the CLI and the interview-prep output. The setup wizard asks for it.
+- English command names: `/rescue`, `/calibration`, `/pause`, `/resume` and `/basecover`. The Spanish names keep working.
+- `profiles/README.md`: a guide to the profile layout and where each file goes.
+- Browser extension: a one-click language selector (Auto, EN, ES) in Options; Auto keeps the browser language.
+- README: an illustrated offer card (a real bot message rendered with demo data).
+
+### Changed
+
+- `ui_language` defaults to `auto`: the system language (Spanish if it starts with `es`, English otherwise). If you already use the Spanish interface and want it regardless of the system, set `ui_language = "es"` in `config.local.toml` to keep it exactly as it was.
+- CVs, cover letters and follow-up drafts still follow the language of each offer, whatever `ui_language` is.
+
 ## [0.2.0] - 2026-11-18
 
 ### Added
@@ -32,6 +47,7 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SPujol98/lazyhunt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SPujol98/lazyhunt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SPujol98/lazyhunt/releases/tag/v0.1.0

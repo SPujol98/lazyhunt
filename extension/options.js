@@ -7,7 +7,7 @@
 // shapes, and the runtime messages sent to the service worker, follow the
 // spec's sections 2 and 3.
 
-import { t } from './i18n.js';
+import { t, applyUiLanguage, loadUiLanguage, normalizeUiLanguage } from './i18n.js';
 import { PORTALS, portalFor } from './portals/registry.js';
 import { portalOrigin, termsMessageKey, termsWarning } from './portals/terms.js';
 import {
@@ -30,7 +30,7 @@ const FETCH_TIMEOUT_MS = 5000;
 const SECRET_HEADER = 'X-CVA-Bridge-Secret';
 const LOAD_KEYS = [
   'settings', 'beacons', 'searches', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters',
-  'profileFamilies', 'familyTitleFilters', 'enabledPortals', 'botConfig', 'lastCheck',
+  'profileFamilies', 'familyTitleFilters', 'enabledPortals', 'botConfig', 'lastCheck', 'uiLanguage',
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -58,6 +58,25 @@ function localizeStatic() {
       node.setAttribute(attr, tr(node.getAttribute(`data-i18n-${attr}`), null, english));
     }
   }
+}
+
+// The language selector: stored at once (like the portal switches), applied
+// to the open page without losing unsaved edits.
+function renderLanguage() {
+  const current = normalizeUiLanguage(state.stored && state.stored.uiLanguage);
+  for (const button of $('languageSegment').querySelectorAll('[data-lang]')) {
+    button.setAttribute('aria-pressed', button.getAttribute('data-lang') === current ? 'true' : 'false');
+  }
+}
+
+async function setLanguage(value) {
+  const lang = normalizeUiLanguage(value);
+  await chrome.storage.local.set({ uiLanguage: lang });
+  state.stored = { ...state.stored, uiLanguage: lang };
+  await applyUiLanguage(lang);
+  localizeStatic();
+  renderLanguage();
+  if (state.draft) drawEverything();
 }
 
 // --- pure helpers ----------------------------------------------------------------
@@ -225,6 +244,7 @@ function drawEverything() {
   renderFilter();
   renderConnection();
   renderBotInfo();
+  renderLanguage();
 }
 
 function scannableCount() {
@@ -793,6 +813,10 @@ function exportConfig() {
     titleFilter: filters.ai,
     titleFilterBackend: filters.backend,
   };
+  // The interface language, only when one is forced: an `auto` file is the
+  // same as before and older versions ignore the key.
+  const language = normalizeUiLanguage(state.stored && state.stored.uiLanguage);
+  if (language !== 'auto') config.uiLanguage = language;
   // Declared families' filters (role families); absent for the built-ins, so
   // such a file is the same as before. Older versions ignore the key.
   const familyFilters = currentFamilyFilters();
@@ -865,6 +889,10 @@ async function importConfig(text) {
     },
     beacons,
   };
+  // An old export without a language keeps the stored one.
+  if (config.uiLanguage === 'en' || config.uiLanguage === 'es' || config.uiLanguage === 'auto') {
+    values.uiLanguage = config.uiLanguage;
+  }
   // An old export without searches or filters keeps the stored ones.
   if (Array.isArray(config.searches)) {
     config.searches.forEach(noteUnknown);
@@ -888,6 +916,10 @@ async function importConfig(text) {
   }
   await chrome.storage.local.set(values);
   await notifyWorker();
+  if (values.uiLanguage) {
+    await applyUiLanguage(values.uiLanguage);
+    localizeStatic();
+  }
   await load();
   setSaveState('');
   const done = tr('importDone', beacons.length, 'Imported $1 beacons.');
@@ -1052,6 +1084,9 @@ function wire() {
   });
   $('toggleSecretBtn').addEventListener('click', toggleSecret);
   $('clearHistoryBtn').addEventListener('click', clearHistory);
+  for (const button of $('languageSegment').querySelectorAll('[data-lang]')) {
+    button.addEventListener('click', () => setLanguage(button.getAttribute('data-lang')));
+  }
   $('exportBtn').addEventListener('click', exportConfig);
   $('importBtn').addEventListener('click', pickImportFile);
   document.addEventListener('keydown', (e) => {
@@ -1064,6 +1099,7 @@ function wire() {
 }
 
 async function init() {
+  await loadUiLanguage();
   localizeStatic();
   wire();
   await load();

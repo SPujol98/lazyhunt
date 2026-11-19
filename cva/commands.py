@@ -1,21 +1,26 @@
 """Single source of truth for the bot's commands (``/help`` + Telegram menu).
 
-``COMMANDS`` feeds both :func:`help_text` (grouped, with explanation and
-example) and :func:`menu_commands` (``set_my_commands``); a test fails when a
-``CommandHandler`` in ``bot.py`` is missing here. User-facing text is Spanish.
+``COMMANDS`` feeds :func:`help_text` (grouped, with explanation and example),
+:func:`menu_commands` (``set_my_commands``) and the ``CommandHandler``
+registration in ``bot.py`` (every name and alias of every command). The text
+lives in :mod:`cva.i18n.commands`, in English and Spanish; each command has a
+Spanish and an English name, both always registered, and the menu and help
+show the names of the UI language (``Settings.ui_language``).
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Final
 
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, join_list, t
 
-SECTION_ANALYZE: Final[str] = "🔎 Analizar"
-SECTION_CV: Final[str] = "📄 CVs y cartas"
-SECTION_TRACKING: Final[str] = "📊 Seguimiento"
-SECTION_BEACONS: Final[str] = "🔭 Beacons y búsquedas"
-SECTION_INTERVIEW: Final[str] = "🎤 Entrevistas"
-SECTION_OTHER: Final[str] = "ℹ️ Otros"
+# Section ids, in /help order (titles: ``commands.section.<id>``).
+SECTION_ANALYZE: Final[str] = "analyze"
+SECTION_CV: Final[str] = "cv"
+SECTION_TRACKING: Final[str] = "tracking"
+SECTION_BEACONS: Final[str] = "beacons"
+SECTION_INTERVIEW: Final[str] = "interview"
+SECTION_OTHER: Final[str] = "other"
 SECTIONS: Final[tuple[str, ...]] = (
     SECTION_ANALYZE,
     SECTION_CV,
@@ -25,337 +30,201 @@ SECTIONS: Final[tuple[str, ...]] = (
     SECTION_OTHER,
 )
 
-BUTTONS_SECTION_TITLE: Final[str] = "🔘 Botones de las tarjetas"
+
+def section_title(section: str, lang: Lang = LEGACY_LANG) -> str:
+    """A section's /help title; ``"buttons"`` is the card-buttons section."""
+    return t(f"commands.section.{section}", lang)
 
 
 @dataclass(frozen=True)
 class Command:
-    name: str  # without the slash; Telegram rules: [a-z0-9_]{1,32}
+    """One bot command. ``name`` is its stable id and Spanish name (Telegram
+    rules: ``[a-z0-9_]{1,32}``); ``en_name`` its English name when different.
+    Text: ``commands.cmd.<name>.{usage,menu,explanation,example}``."""
+
+    name: str
     section: str
-    usage: str  # shown in /help, e.g. "/cv <id> [AI|BACKEND] [es|en|ca]"
-    menu: str  # short description for the Telegram command menu (<= 256)
+    aliases: tuple[str, ...] = ()
+    en_name: str | None = None
+
+    def name_for(self, lang: Lang) -> str:
+        """The name the menu and /help show in ``lang``."""
+        return self.en_name if lang == "en" and self.en_name else self.name
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        """Every language's name (registered as handlers, besides aliases)."""
+        if not self.en_name or self.en_name == self.name:
+            return (self.name,)
+        return (self.name, self.en_name)
+
+    def text(self, field: str, lang: Lang) -> str:
+        """``usage``, ``menu``, ``explanation`` or ``example`` in ``lang``."""
+        return t(f"commands.cmd.{self.name}.{field}", lang)
+
+
+@dataclass(frozen=True)
+class CommandDoc:
+    """A command rendered for one language and profile (for /help)."""
+
+    name: str
+    section: str
+    usage: str
+    menu: str
     explanation: str
     example: str
-    aliases: tuple[str, ...] = ()
 
 
 COMMANDS: Final[tuple[Command, ...]] = (
-    Command(
-        "analyze",
-        SECTION_ANALYZE,
-        "/analyze [url]",
-        "Analiza una oferta (enlace o texto pegado)",
-        "Puntúa una oferta contra tu perfil. Sin enlace, pide el texto.",
-        "/analyze https://www.linkedin.com/jobs/view/123456",
-    ),
-    Command(
-        "rescatar",
-        SECTION_ANALYZE,
-        "/rescatar <id>",
-        "Recupera una oferta descartada (mira /panel)",
-        "Reenvía la tarjeta completa de una oferta descartada, sin tocar su nota.",
-        "/rescatar 42",
-    ),
-    Command(
-        "cv",
-        SECTION_CV,
-        "/cv <id> [AI|BACKEND] [es|en|ca]",
-        "Genera el CV adaptado a una oferta",
-        "PDF del CV para la oferta #id. Rol e idioma opcionales "
-        "(si faltan, se eligen solos).",
-        "/cv 42 BACKEND en",
-    ),
-    Command(
-        "cartabase",
-        SECTION_CV,
-        "/cartabase [es|en|ca] (o /base)",
-        "Tu carta genérica para portales (sin oferta)",
-        "Carta sin oferta concreta, lista para copiar.",
-        "/cartabase en",
-        aliases=("base",),
-    ),
-    Command(
-        "status",
-        SECTION_TRACKING,
-        "/status [id]",
-        "Estado de las ofertas recientes",
-        "Sin id, las últimas 10 ofertas; con id, el estado de una.",
-        "/status 42",
-    ),
-    Command(
-        "sent",
-        SECTION_TRACKING,
-        "/sent <id>",
-        "Marca una oferta como enviada",
-        "Registra que enviaste la candidatura de la oferta #id.",
-        "/sent 42",
-    ),
-    Command(
-        "outcome",
-        SECTION_TRACKING,
-        "/outcome <id>",
-        "Registra el resultado de una candidatura",
-        "Historial de la enviada #id y botones para anotar cómo va. "
-        "Tras 10 días sin noticias propone un seguimiento (lo envías tú).",
-        "/outcome 42",
-    ),
-    Command(
-        "calibracion",
-        SECTION_TRACKING,
-        "/calibracion",
-        "Ejemplos que calibran la nota del bot",
-        "Resultados que calibran la nota; cada uno se puede desactivar.",
-        "/calibracion",
-    ),
-    Command(
-        "skip",
-        SECTION_TRACKING,
-        "/skip",
-        "Omite la nota de feedback pendiente",
-        "Tras un resultado el bot pide una nota; /skip la omite.",
-        "/skip",
-    ),
-    Command(
-        "export",
-        SECTION_TRACKING,
-        "/export",
-        "Exporta el xlsx de enviadas",
-        "Excel solo con las enviadas; te dice dónde quedó.",
-        "/export",
-    ),
-    Command(
-        "panel",
-        SECTION_TRACKING,
-        "/panel",
-        "Panel HTML con KPIs, gráficos y tabla",
-        "HTML sin conexión: métricas, gráficos, alertas, tabla filtrable y "
-        "descartadas (/rescatar).",
-        "/panel",
-    ),
-    Command(
-        "keywords",
-        SECTION_BEACONS,
-        "/keywords [perfil]",
-        "Registro de palabras clave más demandadas",
-        "Muestra las keywords vistas en ofertas y su frecuencia (filtra por perfil).",
-        "/keywords backend",
-    ),
-    Command(
-        "beacons",
-        SECTION_BEACONS,
-        "/beacons",
-        "Estado de los beacons (búsquedas vigiladas)",
-        "Cada beacon con estado, muros seguidos y última comprobación.",
-        "/beacons",
-    ),
-    Command(
-        "beacon",
-        SECTION_BEACONS,
-        "/beacon resume|disable <id>",
-        "Reactiva o desactiva un beacon",
-        "resume reactiva un beacon pausado; disable lo desactiva.",
-        "/beacon resume 3",
-    ),
-    Command(
-        "star",
-        SECTION_INTERVIEW,
-        "/star",
-        "Tu banco de historias STAR para entrevistas",
-        "Pregunta situación, tarea, acción y resultado de tus experiencias; "
-        "luego las lista (✅ completa, ✏️ faltan partes) para ver, editar o "
-        "borrar. /skip deja un campo vacío.",
-        "/star",
-    ),
-    Command(
-        "prep",
-        SECTION_INTERVIEW,
-        "/prep <id>",
-        "Prepara una entrevista (HTML con temas y huecos)",
-        "Elige fase (RR. HH., Técnica, Final): HTML con temas, huecos, STAR, "
-        "salario y preguntas.",
-        "/prep 42",
-    ),
-    Command(
-        "pausa",
-        SECTION_OTHER,
-        "/pausa",
-        "Pausa búsquedas, análisis automático y Gmail",
-        "Detiene todo lo automático; /analyze sigue.",
-        "/pausa",
-    ),
-    Command(
-        "reanudar",
-        SECTION_OTHER,
-        "/reanudar",
-        "Reanuda lo automático tras /pausa",
-        "Vuelve a activar lo pausado.",
-        "/reanudar",
-    ),
-    Command(
-        "help",
-        SECTION_OTHER,
-        "/help",
-        "Muestra esta ayuda",
-        "Comandos y botones (también /start).",
-        "/help",
-        aliases=("start",),
-    ),
+    Command("analyze", SECTION_ANALYZE),
+    Command("rescatar", SECTION_ANALYZE, en_name="rescue"),
+    Command("cv", SECTION_CV),
+    Command("cartabase", SECTION_CV, aliases=("base",), en_name="basecover"),
+    Command("status", SECTION_TRACKING),
+    Command("sent", SECTION_TRACKING),
+    Command("outcome", SECTION_TRACKING),
+    Command("calibracion", SECTION_TRACKING, en_name="calibration"),
+    Command("skip", SECTION_TRACKING),
+    Command("export", SECTION_TRACKING),
+    Command("panel", SECTION_TRACKING),
+    Command("keywords", SECTION_BEACONS),
+    Command("beacons", SECTION_BEACONS),
+    Command("beacon", SECTION_BEACONS),
+    Command("star", SECTION_INTERVIEW),
+    Command("prep", SECTION_INTERVIEW),
+    Command("pausa", SECTION_OTHER, en_name="pause"),
+    Command("reanudar", SECTION_OTHER, en_name="resume"),
+    Command("help", SECTION_OTHER, aliases=("start",)),
 )
 
-# Every inline button the bot shows on its cards (notifier keyboards).
-BUTTONS: Final[tuple[tuple[str, str], ...]] = (
-    ("🔎 Analizar", "en el aviso de una oferta nueva: la analiza igual que /analyze."),
-    ("📄 Generar CV", "crea el PDF con el rol e idioma elegidos en la tarjeta."),
-    ("Idioma: ES/EN/CA", "cambia el idioma del CV (Backend solo ES/EN)."),
-    ("Variante: AI/Backend", "alterna el perfil del CV entre AI y Backend."),
-    (
-        "💶 Investigar salario",
-        "busca en la web un rango salarial con fuentes (puede no encontrar nada).",
-    ),
-    (
-        "✉️ Carta de presentación",
-        (
-            "sobre tu carta base, con la empresa investigada (y sus fuentes) "
-            '("(la piden)" = la oferta pide carta).'
-        ),
-    ),
-    ("✅ Usar esta", "debajo de la carta: la guarda en la oferta."),
-    ("🗑 Descartar", "descarta la oferta; si ya hay CV, no se registra envío."),
-    ("✅ Marcar enviada", "igual que /sent: la oferta pasa a «enviada»."),
-    ("🔄 Rehacer CV", "vuelve a generar el mismo CV (por si cambiaron los CV base)."),
-    (
-        "📝 Resultado",
-        "en una oferta enviada: abre /outcome para anotar cómo va la candidatura.",
-    ),
-    (
-        "Estados del resultado",
-        (
-            "Screening, Entrevista técnica, Entrevista final, Oferta, Aceptada, "
-            "Rechazada, Sin respuesta, Retirada: guardan el estado y piden nota."
-        ),
-    ),
-    (
-        "Calibrar: Sí · No",
-        (
-            "tras una entrevista o rechazo: usa esa oferta (o no) para "
-            "calibrar la nota. Motivo del rechazo: Requisitos, Stack, Idioma "
-            "u Otro / no sé (no calibra)."
-        ),
-    ),
-    (
-        "✅ Enviado",
-        (
-            "en un recordatorio de seguimiento: anota que enviaste tú el "
-            "mensaje (máximo 2)."
-        ),
-    ),
-    (
-        "⏭️ Saltar",
-        "en un recordatorio de seguimiento: lo pospone 7 días.",
-    ),
-    (
-        "🔕 Sin respuesta",
-        ("en un recordatorio de seguimiento: marca la oferta como sin respuesta."),
-    ),
-    (
-        "➕ Experiencia o proyecto",
-        "en /star: elige de qué contar una historia (también «Añadir otra»).",
-    ),
-    (
-        "👁 Ver · ✏️ Editar · 🗑 Borrar",
-        (
-            "en /star: ver una historia, rehacer un campo (Situación, Tarea, "
-            "Acción, Resultado, Uso) o borrarla (Sí, borrar / Cancelar). Volver."
-        ),
-    ),
-    (
-        "🎯 Preparar entrevista",
-        (
-            "en /outcome y al pasar a screening o entrevista: elige fase y "
-            "recibe el HTML de /prep."
-        ),
-    ),
-    ("▶️ Reactivar", "en el aviso de beacon pausado: lo reactiva."),
-    ("⏹ Desactivar", "en el aviso de beacon pausado: deja de comprobarlo."),
+# Every inline button the bot shows on its cards (notifier keyboards), by
+# stable id; text: ``commands.button.<id>.{label,what}``. ``language`` and
+# ``variant`` name the profile's families (see :func:`buttons_for`).
+BUTTONS: Final[tuple[str, ...]] = (
+    "analyze",
+    "generate_cv",
+    "language",
+    "variant",
+    "salary",
+    "cover_letter",
+    "use_this",
+    "discard",
+    "mark_sent",
+    "redo_cv",
+    "outcome",
+    "outcome_states",
+    "calibrate",
+    "followup_sent",
+    "followup_skip",
+    "followup_no_reply",
+    "star_add",
+    "star_manage",
+    "prep",
+    "beacon_resume",
+    "beacon_disable",
 )
 
 
-def menu_commands() -> tuple[tuple[str, str], ...]:
+def menu_commands(lang: Lang = LEGACY_LANG) -> tuple[tuple[str, str], ...]:
     """(name, description) pairs for Telegram's ``set_my_commands``."""
-    return tuple((c.name, c.menu) for c in COMMANDS)
+    return tuple((c.name_for(lang), c.text("menu", lang)) for c in COMMANDS)
 
 
-def cv_usage(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
+def cv_usage(
+    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
+) -> str:
     """``/cv`` usage naming the profile's roles and CV languages."""
     roles = "|".join(f.role for f in families.families)
-    return f"/cv <id> [{roles}] [{'|'.join(families.languages)}]"
+    name = _by_name("cv").name_for(lang)
+    return f"/{name} <id> [{roles}] [{'|'.join(families.languages)}]"
 
 
-def _join_es(items: list[str]) -> str:
-    """Spanish list: "a", "a y b", "a, b y c"."""
-    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} y {items[-1]}"
+def _by_name(name: str) -> Command:
+    (command,) = [c for c in COMMANDS if c.name == name]
+    return command
 
 
-def commands_for(families: FamilyRegistry = BUILTIN_REGISTRY) -> tuple[Command, ...]:
-    """``COMMANDS`` with ``/cv`` and ``/keywords`` naming the profile's role
-    families (role-families T5; the built-ins give ``COMMANDS`` unchanged)."""
+def commands_for(
+    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
+) -> tuple[CommandDoc, ...]:
+    """``COMMANDS`` rendered in ``lang``; ``/cv`` and ``/keywords`` name the
+    profile's role families (role-families T5)."""
     last = families.families[-1]
-    examples = {
-        "cv": f"/cv 42 {last.role} {last.languages[-1]}",
-        "keywords": f"/keywords {last.id}",
+    computed = {
+        ("cv", "usage"): cv_usage(families, lang),
+        ("cv", "example"): f"/{_by_name('cv').name_for(lang)} 42 "
+        f"{last.role} {last.languages[-1]}",
+        ("keywords", "example"): f"/{_by_name('keywords').name_for(lang)} {last.id}",
     }
-    out: list[Command] = []
-    for command in COMMANDS:
-        if command.name == "cv":
-            command = replace(command, usage=cv_usage(families))
-        if command.name in examples:
-            command = replace(command, example=examples[command.name])
-        out.append(command)
-    return tuple(out)
+
+    def field(command: Command, name: str) -> str:
+        return computed.get((command.name, name)) or command.text(name, lang)
+
+    return tuple(
+        CommandDoc(
+            name=command.name_for(lang),
+            section=command.section,
+            usage=field(command, "usage"),
+            menu=field(command, "menu"),
+            explanation=field(command, "explanation"),
+            example=field(command, "example"),
+        )
+        for command in COMMANDS
+    )
 
 
 def buttons_for(
-    families: FamilyRegistry = BUILTIN_REGISTRY,
+    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
 ) -> tuple[tuple[str, str], ...]:
-    """``BUTTONS`` with the language and variant toggles naming the profile's
-    families and their CV languages (the built-ins give ``BUTTONS``)."""
+    """(label, what) per ``BUTTONS`` id in ``lang``; the language and variant
+    toggles name the profile's families and their CV languages."""
     langs = families.languages
     limits = [
-        f"{f.label} solo {'/'.join(code.upper() for code in f.languages)}"
+        t(
+            "commands.button.language.limit",
+            lang,
+            label=f.label,
+            langs="/".join(code.upper() for code in f.languages),
+        )
         for f in families.families
         if f.languages != langs
     ]
-    lang_note = f" ({'; '.join(limits)})" if limits else ""
     labels = [f.label for f in families.families]
-    toggles = {
-        "Idioma: ES/EN/CA": (
-            f"Idioma: {'/'.join(code.upper() for code in langs)}",
-            f"cambia el idioma del CV{lang_note}.",
-        ),
-        "Variante: AI/Backend": (
-            f"Variante: {'/'.join(labels)}",
-            f"alterna el perfil del CV entre {_join_es(labels)}.",
-        ),
+    fmt: dict[str, dict[str, str]] = {
+        "language": {
+            "langs": "/".join(code.upper() for code in langs),
+            "note": f" ({'; '.join(limits)})" if limits else "",
+        },
+        "variant": {"labels": "/".join(labels), "families": join_list(labels, lang)},
     }
-    return tuple(toggles.get(label, (label, what)) for label, what in BUTTONS)
+    out: list[tuple[str, str]] = []
+    for button in BUTTONS:
+        values = fmt.get(button, {})
+        label = t(f"commands.button.{button}.label", lang, **values)
+        what = t(f"commands.button.{button}.what", lang, **values)
+        out.append((label, what))
+    return tuple(out)
 
 
-def help_text(families: FamilyRegistry = BUILTIN_REGISTRY) -> str:
-    """Grouped ``/help`` text: usage, explanation and example per command;
-    ``/cv``, ``/keywords`` and the card toggles name the profile's families."""
-    lines = ["Asistente de seguimiento de ofertas."]
-    commands = commands_for(families)
+def help_text(
+    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
+) -> str:
+    """Grouped ``/help`` text in ``lang``: usage, explanation and example per
+    command; ``/cv``, ``/keywords`` and the card toggles name the profile's
+    families."""
+    lines = [t("commands.header", lang)]
+    commands = commands_for(families, lang)
     for section in SECTIONS:
-        lines.extend(["", section])
+        lines.extend(["", section_title(section, lang)])
         for command in commands:
             if command.section == section:
                 lines.extend(
                     [
-                        f"{command.usage}",
+                        command.usage,
                         f"  {command.explanation}",
-                        f"  Ej.: {command.example}",
+                        f"  {t('commands.example', lang, example=command.example)}",
                     ]
                 )
-    lines.extend(["", BUTTONS_SECTION_TITLE])
-    lines.extend(f"{label} — {what}" for label, what in buttons_for(families))
+    lines.extend(["", section_title("buttons", lang)])
+    lines.extend(f"{label} — {what}" for label, what in buttons_for(families, lang))
     return "\n".join(lines)

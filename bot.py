@@ -3,13 +3,15 @@
 Thin shell over the service seam; run_polling only. Single-owner whitelist
 (unset owner 0 refuses everyone); WallError → paste prompt (D3); heartbeat =
 cva.scheduler (one JobQueue job / 10 min, first tick = startup catch-up).
-User-facing strings are Spanish on purpose; code and comments are English.
+User-facing strings follow ``Settings.ui_language`` (English or Spanish; the
+catalog is ``cva/i18n/bot.py``); code and comments are English.
 """
 
 import asyncio
 import io
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -53,11 +55,12 @@ from cva.calibration_ui import (
 from cva.calibration_ui import (
     reason_message as calibration_reason_message,
 )
-from cva.commands import cv_usage, menu_commands
+from cva.commands import COMMANDS, cv_usage, help_text, menu_commands
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.gmail.client import GoogleGmailClient
 from cva.gmail.sync import GmailSync, should_propose
+from cva.i18n import CATALOGS, LEGACY_LANG, Lang, t
 from cva.ingest import NotFoundError, OfferParseError
 from cva.llm import build_llm_client, describe_llm_setup
 from cva.match import infer_language
@@ -78,7 +81,6 @@ from cva.notifier import (
     GM,
     OE,
     OUT,
-    OUTCOME_NOTE_PROMPT,
     PREP,
     SAL,
     SentMessage,
@@ -98,7 +100,6 @@ from cva.notifier import (
     discard_message,
     discard_no_send_message,
     failure_reason,
-    help_message,
     next_lang,
     next_role,
     no_cv_reply,
@@ -108,6 +109,7 @@ from cva.notifier import (
     offer_status_line,
     outcome_keyboard,
     outcome_message,
+    outcome_note_prompt,
     paste_prompt,
     prep_keyboard,
     prep_stage_keyboard,
@@ -121,11 +123,8 @@ from cva.notifier import (
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
-from cva.service import JobService, OfferClosedError, ServiceError
-from cva.star import (
-    ST,
-    STAR_FIELDS,
-)
+from cva.service import JobService, OfferClosedError, ServiceError, display_result
+from cva.star import ST, star_fields
 from cva.star import candidates_keyboard as star_candidates_keyboard
 from cva.star import candidates_message as star_candidates_message
 from cva.star import delete_keyboard as star_delete_keyboard
@@ -153,11 +152,7 @@ _OWNER_KEY = "owner_id"
 # Path of the profile's cover_letter_base.toml (set by build_app from the same
 # profile the service loads; unset -> the default profile resolution).
 _LETTER_BASE_KEY = "letter_base"
-_CARTABASE_USAGE = "Uso: /cartabase [es|en|ca] (por defecto es)"
-_CARTABASE_NOTE = (
-    "ℹ️ Carta genérica para portales, sin oferta concreta. Para una oferta, "
-    "el botón ✉️ de su tarjeta la adapta a la empresa."
-)
+_LANG_KEY = "ui_language"  # Settings.ui_language, set by build_app
 
 
 def is_owner(user_id: int | None, owner_id: int) -> bool:
@@ -173,11 +168,49 @@ async def gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def start_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(help_message(_families(context)))
+    await update.message.reply_text(help_text(_families(context), lang=_lang(context)))
 
 
 def _service(context: ContextTypes.DEFAULT_TYPE) -> JobService:
     return context.bot_data[_SERVICE_KEY]
+
+
+def _lang(context: ContextTypes.DEFAULT_TYPE | None) -> Lang:
+    """The UI language ``build_app`` stored (``Settings.ui_language``); else
+    the service's; ``LEGACY_LANG`` (Spanish) for contexts built without
+    either (test doubles)."""
+    if context is None:
+        return LEGACY_LANG
+    stored = context.bot_data.get(_LANG_KEY)
+    if stored is not None:
+        lang: Lang = stored
+        return lang
+    return _ui(context.bot_data.get(_SERVICE_KEY))
+
+
+def _ui(service: object) -> Lang:
+    """The service's UI language (``LEGACY_LANG`` for a test double without one)."""
+    lang: Lang = getattr(service, "ui_language", LEGACY_LANG)
+    return lang
+
+
+def _err(exc: Exception, lang: Lang) -> str:
+    """``⚠️`` + the error in ``lang`` (keyed service errors are translated)."""
+    text = exc.text(lang) if isinstance(exc, ServiceError) else str(exc)
+    return f"⚠️ {text}"
+
+
+def _reason(exc: BaseException | None, lang: Lang) -> str:
+    """:func:`failure_reason` in ``lang``; keyed service errors translated."""
+    if isinstance(exc, ServiceError):
+        return exc.text(lang)
+    return failure_reason(exc, lang=lang)
+
+
+def _estado(estado: str, lang: Lang) -> str:
+    """A stored estado as the owner reads it (the raw value in Spanish)."""
+    key = f"notifier.estado.{estado}"
+    return t(key, lang) if key in CATALOGS[lang] else estado
 
 
 def _families(context: ContextTypes.DEFAULT_TYPE | None) -> FamilyRegistry:
@@ -191,7 +224,9 @@ def _families(context: ContextTypes.DEFAULT_TYPE | None) -> FamilyRegistry:
 
 def _apply_findings(service: JobService, offer_id: int) -> list[ApplyInstruction]:
     """Extra application steps in the offer text (pure; never blocks a card)."""
-    return detect_apply_instructions(service.offer(offer_id).source_data or "")
+    return detect_apply_instructions(
+        service.offer(offer_id).source_data or "", _ui(service)
+    )
 
 
 async def _analyze_and_reply(
@@ -199,29 +234,31 @@ async def _analyze_and_reply(
 ) -> None:
     """Analyze a persisted offer; ANY failure replies naming the cause and
     RE-ARMS the paste state so the owner can re-paste without /analyze."""
+    ui = _lang(context)
     try:
         result = await service.analyze(offer_id)
         offer = service.offer(offer_id)
         lang = infer_language(offer.source_data)
         role = _families(context).role_for(offer.perfil)
     except OfferClosedError:
-        await reply.reply_text(offer_closed_message())
+        await reply.reply_text(offer_closed_message(lang=ui))
         return
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
         context.user_data[_PASTE_KEY] = True
-        await reply.reply_text(analyze_failure_message(exc))
+        await reply.reply_text(analyze_failure_message(exc, lang=ui))
         return
     no_cv = service.no_cv_label(offer_id)
     cv_needed = no_cv is None
     card = breakdown_message(
-        result,
+        display_result(result, ui),
         offer_id,
         url=service.offer(offer_id).url_oferta,
         apply_findings=_apply_findings(service, offer_id),
         salary_line=service.card_extras(offer_id),
+        lang=ui,
     )
     await reply.reply_text(
-        card if no_cv is None else with_no_cv_line(card, no_cv),
+        card if no_cv is None else with_no_cv_line(card, no_cv, lang=ui),
         reply_markup=cv_keyboard(
             offer_id,
             role=role,
@@ -229,6 +266,7 @@ async def _analyze_and_reply(
             cover_letter_asked=_cover_letter_asked(service, offer_id),
             cv_needed=cv_needed,
             families=_families(context),
+            ui_lang=ui,
         ),
     )
 
@@ -242,9 +280,9 @@ async def _ingest_url(
         return await service.ingest(url, None)
     except (WallError, OfferParseError):
         context.user_data[_PASTE_KEY] = True
-        await reply.reply_text(paste_prompt())
+        await reply.reply_text(paste_prompt(lang=_lang(context)))
     except NotFoundError:
-        await reply.reply_text(not_found_message())
+        await reply.reply_text(not_found_message(lang=_lang(context)))
     return None
 
 
@@ -252,7 +290,7 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     args = context.args or []
     if not args:
         context.user_data[_PASTE_KEY] = True  # next plain message = pasted offer
-        await update.message.reply_text(paste_prompt())
+        await update.message.reply_text(paste_prompt(lang=_lang(context)))
         return
     service = _service(context)
     offer_id = await _ingest_url(service, update.message, context, args[0])
@@ -275,7 +313,7 @@ async def paste_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         offer_id = await service.ingest(None, update.message.text or "")
     except ValueError:
-        await update.message.reply_text("El texto está vacío; pega la oferta de nuevo.")
+        await update.message.reply_text(t("bot.empty_paste", _lang(context)))
         return
     await _analyze_and_reply(service, update.message, context, offer_id)
 
@@ -301,9 +339,9 @@ async def _save_outcome_note(
     try:
         _service(context).add_outcome_note(offer_id, update.message.text or "")
     except (ServiceError, RepositoryError) as exc:
-        await update.message.reply_text(f"⚠️ {exc}")
+        await update.message.reply_text(_err(exc, _lang(context)))
         return
-    await update.message.reply_text(f"📝 Nota guardada en #{offer_id}.")
+    await update.message.reply_text(t("bot.note_saved", _lang(context), id=offer_id))
 
 
 def _clear_star(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -348,7 +386,9 @@ async def _ask_star(
     context.user_data[_STAR_KEY] = {"id": star_id, "queue": queue, "total": total}
     context.user_data[_STAR_AT_KEY] = time.time()
     position = total - len(queue) + 1
-    await reply.reply_text(star_question_message(position, total, queue[0]))
+    await reply.reply_text(
+        star_question_message(position, total, queue[0], _lang(context))
+    )
 
 
 async def _begin_star(
@@ -378,10 +418,11 @@ async def _star_progress(
         await _ask_star(context, reply, story.id, queue, total=int(pending["total"]))
         return
     _clear_star(context)
+    lang = _lang(context)
     await _reply_long(
         reply,
-        f"{star_story_message(story)}\n\nGuardada tal cual la escribiste.",
-        star_story_keyboard(story.id),
+        f"{star_story_message(story, lang)}\n\n{t('bot.star_saved', lang)}",
+        star_story_keyboard(story.id, lang),
     )
 
 
@@ -396,37 +437,42 @@ async def _save_star_answer(
             int(pending["id"]), field, update.message.text or ""
         )
     except ServiceError:
+        lang = _lang(context)
         await update.message.reply_text(
             star_question_message(
                 int(pending["total"]) - len(pending["queue"]) + 1,
                 int(pending["total"]),
                 field,
+                lang,
             )
-            + "\n(Escribe una respuesta o usa /skip.)"
+            + "\n"
+            + t("bot.star_answer_hint", lang)
         )
         return
     except RepositoryError as exc:
         _clear_star(context)
-        await update.message.reply_text(f"⚠️ {exc}")
+        await update.message.reply_text(_err(exc, _lang(context)))
         return
     await _star_progress(context, update.message, pending, story)
 
 
 async def star_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _clear_star(context)
-    await _star_list(_service(context), update.message)
+    await _star_list(_service(context), update.message, _lang(context))
 
 
-async def _star_list(service: JobService, reply) -> None:
+async def _star_list(service: JobService, reply, lang: Lang) -> None:
     stories = service.star_stories()
     if not stories:
         candidates = service.star_candidates()
         await reply.reply_text(
-            star_candidates_message(candidates, first=True),
-            reply_markup=star_candidates_keyboard(candidates),
+            star_candidates_message(candidates, first=True, lang=lang),
+            reply_markup=star_candidates_keyboard(candidates, lang),
         )
         return
-    await _reply_long(reply, star_list_message(stories), star_list_keyboard(stories))
+    await _reply_long(
+        reply, star_list_message(stories, lang), star_list_keyboard(stories, lang)
+    )
 
 
 async def _star_callback(
@@ -434,16 +480,17 @@ async def _star_callback(
 ) -> None:
     """``st:`` buttons: candidates, view, per-field edit, delete."""
     reply = query.message
+    lang = _lang(context)
     try:
         action = parts[0] if parts else ""
         if action == "l" and len(parts) == 1:
             _clear_star(context)
-            await _star_list(service, reply)
+            await _star_list(service, reply, lang)
         elif action == "add" and len(parts) == 1:
             candidates = service.star_candidates(unused_only=True)
             await reply.reply_text(
-                star_candidates_message(candidates, first=False),
-                reply_markup=star_candidates_keyboard(candidates)
+                star_candidates_message(candidates, first=False, lang=lang),
+                reply_markup=star_candidates_keyboard(candidates, lang)
                 if candidates
                 else None,
             )
@@ -452,37 +499,39 @@ async def _star_callback(
             if not created:
                 await _reply_long(
                     reply,
-                    "Ya tienes una historia con esto.\n" + star_story_message(story),
-                    star_story_keyboard(story.id),
+                    t("bot.star_exists", lang) + "\n" + star_story_message(story, lang),
+                    star_story_keyboard(story.id, lang),
                 )
                 return
             await _begin_star(
                 context,
                 reply,
                 story,
-                [f for f, _q in STAR_FIELDS],
-                intro=star_intro_message(story, service.star_source_texts(story)),
+                [f for f, _q in star_fields(lang)],
+                intro=star_intro_message(story, service.star_source_texts(story), lang),
             )
         elif action in ("v", "e", "d", "dy") and len(parts) == 2 and parts[1].isdigit():
             story = service.star_story(int(parts[1]))
             if action == "v":
                 await _reply_long(
-                    reply, star_story_message(story), star_story_keyboard(story.id)
+                    reply,
+                    star_story_message(story, lang),
+                    star_story_keyboard(story.id, lang),
                 )
             elif action == "e":
                 await reply.reply_text(
-                    f"¿Qué campo de «{story.title}» quieres rehacer?",
-                    reply_markup=star_edit_keyboard(story.id),
+                    t("bot.star_edit_which", lang, title=story.title),
+                    reply_markup=star_edit_keyboard(story.id, lang),
                 )
             elif action == "d":
                 await reply.reply_text(
-                    f"¿Borrar «{story.title}»? No se puede deshacer.",
-                    reply_markup=star_delete_keyboard(story.id),
+                    t("bot.star_delete_confirm", lang, title=story.title),
+                    reply_markup=star_delete_keyboard(story.id, lang),
                 )
             else:
                 service.delete_star(story.id)
                 _clear_star(context)
-                await reply.reply_text(f"🗑 «{story.title}» borrada.")
+                await reply.reply_text(t("bot.star_deleted", lang, title=story.title))
         elif (
             action == "f"
             and len(parts) == 3
@@ -491,17 +540,19 @@ async def _star_callback(
         ):
             story = service.star_story(int(parts[1]))
             index = int(parts[2])
-            if index >= len(STAR_FIELDS):
-                await reply.reply_text("Acción no reconocida.")
+            fields = star_fields(lang)
+            if index >= len(fields):
+                await reply.reply_text(t("bot.unknown_action", lang))
                 return
-            await _begin_star(context, reply, story, [STAR_FIELDS[index][0]])
+            await _begin_star(context, reply, story, [fields[index][0]])
         else:
-            await reply.reply_text("Acción no reconocida.")
+            await reply.reply_text(t("bot.unknown_action", lang))
     except (ServiceError, RepositoryError) as exc:
-        await reply.reply_text(f"⚠️ {exc}")
+        await reply.reply_text(_err(exc, lang))
 
 
 async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    lang = _lang(context)
     pending = _live_star(context)
     if pending is not None:
         service = _service(context)
@@ -511,34 +562,35 @@ async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             story = service.skip_star(int(pending["id"]), field)
         except (ServiceError, RepositoryError) as exc:
             _clear_star(context)
-            await update.message.reply_text(f"⚠️ {exc}")
+            await update.message.reply_text(_err(exc, lang))
             return
         if getattr(kept, field) != STAR_PLACEHOLDER:
             await update.message.reply_text(
-                f"Sin cambios en {star_field_label(field)}."
+                t("bot.star_unchanged", lang, field=star_field_label(field, lang))
             )
         await _star_progress(context, update.message, pending, story)
         return
     if _take_pending_note(context) is None:
-        await update.message.reply_text("No hay nada que saltar.")
+        await update.message.reply_text(t("bot.skip_nothing", lang))
         return
-    await update.message.reply_text("Vale, sin nota.")
+    await update.message.reply_text(t("bot.skip_note", lang))
 
 
 async def _reply_outcome_menu(service: JobService, reply, offer_id: int) -> None:
     """Header + timeline, with the estado buttons once the offer is sent."""
+    lang = _ui(service)
     try:
         offer = service.offer(offer_id)
     except RepositoryError as exc:
-        await reply.reply_text(f"⚠️ {exc}")
+        await reply.reply_text(_err(exc, lang))
         return
-    text = outcome_message(offer, service.outcome_events(offer_id))
+    text = outcome_message(offer, service.outcome_events(offer_id), lang=lang)
     if offer.fecha_envio is None:
-        await reply.reply_text(
-            f"{text}\nTodavía no está enviada: márcala con /sent {offer_id} primero."
-        )
+        await reply.reply_text(f"{text}\n" + t("bot.not_sent_yet", lang, id=offer_id))
         return
-    await reply.reply_text(text, reply_markup=outcome_keyboard(offer_id, offer.estado))
+    await reply.reply_text(
+        text, reply_markup=outcome_keyboard(offer_id, offer.estado, lang=lang)
+    )
 
 
 async def _followup_action(
@@ -548,24 +600,25 @@ async def _followup_action(
 
     Buttons are stale once the offer left ``enviada``: nothing is changed.
     """
+    lang = _ui(service)
     try:
         estado = service.offer(offer_id).estado
         if estado != "enviada":
             await query.message.reply_text(
-                f"Esta candidatura ya está en {estado}; no he cambiado nada."
+                t("bot.already_in", lang, estado=_estado(estado, lang))
             )
             return
         if action == "ok":
             number = service.record_followup_sent(offer_id)
-            done = f"✅ Seguimiento {number} anotado en #{offer_id}."
+            done = t("bot.fu_ok", lang, number=number, id=offer_id)
         elif action == "skip":
             service.snooze_followup(offer_id)
-            done = f"⏭️ #{offer_id}: te lo recordaré dentro de 7 días."
+            done = t("bot.fu_skip", lang, id=offer_id)
         else:
             service.record_outcome(offer_id, "sin_respuesta")
-            done = f"🔕 #{offer_id} marcada como sin respuesta."
+            done = t("bot.fu_none", lang, id=offer_id)
     except (ServiceError, RepositoryError) as exc:
-        await query.message.reply_text(f"⚠️ {exc}")
+        await query.message.reply_text(_err(exc, lang))
         return
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(done)
@@ -580,11 +633,12 @@ async def _ask_calibration(
     optional note capture armed just before (the note prompt follows it): the owner can answer it and still
     write the note (or /skip) in any order. Asked once per offer and polarity.
     """
+    lang = _ui(service)
     try:
         if service.calibration_needs_reason(offer_id, estado):
             await reply.reply_text(
-                calibration_reason_message(),
-                reply_markup=calibration_reason_keyboard(offer_id),
+                calibration_reason_message(lang),
+                reply_markup=calibration_reason_keyboard(offer_id, lang),
             )
             return
         example = service.propose_calibration(offer_id, estado)
@@ -592,23 +646,23 @@ async def _ask_calibration(
         _LOG.warning("calibration question skipped for #%s: %s", offer_id, exc)
         return
     if example is not None:
-        await _send_calibration_question(reply, example)
+        await _send_calibration_question(reply, example, lang)
 
 
-async def _send_calibration_question(reply, example: CalibrationExample) -> None:
+async def _send_calibration_question(
+    reply, example: CalibrationExample, lang: Lang
+) -> None:
     await reply.reply_text(
-        calibration_question_message(example),
-        reply_markup=calibration_question_keyboard(example.id),
+        calibration_question_message(example, lang),
+        reply_markup=calibration_question_keyboard(example.id, lang),
     )
-
-
-_CAL_STALE = "Esa pregunta ya está respondida; no he cambiado nada."
 
 
 async def _calibration_callback(service: JobService, query, parts: list[str]) -> None:
     """``cal:`` buttons: rejection reason, Sí/No on an example, deactivate."""
     reply = query.message
     action = parts[0]
+    lang = _ui(service)
     try:
         if (
             action == "r"
@@ -622,35 +676,36 @@ async def _calibration_callback(service: JobService, query, parts: list[str]) ->
                 # A reason already chosen whose Sí/No never arrived is re-asked.
                 pending = service.propose_calibration(offer_id, "rechazada", parts[2])
                 if pending is None:
-                    await reply.reply_text(_CAL_STALE)
+                    await reply.reply_text(t("bot.cal_stale", lang))
                     return
-                await _send_calibration_question(reply, pending)
+                await _send_calibration_question(reply, pending, lang)
                 return
             example = service.propose_calibration(offer_id, "rechazada", parts[2])
             if example is not None:
                 await query.edit_message_reply_markup(reply_markup=None)
-                await _send_calibration_question(reply, example)
+                await _send_calibration_question(reply, example, lang)
             else:
                 await query.edit_message_reply_markup(reply_markup=None)
-                await reply.reply_text("Vale, no se usará para calibrar.")
+                await reply.reply_text(t("bot.cal_declined", lang))
         elif action in ("y", "n", "d") and len(parts) == 2:
             example_id = _parse_id(parts[1])
             if example_id is None:
                 return
             await _calibration_answer(service, query, action, example_id)
     except (ServiceError, RepositoryError) as exc:
-        await reply.reply_text(f"⚠️ {exc}")
+        await reply.reply_text(_err(exc, lang))
 
 
 async def _calibration_answer(
     service: JobService, query, action: str, example_id: int
 ) -> None:
     reply = query.message
+    lang = _ui(service)
     if action == "d":
         if not service.deactivate_calibration(example_id):
-            await reply.reply_text(_CAL_STALE)
+            await reply.reply_text(t("bot.cal_stale", lang))
             return
-        await reply.reply_text("🗑 Ejemplo desactivado: ya no calibra la nota.")
+        await reply.reply_text(t("bot.cal_deactivated", lang))
         return
     example = (
         service.approve_calibration(example_id)
@@ -658,13 +713,9 @@ async def _calibration_answer(
         else service.decline_calibration(example_id)
     )
     if example is None:
-        await reply.reply_text(_CAL_STALE)
+        await reply.reply_text(t("bot.cal_stale", lang))
         return
-    done = (
-        "✅ Hecho: esta oferta calibrará la nota (puedes quitarla en /calibracion)."
-        if action == "y"
-        else "Vale, no se usará para calibrar."
-    )
+    done = t("bot.cal_approved" if action == "y" else "bot.cal_declined", lang)
     await query.edit_message_text(done, reply_markup=None)
 
 
@@ -672,11 +723,12 @@ async def calibracion_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     service = _service(context)
+    lang = _lang(context)
     examples = service.active_calibrations()
     await _reply_long(
         update.message,
-        calibration_list_message(examples, service.calibration_summary()),
-        calibration_list_keyboard(examples) if examples else None,
+        calibration_list_message(examples, service.calibration_summary(), lang),
+        calibration_list_keyboard(examples, lang) if examples else None,
     )
 
 
@@ -684,7 +736,9 @@ async def outcome_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     args = context.args or []
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
-        await update.message.reply_text("Uso: /outcome <id>")
+        await update.message.reply_text(
+            t("bot.usage", _lang(context), usage="/outcome <id>")
+        )
         return
     await _reply_outcome_menu(_service(context), update.message, offer_id)
 
@@ -735,7 +789,8 @@ def _parse_id(raw: str) -> int | None:
 async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
     families = _families(context)
-    usage = f"Uso: {cv_usage(families)}"
+    ui = _lang(context)
+    usage = t("bot.usage", ui, usage=cv_usage(families, ui))
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
         await update.message.reply_text(usage)
@@ -755,18 +810,21 @@ async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             url=service.offer(offer_id).url_oferta,
             apply_findings=_apply_findings(service, offer_id),
             salary_line=service.card_extras(offer_id),
+            lang=ui,
         ),
         reply_markup=sent_keyboard(
             offer_id,
             cv_base=service.offer(offer_id).cv_base,
             cover_letter_asked=_cover_letter_asked(service, offer_id),
             families=families,
+            lang=ui,
         ),
     )
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     service = _service(context)
+    lang = _lang(context)
     args = context.args or []
     if args and (offer_id := _parse_id(args[0])) is not None:
         await update.message.reply_text(
@@ -774,38 +832,42 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 service.offer(offer_id),
                 also_on=service.also_on(offer_id),
                 families=_families(context),
+                lang=lang,
             )
         )
         return
     if args:
-        await update.message.reply_text("Uso: /status [id]")
+        await update.message.reply_text(t("bot.usage", lang, usage="/status [id]"))
         return
     rows = service.recent_offers()
     families = _families(context)
-    listing = "\n".join(offer_status_line(row, families=families) for row in rows)
-    await update.message.reply_text(listing or "Todavía no hay ofertas registradas.")
+    listing = "\n".join(
+        offer_status_line(row, families=families, lang=lang) for row in rows
+    )
+    await update.message.reply_text(listing or t("bot.no_offers", lang))
 
 
 async def sent_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
+    lang = _lang(context)
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
-        await update.message.reply_text("Uso: /sent <id>")
+        await update.message.reply_text(t("bot.usage", lang, usage="/sent <id>"))
         return
     try:
         _service(context).mark_sent(offer_id)
     except ServiceError as exc:
-        await update.message.reply_text(f"⚠️ {exc}")
+        await update.message.reply_text(_err(exc, lang))
         return
     await update.message.reply_text(
-        sent_message(offer_id, _service(context).offer(offer_id).match or 0),
-        reply_markup=sent_outcome_keyboard(offer_id),
+        sent_message(offer_id, _service(context).offer(offer_id).match or 0, lang=lang),
+        reply_markup=sent_outcome_keyboard(offer_id, lang=lang),
     )
 
 
 async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     path = _service(context).export()
-    await update.message.reply_text(f"📊 Exportado a {path}")
+    await update.message.reply_text(t("bot.exported", _lang(context), path=path))
 
 
 async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -821,9 +883,10 @@ async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def rescatar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Re-send the analysis card of an offer the bot discarded (see /panel)."""
     args = context.args or []
+    lang = _lang(context)
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
-        await update.message.reply_text("Uso: /rescatar <id>")
+        await update.message.reply_text(t("bot.usage_rescue", lang))
         return
 
     async def notify(text: str, keyboard: Any) -> SentMessage:
@@ -833,14 +896,14 @@ async def rescatar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         await _service(context).rescue_offer(offer_id, notify)
     except ServiceError as exc:
-        await update.message.reply_text(f"⚠️ {exc}")
+        await update.message.reply_text(_err(exc, lang))
 
 
 async def keywords_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
     rows = _service(context).keywords(args[0] if args else None)
     if not rows:
-        await update.message.reply_text("Sin keywords registradas todavía.")
+        await update.message.reply_text(t("bot.no_keywords", _lang(context)))
         return
     lines = [f"{row.status or '·'} {row.keyword} ×{row.frequency}" for row in rows]
     await update.message.reply_text("\n".join(lines))
@@ -848,19 +911,18 @@ async def keywords_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def pausa_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _service(context).set_paused(True)
-    await update.message.reply_text(
-        "⏸ En pausa: sin búsquedas, análisis automático ni Gmail. "
-        "/analyze sigue. /reanudar para volver."
-    )
+    await update.message.reply_text(t("bot.paused", _lang(context)))
 
 
 async def reanudar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _service(context).set_paused(False)
-    await update.message.reply_text("▶️ Reanudado: todo vuelve a funcionar.")
+    await update.message.reply_text(t("bot.resumed", _lang(context)))
 
 
 async def beacons_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(beacons_list_message(_service(context).beacons()))
+    await update.message.reply_text(
+        beacons_list_message(_service(context).beacons(), lang=_lang(context))
+    )
 
 
 async def cartabase_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -869,24 +931,27 @@ async def cartabase_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     The letter goes alone in its own plain-text message so it copies cleanly;
     a short note follows. The base is read on every call (edits apply live).
     """
+    lang = _lang(context)
     args = [arg.lower() for arg in context.args or []]
     language = args[0] if args else "es"
     if len(args) > 1 or language not in LETTER_LANGUAGES:
-        await update.message.reply_text(_CARTABASE_USAGE)
+        await update.message.reply_text(t("bot.cartabase_usage", lang))
         return
     path = context.bot_data.get(_LETTER_BASE_KEY) or resolve_profile_paths().letter_base
     try:
         bases = load_letter_bases(Path(path))
     except ProfileError as exc:
-        await update.message.reply_text(f"⚠️ No pude leer la carta base: {exc}")
+        await update.message.reply_text(t("bot.letter_base_error", lang, error=exc))
         return
     await update.message.reply_text(assemble_open_letter(bases[language]))
-    await update.message.reply_text(_CARTABASE_NOTE)
+    await update.message.reply_text(t("bot.cartabase_note", lang))
 
 
 async def beacon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        beacon_command_reply(_service(context), list(context.args or []))
+        beacon_command_reply(
+            _service(context), list(context.args or []), lang=_lang(context)
+        )
     )
 
 
@@ -901,51 +966,62 @@ async def _write_cover_letters_and_reply(
     service: JobService, reply, offer_id: int
 ) -> None:
     """ "✉️ Carta de presentación" press: two plain-text versions, each with a
-    [✅ Usar esta] button. Any failure replies in Spanish and stores nothing."""
+    [✅ Usar esta] button. Any failure replies (UI language) and stores nothing."""
+    lang = _ui(service)
     try:
-        await reply.reply_text("✍️ Escribiendo carta…")
+        await reply.reply_text(t("bot.writing_letter", lang))
         result = await service.cover_letters(offer_id)
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
-        await reply.reply_text(f"⚠️ No pude escribir la carta: {failure_reason(exc)}")
+        await reply.reply_text(t("bot.letter_failed", lang, reason=_reason(exc, lang)))
         return
     await reply.reply_text(
-        cover_letter_message("✉️ Carta", result.text),
-        reply_markup=cover_letter_keyboard(offer_id, "a", result.generation),
+        cover_letter_message(t("bot.letter_label", lang), result.text),
+        reply_markup=cover_letter_keyboard(offer_id, "a", result.generation, lang=lang),
     )
-    await reply.reply_text(cover_letter_sources_message(result.facts))
+    await reply.reply_text(cover_letter_sources_message(result.facts, lang=lang))
     if result.warnings:
         await reply.reply_text(
-            "⚠️ Ojo, revisa antes de usarla:\n"
+            t("bot.letter_warnings", lang)
+            + "\n"
             + "\n".join(f"- {warning}" for warning in result.warnings)
         )
 
 
 async def _research_salary_and_reply(service: JobService, reply, offer_id: int) -> None:
     """ "💶 Investigar salario" press: cited range, cached same-day result, or a
-    Spanish reason (no web-search provider / LLM failure). Never fabricates."""
+    reason in the UI language (no web-search provider / LLM failure). Never
+    fabricates."""
+    lang = _ui(service)
     try:
-        await reply.reply_text("🔎 Investigando salario en la web…")
+        await reply.reply_text(t("bot.researching_salary", lang))
         outcome = await service.research_salary(offer_id)
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
-        await reply.reply_text(
-            f"⚠️ La investigación salarial falló: {failure_reason(exc)}"
-        )
+        await reply.reply_text(t("bot.salary_failed", lang, reason=_reason(exc, lang)))
         return
-    await reply.reply_text(salary_research_message(outcome))
+    await reply.reply_text(salary_research_message(outcome, lang=lang))
 
 
 async def _prep_stage_choice(service: JobService, reply, offer_id: int) -> None:
     """Ask which stage to prepare, suggesting one from the offer's estado."""
+    lang = _ui(service)
     try:
         offer = service.offer(offer_id)
     except RepositoryError as exc:
-        await reply.reply_text(f"⚠️ {exc}")
+        await reply.reply_text(_err(exc, lang))
         return
     suggested = default_stage(offer.estado)
     await reply.reply_text(
-        f"🎯 Preparar entrevista de #{offer_id} · {offer.empresa or '(sin empresa)'}\n"
-        f"¿Qué fase? Sugerida: {STAGE_LABEL[suggested]} (según el estado «{offer.estado}»).",
-        reply_markup=prep_stage_keyboard(offer_id, suggested),
+        t(
+            "bot.prep_choice",
+            lang,
+            id=offer_id,
+            company=offer.empresa or t("bot.no_company", lang),
+            stage=t(f"notifier.stage.{suggested}", lang)
+            if f"notifier.stage.{suggested}" in CATALOGS[lang]
+            else STAGE_LABEL[suggested],
+            estado=_estado(offer.estado, lang),
+        ),
+        reply_markup=prep_stage_keyboard(offer_id, suggested, lang=lang),
     )
 
 
@@ -953,31 +1029,27 @@ async def _prepare_and_reply(
     service: JobService, reply, offer_id: int, stage: str
 ) -> None:
     """Stage press: progress, then the HTML pack + a short summary. Any failure
-    replies in Spanish and sends no partial pack."""
+    replies in the UI language and sends no partial pack."""
+    lang = _ui(service)
     try:
         service.offer(offer_id)
     except RepositoryError as exc:
-        await reply.reply_text(f"⚠️ {exc}")
+        await reply.reply_text(_err(exc, lang))
         return
     if not service.claim_prep(offer_id, stage):  # sync: atomic with the check
-        await reply.reply_text("⏳ Ya estoy preparando esa entrevista…")
+        await reply.reply_text("⏳ " + t("bot.err.prep_busy", lang))
         return
     try:
-        await reply.reply_text("⏳ Preparando…")
+        await reply.reply_text(t("bot.preparing", lang))
         delivery = await service.prepare_interview(offer_id, stage, claimed=True)
         await reply.reply_document(
             io.BytesIO(delivery.html.encode("utf-8")), filename=delivery.filename
         )
         await reply.reply_text(delivery.summary)
     except ValidationError:
-        await reply.reply_text(
-            "⚠️ No pude preparar la entrevista: el LLM devolvió un formato "
-            "inválido. Inténtalo de nuevo."
-        )
+        await reply.reply_text(t("bot.prep_invalid", lang))
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
-        await reply.reply_text(
-            f"⚠️ No pude preparar la entrevista: {failure_reason(exc)}"
-        )
+        await reply.reply_text(t("bot.prep_failed", lang, reason=_reason(exc, lang)))
     finally:
         service.release_prep(offer_id, stage)
 
@@ -986,7 +1058,9 @@ async def prep_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     args = context.args or []
     offer_id = _parse_id(args[0]) if args else None
     if offer_id is None:
-        await update.message.reply_text("Uso: /prep <id>")
+        await update.message.reply_text(
+            t("bot.usage", _lang(context), usage="/prep <id>")
+        )
         return
     await _prep_stage_choice(_service(context), update.message, offer_id)
 
@@ -997,21 +1071,24 @@ async def _apply_outcome(
     """Record an outcome estado and run the follow-up flow (confirmation,
     calibration question, note prompt). Shared by the outcome menu buttons and
     the Gmail "Sí" button. True when the estado was recorded."""
+    lang = _lang(context)
     try:
         service.record_outcome(offer_id, estado)
     except (ServiceError, RepositoryError) as exc:
-        await query.message.reply_text(f"⚠️ {exc}")
+        await query.message.reply_text(_err(exc, lang))
         return False
     context.user_data[_PASTE_KEY] = False
     _clear_star(context)
     context.user_data[_NOTE_KEY] = offer_id
     context.user_data[_NOTE_AT_KEY] = time.time()
     await query.message.reply_text(
-        f"✅ #{offer_id} → {estado}.",
-        reply_markup=prep_keyboard(offer_id) if estado in PREP_ESTADOS else None,
+        t("bot.outcome_set", lang, id=offer_id, estado=_estado(estado, lang)),
+        reply_markup=prep_keyboard(offer_id, lang=lang)
+        if estado in PREP_ESTADOS
+        else None,
     )
     await _ask_calibration(service, query.message, offer_id, estado)
-    await query.message.reply_text(OUTCOME_NOTE_PROMPT)
+    await query.message.reply_text(outcome_note_prompt(lang))
     return True
 
 
@@ -1035,17 +1112,18 @@ async def _gmail_callback(
     a proposal the owner already outran (offer at that estado or later) is
     closed as stale without touching the offer.
     """
+    lang = _lang(context)
     row = service.gmail_proposal(message_id)
     if row is None:
-        await query.message.reply_text("Esta propuesta ya no existe.")
+        await query.message.reply_text(t("bot.gm_gone", lang))
         return
     if row.decision != "pending":
-        await query.message.reply_text("Esta propuesta ya está resuelta.")
+        await query.message.reply_text(t("bot.gm_resolved", lang))
         return
     if action == "i":
         if service.resolve_gmail_proposal(message_id, "ignored", expect="pending"):
             await _clear_markup(query)
-            await query.message.reply_text("Vale, la ignoro.")
+            await query.message.reply_text(t("bot.gm_ignored", lang))
         return
     if action == "o":
         if service.resolve_gmail_proposal(message_id, "other", expect="pending"):
@@ -1055,17 +1133,17 @@ async def _gmail_callback(
     try:
         current = service.offer(row.offer_id).estado
     except RepositoryError as exc:
-        await query.message.reply_text(f"⚠️ {exc}")
+        await query.message.reply_text(_err(exc, lang))
         return
     if not should_propose(current, row.proposed_estado):
         service.resolve_gmail_proposal(message_id, "stale", expect="pending")
         await _clear_markup(query)
         await query.message.reply_text(
-            f"Esta candidatura ya está en {current}; no he cambiado nada."
+            t("bot.already_in", lang, estado=_estado(current, lang))
         )
         return
     if not service.resolve_gmail_proposal(message_id, "accepted", expect="pending"):
-        await query.message.reply_text("Esta propuesta ya está resuelta.")
+        await query.message.reply_text(t("bot.gm_resolved", lang))
         return
     # Record the outcome FIRST; the buttons stay on the card until it is
     # recorded, so a failure leaves the proposal retryable from the same card.
@@ -1103,6 +1181,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     service = _service(context)
     families = _families(context)
+    ui = _lang(context)
     kind, parts = (query.data or "").split(":", 1)[0], (query.data or "").split(":")[1:]
     if query.message is not None and kind not in ("cv", CL):
         # The handlers below rewrite this card: stop tracking it so a later
@@ -1119,12 +1198,12 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         role = normalize_role(parts[1], families=families) if len(parts) > 1 else None
         lang = parts[2] if len(parts) > 2 else None
         if (no_cv := service.no_cv_label(offer_id)) is not None:  # stale button
-            await query.message.reply_text(no_cv_reply(no_cv))
+            await query.message.reply_text(no_cv_reply(no_cv, lang=ui))
             return
         if len(parts) > 1 and families.get(parts[1]) is None:
             # An old button of a family the profile no longer declares.
             await query.message.reply_text(
-                unknown_role_message(parts[1], families.default.label)
+                unknown_role_message(parts[1], families.default.label, lang=ui)
             )
             if lang not in families.default.languages:
                 lang = families.default.languages[0]
@@ -1140,12 +1219,14 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 url=service.offer(offer_id).url_oferta,
                 apply_findings=_apply_findings(service, offer_id),
                 salary_line=service.card_extras(offer_id),
+                lang=ui,
             ),
             reply_markup=sent_keyboard(
                 offer_id,
                 cv_base=service.offer(offer_id).cv_base,
                 cover_letter_asked=_cover_letter_asked(service, offer_id),
                 families=families,
+                lang=ui,
             ),
         )
     elif kind in ("lang", "variant") and len(parts) == 3:
@@ -1162,29 +1243,32 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 lang=lang,
                 cover_letter_asked=_cover_letter_asked(service, offer_id),
                 families=families,
+                ui_lang=ui,
             )
         )
     elif kind == "discard" and len(parts) == 1:
         offer_id = _parse_id(parts[0])
         if offer_id is not None:
             service.discard(offer_id)
-            await query.edit_message_text(discard_message(offer_id))
+            await query.edit_message_text(discard_message(offer_id, lang=ui))
     elif kind == "disc" and parts and (offer_id := _parse_id(parts[0])) is not None:
         try:
             service.discard(offer_id)
         except ServiceError as exc:
-            await query.message.reply_text(f"⚠️ {exc}")
+            await query.message.reply_text(_err(exc, ui))
             return
-        await query.edit_message_text(discard_no_send_message(), reply_markup=None)
+        await query.edit_message_text(
+            discard_no_send_message(lang=ui), reply_markup=None
+        )
     elif kind == "sent" and parts and (offer_id := _parse_id(parts[0])) is not None:
         try:
             service.mark_sent(offer_id)
         except ServiceError as exc:
-            await query.message.reply_text(f"⚠️ {exc}")
+            await query.message.reply_text(_err(exc, ui))
             return
         await query.edit_message_text(
-            sent_message(offer_id, service.offer(offer_id).match or 0),
-            reply_markup=sent_outcome_keyboard(offer_id),
+            sent_message(offer_id, service.offer(offer_id).match or 0, lang=ui),
+            reply_markup=sent_outcome_keyboard(offer_id, lang=ui),
         )
     elif kind == OUT and parts and (offer_id := _parse_id(parts[0])) is not None:
         await _reply_outcome_menu(service, query.message, offer_id)
@@ -1221,9 +1305,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             service.choose_cover_letter(offer_id, parts[2], generation=int(parts[1]))
         except ServiceError as exc:
-            await query.message.reply_text(f"⚠️ {exc}")
+            await query.message.reply_text(_err(exc, ui))
             return
-        await query.message.reply_text("Guardada la carta en la oferta")
+        await query.message.reply_text(t("bot.letter_saved", ui))
     elif (
         kind == PREP
         and len(parts) in (1, 2)
@@ -1237,10 +1321,12 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif kind == ST:
         await _star_callback(service, query, context, parts)
     elif kind in (BEACON_RESUME, BEACON_DISABLE) and len(parts) == 1:
-        if (reply := beacon_callback_reply(service, kind, parts[0])) is not None:
+        if (
+            reply := beacon_callback_reply(service, kind, parts[0], lang=ui)
+        ) is not None:
             await query.edit_message_text(reply)
     else:
-        await query.message.reply_text("Acción no reconocida.")
+        await query.message.reply_text(t("bot.unknown_action", ui))
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1250,14 +1336,15 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await context.bot.send_message(
             int(context.bot_data[_OWNER_KEY]),
-            backstop_error_message(failure_reason(error)),
+            backstop_error_message(_reason(error, _lang(context)), lang=_lang(context)),
         )
     except Exception:  # noqa: BLE001 — a failing backstop must not crash either
         _LOG.exception("could not notify the owner about the failure")
 
 
-def register_menu(app: Application) -> None:
-    """Publish the command menu at startup (chains any existing ``post_init``).
+def register_menu(app: Application, lang: Lang) -> None:
+    """Publish the ``lang`` command menu at startup (chains any existing
+    ``post_init``).
 
     Call AFTER ``bridge.register``, which assigns ``app.post_init`` itself.
     A Telegram failure is logged, never fatal.
@@ -1267,7 +1354,7 @@ def register_menu(app: Application) -> None:
     async def _post_init(application: Application) -> None:
         try:
             await application.bot.set_my_commands(
-                [BotCommand(name, text) for name, text in menu_commands()]
+                [BotCommand(name, text) for name, text in menu_commands(lang)]
             )
         except Exception:  # noqa: BLE001 — the menu is cosmetic
             _LOG.warning("could not set the Telegram command menu", exc_info=True)
@@ -1277,6 +1364,33 @@ def register_menu(app: Application) -> None:
     app.post_init = _post_init
 
 
+# Callback per ``cva.commands.COMMANDS`` entry (by ``Command.name``); every
+# Spanish and English name and alias of the table is registered to it.
+_COMMAND_HANDLERS: dict[
+    str, Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
+] = {
+    "help": start_help,
+    "analyze": analyze_command,
+    "cv": cv_command,
+    "status": status_command,
+    "sent": sent_command,
+    "export": export_command,
+    "panel": panel_command,
+    "rescatar": rescatar_command,
+    "outcome": outcome_command,
+    "calibracion": calibracion_command,
+    "skip": skip_command,
+    "star": star_command,
+    "prep": prep_command,
+    "keywords": keywords_command,
+    "pausa": pausa_command,
+    "reanudar": reanudar_command,
+    "beacons": beacons_command,
+    "beacon": beacon_command,
+    "cartabase": cartabase_command,
+}
+
+
 def build_app(settings: Settings, service: JobService) -> Application:
     """Wire handlers: whitelist gate (group -1) → commands → paste → callbacks."""
     app = (
@@ -1284,30 +1398,18 @@ def build_app(settings: Settings, service: JobService) -> Application:
     )
     app.bot_data[_SERVICE_KEY] = service
     app.bot_data[_OWNER_KEY] = settings.owner_telegram_id
+    app.bot_data[_LANG_KEY] = settings.ui_language
     app.bot_data[_LETTER_BASE_KEY] = resolve_profile_paths(
         settings.profile_dir
     ).letter_base
     app.add_error_handler(on_error)
     app.add_handler(TypeHandler(Update, gate), group=-1)
-    app.add_handler(CommandHandler(["start", "help"], start_help))
-    app.add_handler(CommandHandler("analyze", analyze_command))
-    app.add_handler(CommandHandler("cv", cv_command))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("sent", sent_command))
-    app.add_handler(CommandHandler("export", export_command))
-    app.add_handler(CommandHandler("panel", panel_command))
-    app.add_handler(CommandHandler("rescatar", rescatar_command))
-    app.add_handler(CommandHandler("outcome", outcome_command))
-    app.add_handler(CommandHandler("calibracion", calibracion_command))
-    app.add_handler(CommandHandler("skip", skip_command))
-    app.add_handler(CommandHandler("star", star_command))
-    app.add_handler(CommandHandler("prep", prep_command))
-    app.add_handler(CommandHandler("keywords", keywords_command))
-    app.add_handler(CommandHandler("pausa", pausa_command))
-    app.add_handler(CommandHandler("reanudar", reanudar_command))
-    app.add_handler(CommandHandler("beacons", beacons_command))
-    app.add_handler(CommandHandler("beacon", beacon_command))
-    app.add_handler(CommandHandler(["cartabase", "base"], cartabase_command))
+    for command in COMMANDS:
+        app.add_handler(
+            CommandHandler(
+                [*command.names, *command.aliases], _COMMAND_HANDLERS[command.name]
+            )
+        )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, paste_handler))
     app.add_handler(CallbackQueryHandler(callback_router))
     return app
@@ -1335,9 +1437,11 @@ def build_gmail_sync(settings: Settings, service: JobService) -> GmailSync | Non
         client=GoogleGmailClient(
             Path(settings.gmail_credentials_path).expanduser(),
             Path(settings.gmail_token_path).expanduser(),
+            lang=settings.ui_language,
         ),
         llm=build_llm_client(settings),
         poll_minutes=settings.gmail_poll_minutes,
+        lang=settings.ui_language,
     )
 
 
@@ -1356,7 +1460,9 @@ def main() -> None:
         gmail=build_gmail_sync(settings, service),
     )
     bridge.register(app, settings, service)
-    register_menu(app)  # after the bridge: it overwrites app.post_init
+    register_menu(
+        app, settings.ui_language
+    )  # after the bridge: it overwrites app.post_init
     app.run_polling()  # long polling — no public endpoint, TLS, or webhook
 
 

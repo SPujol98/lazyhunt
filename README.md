@@ -59,10 +59,10 @@ There is no server, no account and no shared backend. Everything the bot knows a
 - One tap for a **tailored one-page CV** (Spanish, English or Catalan) and a **cover letter** built on your own base letter.
 - **Tracking** of what you sent, follow-up reminders after 10 days of silence, an Excel export and an offline HTML dashboard.
 - **Interview prep**: a bank of STAR stories from your profile and a preparation sheet per interview stage.
-- A **kill switch**: `/pausa` stops everything automatic and survives restarts.
+- A **kill switch**: `/pause` stops everything automatic and survives restarts.
 
 > [!NOTE]
-> The Telegram interface is **in Spanish** today (commands such as `/pausa` and `/reanudar`, and all button labels). An English interface is planned. This README and the documentation are in English.
+> The Telegram interface follows **your system language** (English or Spanish); set `ui_language = "en"` or `"es"` to force one (see [Configuration](#configuration)). Your CVs and cover letters keep following the language of each offer.
 
 ## Quick start
 
@@ -101,18 +101,19 @@ uv run cli.py init
 The wizard asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
 
 1. **Prerequisites.** Checks Python, `uv` and that `claude` is installed and logged in (only the yes/no is read). If something is missing it tells you how to fix it and carries on.
-2. **AI provider.** `claude_code` by default. For `anthropic` or `openai_compatible`, you add the API key to `.env` yourself.
-3. **Telegram.** Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the steps, then paste the token it gives you (the input is hidden). Get your numeric user id from [@userinfobot](https://t.me/userinfobot): the bot will answer **only** that id.
-4. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot.
-5. **Profile directory.** Creates `profiles/me` (gitignored), either as a skeleton with placeholders or as a copy of the fictional demo profile so you can try things first.
-6. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
+2. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`.
+3. **AI provider.** `claude_code` by default. For `anthropic` or `openai_compatible`, you add the API key to `.env` yourself.
+4. **Telegram.** Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the steps, then paste the token it gives you (the input is hidden). Get your numeric user id from [@userinfobot](https://t.me/userinfobot): the bot will answer **only** that id.
+5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot.
+6. **Profile directory.** Creates `profiles/me` (gitignored), either as a skeleton with placeholders or as a copy of the fictional demo profile so you can try things first.
+7. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
 
 Where things end up:
 
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET` |
-| `config.local.toml` | Settings: `llm_provider`, `owner_telegram_id`, `profile_dir` |
+| `config.local.toml` | Settings: `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir` |
 | `profiles/me/` | Your profile |
 
 > [!TIP]
@@ -162,6 +163,11 @@ You do not have to wait for the schedule:
 
 A card arrives with the score, the verdict, what you match and what you do not, and buttons for the next steps. After that, rounds run on their own every **60 minutes** by default (adjustable in **Options › Schedule and bot**; the extension warns below 30).
 
+<p align="center">
+  <img src="assets/readme/screenshots/telegram-card.png" alt="A lazyhunt offer card in Telegram: offer 42 scores 82 out of 100 with the verdict apply, the core role, the suggested base CV, the main fit backed by claims, one soft wall about Kubernetes, the judge's rationale and the keyword detail, followed by the buttons Generate CV, Language, Variant, Research salary, Cover letter, Mark as sent and Discard." width="420"><br>
+  <sub>An offer card. (Illustration of a real bot message, demo data.)</sub>
+</p>
+
 ### 7. Generate a CV and a cover letter
 
 On an offer card:
@@ -173,14 +179,14 @@ On an offer card:
 ### 8. Day to day
 
 - Let rounds run in the background; review the cards that arrive.
-- When a company answers, use `/outcome <id>` to record progress. Interviews and rejections you record can become **calibration examples** (`/calibracion`), so the score learns what actually works for you.
+- When a company answers, use `/outcome <id>` to record progress. Interviews and rejections you record can become **calibration examples** (`/calibration`), so the score learns what actually works for you.
 - Before an interview, `/prep <id>` gives you a preparation sheet and `/star` keeps your STAR stories.
 - `/panel` sends an offline HTML dashboard of everything so far.
-- Going on holiday? `/pausa` stops scans, automatic analysis and Gmail; `/reanudar` resumes. The extension popup has the same **Pause** button.
+- Going on holiday? `/pause` stops scans, automatic analysis and Gmail; `/resume` resumes. The extension popup has the same **Pause** button.
 
 ## Telegram commands
 
-Send `/help` at any time for the full list with an example of each. The ones you will use most:
+Send `/help` at any time for the full list with an example of each. The ones you will use most (with `ui_language = "es"` the bot shows the Spanish names, and both spellings always work):
 
 | Command | What it does |
 | --- | --- |
@@ -190,7 +196,7 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | `/sent <id>` · `/outcome <id>` | Record an application and how it is going |
 | `/panel` | Offline HTML dashboard with metrics, charts and a filterable table |
 | `/prep <id>` · `/star` | Interview preparation and your STAR story bank |
-| `/pausa` · `/reanudar` | Pause or resume every automatic task |
+| `/pause` · `/resume` | Pause or resume every automatic task |
 
 <details>
 <summary><b>Full command reference</b></summary>
@@ -200,13 +206,13 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | Group | Command | What it does |
 | --- | --- | --- |
 | Analyze | `/analyze [url]` | Scores an offer against your profile. Without a link, it asks for the text. |
-| | `/rescatar <id>` | Re-sends the full card of an offer that was discarded, without touching its score. |
+| | `/rescue <id>` | Re-sends the full card of an offer that was discarded, without touching its score. |
 | CVs and letters | `/cv <id> [AI\|BACKEND] [es\|en\|ca]` | CV PDF for offer `#id`. Role and language are optional and chosen automatically when missing. |
-| | `/cartabase [es\|en\|ca]` (or `/base`) | Your generic letter for portals, with no specific offer, ready to copy. |
+| | `/basecover [es\|en\|ca]` (or `/base`) | Your generic letter for portals, with no specific offer, ready to copy. |
 | Tracking | `/status [id]` | Without an id, the last 10 offers; with an id, that offer's status. |
 | | `/sent <id>` | Records that you sent the application for offer `#id`. |
 | | `/outcome <id>` | History of a sent application plus buttons to record progress. After 10 days without news it proposes a follow-up, which you send yourself. |
-| | `/calibracion` | The real outcomes that calibrate the score; each one can be turned off. |
+| | `/calibration` | The real outcomes that calibrate the score; each one can be turned off. |
 | | `/skip` | Skips the feedback note the bot asks for after an outcome. |
 | | `/export` | Excel file with only the applications you sent. |
 | | `/panel` | Offline HTML dashboard: metrics, charts, alerts, a filterable table and discarded offers. |
@@ -215,11 +221,11 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | | `/beacon resume\|disable <id>` | Resumes a paused beacon or disables it. |
 | Interviews | `/star` | Builds your STAR stories (situation, task, action, result) and lists them to view, edit or delete. |
 | | `/prep <id>` | Pick a stage (HR, technical, final) and get an HTML sheet with topics, gaps, STAR stories, salary and questions. |
-| Other | `/pausa` | Stops everything automatic; `/analyze` keeps working. |
-| | `/reanudar` | Turns back on what was paused. |
+| Other | `/pause` | Stops everything automatic; `/analyze` keeps working. |
+| | `/resume` | Turns back on what was paused. |
 | | `/help` (or `/start`) | Commands and buttons. |
 
-Card buttons include **Analizar**, **Generar CV**, language and variant toggles, **Investigar salario** (looks for a salary range on the web, with sources), **Carta de presentación**, **Descartar**, **Marcar enviada**, **Rehacer CV** and **Resultado**. `/help` explains every one of them.
+Five commands have a Spanish name that still works and is shown when `ui_language = "es"`: `/rescue` is `/rescatar`, `/calibration` is `/calibracion`, `/pause` is `/pausa`, `/resume` is `/reanudar` and `/basecover` is `/cartabase`. Card buttons follow the same language (for example **Generate CV** or **Generar CV**). `/help` explains every one of them.
 
 The same service is scriptable from the command line:
 
@@ -254,7 +260,7 @@ uv run cli.py judge-eval      # measure the judge against labelled offers
 - **It learns from what happened, not from guesses.** Interviews and rejections you record become approved calibration examples for the judge.
 - **Your own AI, your own bill.** By default it uses the Claude Code CLI you already pay for and never forwards `ANTHROPIC_API_KEY` to it, so you are not silently switched to API billing. Why: [ADR 0002](docs/adr/0002-users-own-claude-code-cli-as-default-provider.md).
 - **Your data stays a file.** One SQLite database on your disk ([ADR 0003](docs/adr/0003-sqlite-local-storage.md)); Gmail, if you want it, goes through your own OAuth client ([ADR 0004](docs/adr/0004-bring-your-own-google-oauth-client.md)).
-- **One big off switch.** `/pausa` stops scans, automatic analysis and Gmail at once and stays off across restarts.
+- **One big off switch.** `/pause` stops scans, automatic analysis and Gmail at once and stays off across restarts.
 
 The full picture, component by component: [docs/architecture.md](docs/architecture.md).
 
@@ -272,7 +278,8 @@ Settings are layered: code defaults, then `config.toml`, then `config.local.toml
 | `match_mode` | `keyword` | `hybrid` lets the AI judge drive notifications |
 | `threshold` | `65` | Minimum score for the top-choice badge |
 | `gmail_enabled` | `false` | Optional read-only Gmail sync ([docs/gmail.md](docs/gmail.md)) |
-| `paused` | `false` | Initial state of the kill switch until `/pausa` or `/reanudar` is used |
+| `paused` | `false` | Initial state of the kill switch until `/pause` or `/resume` is used |
+| `ui_language` | `auto` | Language of the Telegram bot, the CLI and the dashboard: `auto` (your system language: Spanish if it starts with `es`, English otherwise), or `en` / `es` to force one. CVs and letters follow each offer's language, not this setting |
 
 ## Customization
 
@@ -311,9 +318,8 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v0.2.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v0.3.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
-- The Telegram interface is in Spanish today; English is planned.
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.
 - AI scores are not deterministic; the gates and the calibration set keep them consistent, not exact.

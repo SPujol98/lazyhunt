@@ -8,6 +8,11 @@
 
 owner_telegram_id = 0   # your Telegram numeric id (owner whitelist filter)
 
+# Interface language of the bot, the CLI and the panel: "auto" (default, your
+# system language), "en" or "es" to force one. CVs and cover letters keep
+# following each offer's language.
+# ui_language = "es"
+
 # Windows: full path to the claude.exe CLI when it's not on the scheduled
 # task's PATH (see deploy/README.md §14.1).
 # claude_code_path = 'C:\Users\<you>\.local\bin\claude.exe'

@@ -47,6 +47,7 @@ from cva.cvgen.base_pdfs import (
 )
 from cva.cvgen.engine import generic_output_path
 from cva.fetch import Fetcher, HttpxFetcher
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.ingest import (
     FetchedOffer,
     canonical_url,
@@ -71,7 +72,7 @@ from cva.match.cover_letter import (
 )
 from cva.match.extraction import ExtractionCache, extract
 from cva.match.followup import FollowupDraft, generate_followup
-from cva.match.gates import run_gates
+from cva.match.gates import gate_reason, run_gates
 from cva.match.interview_prep import (
     STAGES,
     CompanyFact,
@@ -90,6 +91,7 @@ from cva.match.persona import JudgePersona
 from cva.match.salary_reference import (
     CITY_LABEL,
     ReferenceRange,
+    city_label,
     infer_city,
     infer_level,
     load_reference_table,
@@ -102,7 +104,7 @@ from cva.match.salary_research import (
     to_outcome,
 )
 from cva.match.scorer import SynonymMap, classify_keyword, load_synonyms
-from cva.match.stack_wall import stack_wall_reason
+from cva.match.stack_wall import stack_wall_display, stack_wall_reason
 from cva.mirror import mirror_root, on_discarded, on_generated, on_sent
 from cva.notifier import (
     SentMessage,
@@ -389,6 +391,7 @@ def _format_rejudge_report(
     min_score: int,
     total_judged: int,
     stopped_reason: str | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Ranked Markdown report (score desc, filtered to ``score >= min_score``).
 
@@ -401,37 +404,50 @@ def _format_rejudge_report(
     surfaced as a header warning when the run ended early.
     """
     shown = [row for row in rows if row.score >= min_score]
-    summary = (
-        f"Juzgadas: {total_judged} · Mostradas (score ≥ {min_score}): {len(shown)} "
-        f"· Fallos: {len(failures)}"
+    summary = t(
+        "bot.rejudge.summary",
+        lang,
+        judged=total_judged,
+        min_score=min_score,
+        shown=len(shown),
+        failures=len(failures),
     )
-    lines = ["# Rejudge del backlog", ""]
+    lines = [t("bot.rejudge.title", lang), ""]
     if stopped_reason:
-        lines.append(
-            f"⚠️ Ejecución detenida antes de completar el backlog: {stopped_reason}"
-        )
+        lines.append(t("bot.rejudge.stopped", lang, reason=stopped_reason))
         lines.append("")
     lines.extend([summary, ""])
     for row in shown:
         age_note = ""
         if row.age_days is not None:
-            age_note = f" · visto hace {row.age_days} días"
+            age_note = t("bot.rejudge.seen", lang, days=row.age_days)
             if row.age_flag:
-                age_note += " (probablemente cerrada/avanzada)"
-        walls = "; ".join(row.walls) if row.walls else "-"
-        run_note = (
-            "" if row.judged_this_run else " · (juzgada en una ejecución anterior)"
+                age_note += t("bot.rejudge.stale", lang)
+        walls = (
+            "; ".join(display_reason(w, lang) for w in row.walls) if row.walls else "-"
         )
+        run_note = "" if row.judged_this_run else t("bot.rejudge.earlier", lang)
         lines.append(
-            f"- **{row.score}** [{row.verdict}] {row.title or '(sin título)'} — "
-            f"{row.company or '(sin empresa)'}{age_note} · walls: {walls} · "
-            f"{row.url or '(sin url)'}{run_note}"
+            t(
+                "bot.rejudge.row",
+                lang,
+                score=row.score,
+                verdict=row.verdict,
+                title=row.title or t("bot.rejudge.no_title", lang),
+                company=row.company or t("bot.rejudge.no_company", lang),
+                age=age_note,
+                walls=walls,
+                url=row.url or t("bot.rejudge.no_url", lang),
+                run=run_note,
+            )
         )
     if failures:
         lines.append("")
-        lines.append(f"## Fallos ({len(failures)})")
+        lines.append(t("bot.rejudge.failures", lang, n=len(failures)))
         for failure in failures:
-            lines.append(f"- oferta #{failure.offer_id}: {failure.error}")
+            lines.append(
+                t("bot.rejudge.failure", lang, id=failure.offer_id, error=failure.error)
+            )
     return "\n".join(lines)
 
 
@@ -578,8 +594,68 @@ class PrepDelivery:
     result: PrepResult
 
 
+def display_reason(reason: str, lang: Lang) -> str:
+    """A stored (Spanish) gate or stack-wall reason shown in ``lang``; any
+    other text (a judge's own wall) is returned unchanged."""
+    return stack_wall_display(gate_reason(reason, lang), lang)
+
+
+def display_result(result: MatchResult, lang: Lang) -> MatchResult:
+    """``result`` with its stored (Spanish) gate and stack-wall reasons in
+    ``lang``; display only, nothing persisted changes."""
+    if lang == "es" or not (result.gates or result.stack_wall):
+        return result
+    gates = [
+        g.model_copy(update={"reason": display_reason(g.reason, lang)})
+        for g in result.gates
+    ]
+    update: dict[str, object] = {"gates": gates}
+    if result.stack_wall:
+        update["stack_wall"] = display_reason(result.stack_wall, lang)
+    return result.model_copy(update=update)
+
+
+def display_judgment(
+    judgment: OfferJudgment | None, lang: Lang
+) -> OfferJudgment | None:
+    """``judgment`` with its stored (Spanish) gate walls in ``lang``."""
+    if judgment is None or lang == "es" or not judgment.walls:
+        return judgment
+    walls = [
+        w.model_copy(update={"text": display_reason(w.text, lang)})
+        for w in judgment.walls
+    ]
+    return judgment.model_copy(update={"walls": walls})
+
+
 class ServiceError(ValueError):
-    """Guard failure in a use-case (missing analysis/CV, invalid request)."""
+    """Guard failure in a use-case (missing analysis/CV, invalid request).
+
+    User-facing errors are built with :meth:`keyed` (an i18n ``bot.err.*``
+    key + its params): ``str(exc)`` stays the Spanish text, and
+    :meth:`text` renders the message in the UI language. Developer-facing
+    errors (plain English message, no key) render as ``str(exc)``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        key: str | None = None,
+        params: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.key = key
+        self.params: dict[str, object] = dict(params or {})
+
+    @classmethod
+    def keyed(cls, key: str, /, **params: object) -> "ServiceError":
+        """A user-facing error; its ``str`` is the Spanish text of ``key``."""
+        return cls(t(key, "es", **params), key=key, params=params)
+
+    def text(self, lang: Lang) -> str:
+        """The message in ``lang`` (``str(self)`` when it has no key)."""
+        return t(self.key, lang, **self.params) if self.key else str(self)
 
 
 def _offer_input(fetched: FetchedOffer, *, today: date | None = None) -> OfferInput:
@@ -685,8 +761,11 @@ class JobService:
         salary_table: list[ReferenceRange] | None = None,
         cover_letter_review: bool = False,
         paused_default: bool = False,
+        ui_language: Lang = LEGACY_LANG,
     ) -> None:
         self._repo = repo
+        # Settings.ui_language: every text this service renders for the owner.
+        self._lang: Lang = ui_language
         # Kill-switch default (Settings.paused); the persisted toggle wins.
         self._paused_default = paused_default
         # One extra LLM pass that reviews the generated cover letters.
@@ -809,7 +888,13 @@ class JobService:
             salary_table=_load_salary_table(paths.salary_table),
             cover_letter_review=settings.cover_letter_review,
             paused_default=settings.paused,
+            ui_language=settings.ui_language,
         )
+
+    @property
+    def ui_language(self) -> Lang:
+        """The UI language (``Settings.ui_language``) of every owner-facing text."""
+        return self._lang
 
     def is_paused(self) -> bool:
         """Global kill switch: the persisted toggle, else ``Settings.paused``."""
@@ -832,6 +917,7 @@ class JobService:
             perfil=offer.perfil,
             table=self._salary_table,
             families=self._prefs.families,
+            lang=self._lang,
         )
 
     def _note_guard(self, offer_id: int, report: GuardReport) -> None:
@@ -848,10 +934,13 @@ class JobService:
         """Extra card lines: salary line plus deadline/age lines (blank-free)."""
         offer = self._repo.get_offer(offer_id)
         lines = [
-            warning_line(self._guard_reports.get(offer_id)),
+            warning_line(self._guard_reports.get(offer_id), self._lang),
             self.salary_line(offer_id),
             date_card_lines(
-                offer.fecha_publicacion, offer.fecha_limite, self._now().date()
+                offer.fecha_publicacion,
+                offer.fecha_limite,
+                self._now().date(),
+                lang=self._lang,
             ),
         ]
         return "\n".join(line for line in lines if line)
@@ -880,7 +969,7 @@ class JobService:
         fresh = [r for r in rows if r.id not in done]
         if not fresh:
             return None
-        text, listed = deadline_alert_batch(fresh, today)
+        text, listed = deadline_alert_batch(fresh, today, lang=self._lang)
         return text, [r.id for r in fresh[:listed]]
 
     def mark_deadline_alerted(self, offer_ids: list[int]) -> None:
@@ -1093,6 +1182,7 @@ class JobService:
                 owner_name=owner_name(self._db, self._identity),
                 days_silent=days_silent,
                 number=number,
+                ui_lang=self._lang,
             )
         except Exception:  # a failing draft must not block the reminder
             _logger.warning("follow-up draft failed for #%s", offer_id, exc_info=True)
@@ -1235,7 +1325,10 @@ class JobService:
         # the first and then reuses its stored result (same-day cache).
         lock = self._salary_locks.setdefault(offer_id, asyncio.Lock())
         async with lock:
-            return await self._research_salary_locked(offer_id, base)
+            outcome = await self._research_salary_locked(offer_id, base)
+        # The research prompt got the Spanish city label (model input); the
+        # owner reads it in the UI language.
+        return replace(outcome, city=city_label(city, self._lang))
 
     async def _research_salary_locked(
         self, offer_id: int, base: SalaryOutcome
@@ -1290,7 +1383,7 @@ class JobService:
         failures never do.
         """
         if not callable(getattr(self._llm, "json_completion", None)):
-            raise ServiceError("este proveedor LLM no puede escribir cartas")
+            raise ServiceError.keyed("bot.err.no_letter_llm")
         lock = self._letter_locks.setdefault(offer_id, asyncio.Lock())
         async with lock:
             offer = self._repo.get_offer(offer_id)
@@ -1308,13 +1401,14 @@ class JobService:
                 language=language,
                 branch=self._prefs.families.role_for(offer.perfil),
                 claims_digest=build_claims_digest(self._db),
-                apply_findings=detect_apply_instructions(text),
+                apply_findings=detect_apply_instructions(text, self._lang),
                 voice_sample=self._voice_sample(),
                 base=bases.get(language, bases["es"]),
                 facts=facts,
                 review=self._cover_letter_review,
                 persona=self._prefs.cover_letter,
                 families=self._prefs.families,
+                ui_lang=self._lang,
             )
             result = replace(result, generation=self._letter_gen.get(offer_id, 0) + 1)
             self._letter_gen[offer_id] = result.generation
@@ -1378,15 +1472,11 @@ class JobService:
             and generation is not None
             and generation != letter.generation
         ):
-            raise ServiceError(
-                "esa carta es de una generación anterior; usa los botones de la última"
-            )
+            raise ServiceError.keyed("bot.err.letter_stale")
         if letter is None:
-            raise ServiceError(
-                "no hay una carta generada para esta oferta; pulsa de nuevo «Carta de presentación»"
-            )
+            raise ServiceError.keyed("bot.err.no_letter")
         if version != "a":
-            raise ServiceError(f"versión de carta desconocida: {version}")
+            raise ServiceError.keyed("bot.err.letter_version", version=version)
         self._repo.set_cover_letter(offer_id, letter.text)
         self._refresh_tracker()
         return letter.text
@@ -1455,7 +1545,9 @@ class JobService:
         """One web search for company facts; ``None`` when unsupported or failed."""
         if not supports_web_search(self._llm):
             return None
-        system, user = build_facts_prompt(company=company, position=position)
+        system, user = build_facts_prompt(
+            company=company, position=position, lang=self._lang
+        )
         try:
             facts: CompanyFacts = await self._llm.web_json_completion(  # type: ignore[attr-defined]
                 system, user, CompanyFacts
@@ -1494,14 +1586,14 @@ class JobService:
         "sin datos verificados".
         """
         if stage not in STAGES:
-            raise ServiceError(f"Fase desconocida: {stage}")
+            raise ServiceError.keyed("bot.err.stage", stage=stage)
         if not callable(getattr(self._llm, "json_completion", None)):
-            raise ServiceError("este proveedor LLM no puede preparar entrevistas")
+            raise ServiceError.keyed("bot.err.no_prep_llm")
         if not claimed and not self.claim_prep(offer_id, stage):
-            raise ServiceError("Ya estoy preparando esa entrevista…")
+            raise ServiceError.keyed("bot.err.prep_busy")
         try:
             inputs = self._prep_inputs(offer_id, stage)
-            system, user = build_prep_prompt(inputs)
+            system, user = build_prep_prompt(inputs, self._lang)
             pack = await self._llm.json_completion(system, user, PrepPack)
             facts = await self._company_facts(inputs)
             created = self._now().date().isoformat()
@@ -1514,12 +1606,14 @@ class JobService:
                     company=inputs.company,
                     position=inputs.title,
                     created_at=created,
+                    lang=self._lang,
                 )
                 summary = prep_summary(
                     result,
                     offer_id=offer_id,
                     company=inputs.company,
                     position=inputs.title,
+                    lang=self._lang,
                 )
                 return result, page, summary
 
@@ -1528,7 +1622,11 @@ class JobService:
                 offer_id, stage, html=page, json_text=result.model_dump_json()
             )
             return PrepDelivery(
-                prep_filename(offer_id, stage), page, summary, pack_id, result
+                prep_filename(offer_id, stage, self._lang),
+                page,
+                summary,
+                pack_id,
+                result,
             )
         finally:
             if not claimed:
@@ -1750,8 +1848,9 @@ class JobService:
                         job_id=job_id,
                         threshold=self._threshold,
                         url=card_url,
+                        lang=self._lang,
                     ),
-                    new_job_keyboard(job_id),
+                    new_job_keyboard(job_id, lang=self._lang),
                 )
             return BridgeJobOutcome(zone="pending", score=None)
         profile = self._profile_of(offer_id)
@@ -1762,7 +1861,7 @@ class JobService:
         # override inference: arm the keyboard with the offer's own language.
         source_data = self.offer(offer_id).source_data or ""
         lang = infer_language(source_data)
-        apply_findings = detect_apply_instructions(source_data)
+        apply_findings = detect_apply_instructions(source_data, self._lang)
         card_salary = self.card_extras(offer_id)
         if wall_reason := result.walled_reason:
             # Hard wall (non-Python backend stack, or a gate FAIL: non-EU
@@ -1796,6 +1895,7 @@ class JobService:
                     url=url,
                     apply_findings=apply_findings,
                     salary_line=card_salary,
+                    lang=self._lang,
                 ),
                 cv_keyboard(
                     offer_id,
@@ -1804,6 +1904,7 @@ class JobService:
                     cover_letter_asked=asks_cover_letter(apply_findings),
                     cv_needed=self.cv_needed(offer_id),
                     families=self._prefs.families,
+                    ui_lang=self._lang,
                 ),
             )
             return BridgeJobOutcome(zone="gray", score=result.score)
@@ -1826,23 +1927,20 @@ class JobService:
         try:
             offer = self._repo.get_offer(offer_id)
         except RepositoryError:
-            raise ServiceError(f"No existe la oferta #{offer_id}.") from None
+            raise ServiceError.keyed("bot.err.no_offer", id=offer_id) from None
         if (dup := _DUPLICATE_OF.search(offer.notas or "")) is not None:
-            raise ServiceError(
-                f"La oferta #{offer_id} es duplicada de #{dup.group(1)}: rescata esa."
+            raise ServiceError.keyed(
+                "bot.err.duplicate", id=offer_id, original=dup.group(1)
             )
         match = self._repo.latest_match(offer_id)
         if match is None:
-            raise ServiceError(f"La oferta #{offer_id} no está analizada todavía.")
+            raise ServiceError.keyed("bot.err.not_analyzed", id=offer_id)
         try:
             result = MatchResult.model_validate_json(match.breakdown_json).model_copy(
                 update={"score": match.score}
             )
         except ValidationError:
-            raise ServiceError(
-                f"El análisis guardado de #{offer_id} no se puede leer: vuelve a "
-                f"analizarla con /analyze."
-            ) from None
+            raise ServiceError.keyed("bot.err.unreadable", id=offer_id) from None
         await self._send_breakdown_card(notify, offer_id, result, url=offer.url_oferta)
         # Rescued offers leave the panel's discarded list (score/estado untouched).
         self._repo.add_event(offer_id, "note", note=RESCUED_NOTE)
@@ -1860,19 +1958,20 @@ class JobService:
         also used by ``/rescatar`` so both go through the very same path."""
         profile = self._profile_of(offer_id)
         source_data = self.offer(offer_id).source_data or ""
-        apply_findings = detect_apply_instructions(source_data)
+        apply_findings = detect_apply_instructions(source_data, self._lang)
         judgment, fallback = self.latest_judgment(offer_id)
         await self._notify_analysis_card(
             notify,
             offer_id,
             judge_breakdown_message(
-                result,
-                judgment,
+                self.display_result(result),
+                self.display_judgment(judgment),
                 offer_id,
                 url=url,
                 judge_fallback=fallback,
                 apply_findings=apply_findings,
                 salary_line=self.card_extras(offer_id),
+                lang=self._lang,
             ),
             cv_keyboard(
                 offer_id,
@@ -1881,8 +1980,17 @@ class JobService:
                 cover_letter_asked=asks_cover_letter(apply_findings),
                 cv_needed=self.cv_needed(offer_id),
                 families=self._prefs.families,
+                ui_lang=self._lang,
             ),
         )
+
+    def display_result(self, result: MatchResult) -> MatchResult:
+        """:func:`display_result` in the service's UI language."""
+        return display_result(result, self._lang)
+
+    def display_judgment(self, judgment: OfferJudgment | None) -> OfferJudgment | None:
+        """:func:`display_judgment` in the service's UI language."""
+        return display_judgment(judgment, self._lang)
 
     async def _notify_analysis_card(
         self,
@@ -1894,9 +2002,9 @@ class JobService:
         """Send an analysis card (with "También en" when duplicates are already
         known) and remember where it landed so it can be edited in place."""
         if (label := self.no_cv_label(offer_id)) is not None:
-            text = with_no_cv_line(text, label)
+            text = with_no_cv_line(text, label, lang=self._lang)
         try:
-            text = with_also_on(text, self.also_on(offer_id))
+            text = with_also_on(text, self.also_on(offer_id), lang=self._lang)
         except Exception as exc:  # noqa: BLE001 — the card goes out regardless
             _logger.warning("also-on lookup failed for offer #%s: %s", offer_id, exc)
         sent = await notify(text, keyboard)
@@ -2042,6 +2150,7 @@ class JobService:
                     anchor_thresholds=self._anchor_thresholds(),
                     families=self._prefs.families,
                     persona=self._judge_persona,
+                    lang=self._lang,
                 )
             except LlmResponseError as exc:
                 _logger.warning(
@@ -2121,6 +2230,7 @@ class JobService:
             self._llm,
             model=self._judge_model,
             threshold=self._threshold,
+            lang=self._lang,
         )
 
     async def rejudge_backlog(
@@ -2255,7 +2365,11 @@ class JobService:
                 )
             rows.sort(key=lambda row: row.score, reverse=True)
             report_text = _format_rejudge_report(
-                rows, [], min_score=min_score, total_judged=len(rows)
+                rows,
+                [],
+                min_score=min_score,
+                total_judged=len(rows),
+                lang=self._lang,
             )
             report_dir.mkdir(parents=True, exist_ok=True)
             report_path = _unique_report_path(
@@ -2339,6 +2453,7 @@ class JobService:
                 min_score=min_score,
                 total_judged=len(all_rows),
                 stopped_reason=stopped_reason,
+                lang=self._lang,
             )
             report_path.write_text(text, encoding="utf-8")
             return text
@@ -2346,8 +2461,15 @@ class JobService:
         anchors = self._judge_anchors()
         for index, offer in enumerate(to_judge):
             progress(
-                f"[{index + 1}/{len(to_judge)}] oferta #{offer.id} — "
-                f"{offer.posicion or '(sin título)'} ({offer.empresa or '(sin empresa)'})"
+                t(
+                    "bot.rejudge.progress",
+                    self._lang,
+                    n=index + 1,
+                    total=len(to_judge),
+                    id=offer.id,
+                    title=offer.posicion or t("bot.rejudge.no_title", self._lang),
+                    company=offer.empresa or t("bot.rejudge.no_company", self._lang),
+                )
             )
             try:
                 if index > 0 and pace_seconds > 0:
@@ -2362,9 +2484,10 @@ class JobService:
                     anchor_thresholds=self._anchor_thresholds(),
                     families=self._prefs.families,
                     persona=self._judge_persona,
+                    lang=self._lang,
                 )
             except KeyboardInterrupt:
-                stopped_reason = "interrumpido por el usuario (KeyboardInterrupt)"
+                stopped_reason = t("bot.rejudge.interrupted", self._lang)
                 break
             except Exception as exc:  # noqa: BLE001 — continue-on-failure by design
                 failures.append(
@@ -2375,9 +2498,11 @@ class JobService:
                 consecutive_failures += 1
                 _write_report()
                 if consecutive_failures >= max_consecutive_failures:
-                    stopped_reason = (
-                        f"{consecutive_failures} fallos consecutivos del juez — "
-                        f"último error: {type(exc).__name__}: {exc}"
+                    stopped_reason = t(
+                        "bot.rejudge.breaker",
+                        self._lang,
+                        n=consecutive_failures,
+                        error=f"{type(exc).__name__}: {exc}",
                     )
                     break
                 continue
@@ -2540,15 +2665,13 @@ class JobService:
     def _require_sent(self, offer_id: int) -> OfferRow:
         offer = self._repo.get_offer(offer_id)
         if offer.fecha_envio is None:
-            raise ServiceError(
-                f"La oferta #{offer_id} todavía no está marcada como enviada."
-            )
+            raise ServiceError.keyed("bot.err.not_sent", id=offer_id)
         return offer
 
     def record_outcome(self, offer_id: int, estado: str) -> None:
         """Move a SENT offer to a post-send estado and log it on the timeline."""
         if estado not in OUTCOME_ESTADOS:
-            raise ServiceError(f"Estado no válido: {estado}")
+            raise ServiceError.keyed("bot.err.estado", estado=estado)
         self._require_sent(offer_id)
         self._repo.record_estado_event(offer_id, estado)
         self._refresh_tracker()
@@ -2557,7 +2680,7 @@ class JobService:
         """Store free-text feedback on a sent offer's timeline."""
         text = note.strip()[:_OUTCOME_NOTE_MAX]
         if not text:
-            raise ServiceError("La nota está vacía.")
+            raise ServiceError.keyed("bot.err.empty_note")
         self._require_sent(offer_id)
         self._repo.add_event(offer_id, "note", note=text)
 
@@ -2596,7 +2719,7 @@ class JobService:
             return existing if existing.status == "pending" else None
         if polarity == "negative":
             if reason is None or (reason not in FIT_REASONS and reason != REASON_OTHER):
-                raise ServiceError(f"Motivo no válido: {reason}")
+                raise ServiceError.keyed("bot.err.reason", reason=reason)
         else:
             reason = None
         judgment = self._calibration_judgment(offer)
@@ -2672,7 +2795,7 @@ class JobService:
         offer = self._repo.get_offer(offer_id)
         estado = offer.estado
         if estado == "enviada":
-            raise ServiceError("Ya está marcada como enviada.")
+            raise ServiceError.keyed("bot.err.already_sent")
         if estado != "descartada":
             self._repo.set_estado(offer_id, "descartada")
             # Mirror removal AFTER the DB write (D7); silent if no CV exists.
@@ -2702,7 +2825,7 @@ class JobService:
         """(story, created): the candidate's story; reused if already started."""
         candidate = next((c for c in star_candidates(self._db) if c.key == key), None)
         if candidate is None:
-            raise ServiceError("Esa candidata ya no existe; usa /star de nuevo.")
+            raise ServiceError.keyed("bot.err.star_gone")
         for story in self._repo.list_stars():
             if tuple(story.source_claim_ids) == candidate.source_claim_ids:
                 return story, False
@@ -2720,10 +2843,10 @@ class JobService:
     def answer_star(self, star_id: int, field: str, text: str) -> StarStory:
         """Store one answer verbatim (whitespace stripped, nothing else)."""
         if field not in STAR_TEXT_FIELDS:
-            raise ServiceError(f"Campo desconocido: {field}")
+            raise ServiceError.keyed("bot.err.field", field=field)
         cleaned = text.strip()
         if not cleaned:
-            raise ServiceError("La respuesta está vacía.")
+            raise ServiceError.keyed("bot.err.empty_answer")
         self._repo.update_star(star_id, **{field: cleaned})
         return self._repo.get_star(star_id)
 
@@ -2733,7 +2856,7 @@ class JobService:
         An already-answered field (single-field edit) is kept unchanged.
         """
         if field not in STAR_TEXT_FIELDS:
-            raise ServiceError(f"Campo desconocido: {field}")
+            raise ServiceError.keyed("bot.err.field", field=field)
         story = self._repo.get_star(star_id)
         if getattr(story, field) != STAR_PLACEHOLDER:
             return story
@@ -2917,6 +3040,7 @@ class JobService:
             self._now(),
             discarded,
             families=self._prefs.families,
+            lang=self._lang,
         )
         if self._tracker_xlsx is not None:
             copy = self._tracker_xlsx.parent / PANEL_FILENAME

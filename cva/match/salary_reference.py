@@ -22,6 +22,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, Field
 
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.match.salary import PublishedSalary, extract_published_salary
 
 # A family's CV role (``Family.role``: the id upper-cased).
@@ -67,7 +68,9 @@ def _fold(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
-_SEMI_SENIOR_RE: Final[re.Pattern[str]] = re.compile(r"\b(?:semi[\s-]?senior|ssr|mid|medior)\b")
+_SEMI_SENIOR_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:semi[\s-]?senior|ssr|mid|medior)\b"
+)
 _SENIOR_RE: Final[re.Pattern[str]] = re.compile(
     r"\b(?:senior|sr|lead|staff|principal|head|manager|architect|arquitect[oa])\b"
 )
@@ -156,7 +159,12 @@ def _short_source(source: str) -> str:
     return source if len(source) <= _SOURCE_MAX else source[: _SOURCE_MAX - 1] + "…"
 
 
-def published_line(found: PublishedSalary) -> str:
+def city_label(city: str, lang: Lang) -> str:
+    """Display name of a reference city (``bot.salary.city.<id>``)."""
+    return t(f"bot.salary.city.{city}", lang) if city in CITY_LABEL else city
+
+
+def published_line(found: PublishedSalary, lang: Lang = LEGACY_LANG) -> str:
     """``💶 Salario publicado: 28.000–34.000 € brutos/año`` (+ conversion note)."""
     amount = (
         eur_text(found.min_eur)
@@ -164,7 +172,7 @@ def published_line(found: PublishedSalary) -> str:
         else f"{eur_text(found.min_eur)}–{eur_text(found.max_eur)}"
     )
     note = f" ({found.note})" if found.note else ""
-    return f"💶 Salario publicado: {amount} € brutos/año{note}"
+    return t("bot.salary.published", lang, amount=amount, note=note)
 
 
 def reference_line(
@@ -172,23 +180,36 @@ def reference_line(
     *,
     location_note: str = "",
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """``💶 Referencia: 28–34k (mediana 31k) · AI junior · Barcelona · ...``
 
     The branch is shown with its family's label (the role itself when no
     family of ``families`` has it).
     """
-    location = CITY_LABEL[row.city] + location_note
+    location = city_label(row.city, lang) + location_note
     family = families.get(row.branch)
     branch = family.label if family is not None else row.branch
-    source = _short_source(row.sources[0]) if row.sources else "sin fuente"
-    line = (
-        f"💶 Referencia: {_k(row.low)[:-1]}–{_k(row.high)} (mediana {_k(row.median)}) · "
-        f"{branch} {row.level} · {location} · "
-        f"fuente: {source}, {row.as_of} · pide ~{_k(row.ask)}"
+    source = (
+        _short_source(row.sources[0])
+        if row.sources
+        else t("bot.salary.no_source", lang)
+    )
+    line = t(
+        "bot.salary.reference",
+        lang,
+        low=_k(row.low)[:-1],
+        high=_k(row.high),
+        median=_k(row.median),
+        branch=branch,
+        level=row.level,
+        location=location,
+        source=source,
+        as_of=row.as_of,
+        ask=_k(row.ask),
     )
     if row.confidence == "low":
-        line += " · confianza baja"
+        line += t("bot.salary.low_confidence", lang)
     return line
 
 
@@ -199,15 +220,16 @@ def salary_line(
     perfil: object,
     table: list[ReferenceRange],
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """The card line for an offer, or ``""`` when there is nothing to show.
 
     The branch is the CV role of the offer's family in ``families`` (unknown
     or NULL: the default family); a family without rows shows no reference.
     """
-    published = extract_published_salary(text)
+    published = extract_published_salary(text, lang=lang)
     if published is not None:
-        return published_line(published)
+        return published_line(published, lang)
     level = infer_level(title, text)
     if level is None:
         return ""
@@ -218,7 +240,7 @@ def salary_line(
         return ""
     note = ""
     if not detected:
-        note = " (ubicación no detectada)"
+        note = t("bot.salary.no_location", lang)
     elif row.city != city:  # fell back to the spain_remote row
-        note = f" (sin dato de {CITY_LABEL[city]})"
-    return reference_line(row, location_note=note, families=families)
+        note = t("bot.salary.no_city_data", lang, city=city_label(city, lang))
+    return reference_line(row, location_note=note, families=families, lang=lang)

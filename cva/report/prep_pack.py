@@ -8,12 +8,8 @@ import html
 import re
 from typing import Final
 
-from cva.match.interview_prep import (
-    NO_FACTS_TEXT,
-    STAGE_LABEL,
-    PrepResult,
-    flag_line,
-)
+from cva.i18n import LEGACY_LANG, Lang, t
+from cva.match.interview_prep import PrepResult
 from cva.star import field_label
 
 _CSS: Final[str] = (
@@ -33,8 +29,20 @@ _CSS: Final[str] = (
 )
 
 
-def prep_filename(offer_id: int, stage: str) -> str:
-    return f"preparacion_{offer_id}_{stage}.html"
+def prep_filename(offer_id: int, stage: str, lang: Lang = LEGACY_LANG) -> str:
+    return t("panel.prep.file", lang, id=offer_id, stage=stage)
+
+
+def _stage_label(stage: str, lang: Lang) -> str:
+    key = f"panel.prep.stage.{stage}"
+    try:
+        return t(key, lang)
+    except KeyError:
+        return stage
+
+
+def _flag_line(flags: list[str], lang: Lang) -> str:
+    return t("panel.prep.flags", lang, flags=", ".join(flags))
 
 
 def _e(text: object) -> str:
@@ -65,23 +73,24 @@ def render_prep_html(
     company: str,
     position: str,
     created_at: str,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
-    """The whole pack as one HTML document (Spanish)."""
+    """The whole pack as one HTML document (in the UI language ``lang``)."""
     pack = result.pack
-    label = STAGE_LABEL.get(result.stage, result.stage)
+    label = _stage_label(result.stage, lang)
     parts: list[str] = []
     parts.append(
         _section(
             1,
-            "Lo que te van a pedir que expliques",
+            t("panel.prep.s1", lang),
             _cards([(i.topic, i.detail) for i in pack.explain]),
         )
     )
     parts.append(
         _section(
             2,
-            "Temas probables para esta fase",
-            '<p class="muted">Son temas probables, no preguntas seguras.</p><ul>'
+            t("panel.prep.s2", lang),
+            f'<p class="muted">{t("panel.prep.topics_note", lang)}</p><ul>'
             + "".join(
                 f"<li><b>{_e(t.topic)}</b>{' — ' + _e(t.why) if t.why else ''}</li>"
                 for t in pack.topics
@@ -92,17 +101,25 @@ def render_prep_html(
     gap_cards = "".join(
         '<div class="card">'
         f"<b>{_e(g.gap)}</b><br>"
-        f"Reconoce: {_e(g.acknowledge)}"
-        + (f"<br>Experiencia cercana: {_e(g.adjacent)}" if g.adjacent else "")
-        + (f"<br>Cómo lo cubrirías: {_e(g.learning)}" if g.learning else "")
+        f"{t('panel.prep.acknowledge', lang)}: {_e(g.acknowledge)}"
+        + (
+            f"<br>{t('panel.prep.adjacent', lang)}: {_e(g.adjacent)}"
+            if g.adjacent
+            else ""
+        )
+        + (
+            f"<br>{t('panel.prep.learning', lang)}: {_e(g.learning)}"
+            if g.learning
+            else ""
+        )
         + "</div>"
         for g in pack.gaps
     )
     parts.append(
         _section(
             3,
-            "Tus huecos y cómo responder con honestidad",
-            gap_cards or '<p class="muted">Sin huecos señalados.</p>',
+            t("panel.prep.s3", lang),
+            gap_cards or f'<p class="muted">{t("panel.prep.no_gaps", lang)}</p>',
         )
     )
     story_cards = []
@@ -111,13 +128,19 @@ def render_prep_html(
             ""
             if s.complete
             else (
-                " <i>(incompleta"
+                f" <i>({t('panel.prep.incomplete', lang)}"
                 + (
-                    f": falta {_e(', '.join(field_label(m) for m in s.missing))}"
+                    _e(
+                        t(
+                            "panel.prep.missing",
+                            lang,
+                            fields=", ".join(field_label(m, lang) for m in s.missing),
+                        )
+                    )
                     if s.missing
                     else ""
                 )
-                + "; complétala con /star)</i>"
+                + f"{t('panel.prep.finish', lang)})</i>"
             )
         )
         why = f"<br>{_e(s.why)}" if s.why else ""
@@ -125,19 +148,19 @@ def render_prep_html(
     parts.append(
         _section(
             4,
-            "Historias STAR que encajan",
+            t("panel.prep.s4", lang),
             "".join(story_cards)
-            or '<p class="muted">Ninguna historia de tu banco encaja todavía.</p>',
+            or f'<p class="muted">{t("panel.prep.no_stories", lang)}</p>',
         )
     )
     salary = f"<p>{_e(result.salary_text).replace(chr(10), '<br>')}</p>"
     if pack.salary_notes:
         salary += f"<p>{_e(pack.salary_notes)}</p>"
-    parts.append(_section(5, "Salario y disponibilidad", salary))
+    parts.append(_section(5, t("panel.prep.s5", lang), salary))
     parts.append(
         _section(
             6,
-            "Preguntas para hacerles",
+            t("panel.prep.s6", lang),
             "<ul>" + "".join(f"<li>{_e(q)}</li>" for q in pack.questions) + "</ul>",
         )
     )
@@ -151,38 +174,44 @@ def render_prep_html(
             + "</ul>"
         )
     else:
-        facts = f"<p>{_e(NO_FACTS_TEXT)}</p>"
-    parts.append(_section(7, "Datos de la empresa", facts))
+        facts = f"<p>{_e(t('panel.prep.no_facts', lang))}</p>"
+    parts.append(_section(7, t("panel.prep.s7", lang), facts))
     warn = (
-        f'<div class="warn">{_e(flag_line(result.flags))}</div>' if result.flags else ""
+        f'<div class="warn">{_e(_flag_line(result.flags, lang))}</div>'
+        if result.flags
+        else ""
     )
     head = (
-        f"<h1>🎯 Preparación {_e(label)} · #{offer_id}</h1>"
+        f"<h1>{_e(t('panel.prep.heading', lang, label=label, id=offer_id))}</h1>"
         f'<p class="muted">{_e(company)} · {_e(position)} · {_e(created_at)}</p>'
     )
     return (
-        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>Preparación #{offer_id} · {_e(label)}</title>"
+        f"<title>{_e(t('panel.prep.doc_title', lang, id=offer_id, label=label))}</title>"
         f"<style>{_CSS}</style></head><body>{head}{warn}{''.join(parts)}"
-        '<p class="muted">Generado con tus datos; revisa cada punto antes de '
-        "usarlo. No hay garantía de que pregunten esto.</p></body></html>"
+        f'<p class="muted">{_e(t("panel.prep.footer", lang))}</p></body></html>'
     )
 
 
 def prep_summary(
-    result: PrepResult, *, offer_id: int, company: str, position: str
+    result: PrepResult,
+    *,
+    offer_id: int,
+    company: str,
+    position: str,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Short Telegram message: stage, 3 key topics, flags."""
-    label = STAGE_LABEL.get(result.stage, result.stage)
+    label = _stage_label(result.stage, lang)
     topics = "\n".join(f"• {t.topic}" for t in result.pack.topics[:3])
     lines = [
-        f"🎯 Preparación #{offer_id} · {label}",
+        t("panel.prep.summary_head", lang, id=offer_id, label=label),
         f"{company} · {position}",
-        "Temas clave (probables, no seguros):",
+        t("panel.prep.summary_topics", lang),
         topics,
     ]
     if result.flags:
-        lines.append(flag_line(result.flags))
-    lines.append("Detalle completo en el HTML adjunto.")
+        lines.append(_flag_line(result.flags, lang))
+    lines.append(t("panel.prep.summary_tail", lang))
     return "\n".join(lines)[:4096]

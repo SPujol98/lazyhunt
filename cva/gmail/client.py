@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
+from cva.i18n import LEGACY_LANG, Lang, t
+
 _LOG = logging.getLogger(__name__)
 _CHARSET = re.compile(r"charset\s*=\s*[\"']?([\w.:-]+)", re.IGNORECASE)
 
@@ -164,16 +166,14 @@ def _build_service(credentials: Any) -> Any:
     return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
 
-def _load_credentials(token_path: Path) -> Any:
+def _load_credentials(token_path: Path, lang: Lang = LEGACY_LANG) -> Any:
     """Load the stored token, refreshing (and writing back) when expired."""
     from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
     if not token_path.exists():
-        raise GmailAuthError(
-            f"No hay token de Gmail: ejecuta `{AUTH_COMMAND}` en tu PC."
-        )
+        raise GmailAuthError(t("panel.gmail.no_token", lang, command=AUTH_COMMAND))
     try:
         # google-auth leaves this classmethod unannotated; typed at the seam.
         credentials = cast(Any, Credentials).from_authorized_user_file(
@@ -181,11 +181,13 @@ def _load_credentials(token_path: Path) -> Any:
         )
     except (ValueError, OSError) as exc:
         raise GmailAuthError(
-            f"El token de Gmail no es válido: ejecuta `{AUTH_COMMAND}`."
+            t("panel.gmail.bad_token", lang, command=AUTH_COMMAND)
         ) from exc
     if not credentials.valid:
         if not credentials.refresh_token:
-            raise GmailAuthError(f"Sin refresh token: ejecuta `{AUTH_COMMAND}`.")
+            raise GmailAuthError(
+                t("panel.gmail.no_refresh", lang, command=AUTH_COMMAND)
+            )
         try:
             credentials.refresh(Request())
         except RefreshError as exc:
@@ -194,8 +196,7 @@ def _load_credentials(token_path: Path) -> Any:
                     f"token refresh failed temporarily: {type(exc).__name__}"
                 ) from exc
             raise GmailAuthError(
-                f"Gmail rechazó la renovación (autorización revocada o caducada): "
-                f"ejecuta `{AUTH_COMMAND}`."
+                t("panel.gmail.refresh_rejected", lang, command=AUTH_COMMAND)
             ) from exc
         write_token_file(token_path, credentials.to_json())
     return credentials
@@ -210,7 +211,9 @@ class GoogleGmailClient:
         token_path: Path,
         *,
         service_factory: Callable[[], Any] | None = None,
+        lang: Lang = LEGACY_LANG,
     ) -> None:
+        self._lang = lang
         self._credentials_path = credentials_path
         self._token_path = token_path
         self._service_factory = service_factory
@@ -220,7 +223,7 @@ class GoogleGmailClient:
         # Built per call: the token may have been refreshed or replaced.
         if self._service_factory is not None:
             return self._service_factory()
-        return _build_service(_load_credentials(self._token_path))
+        return _build_service(_load_credentials(self._token_path, self._lang))
 
     def list_message_ids(
         self, after: datetime, before: datetime | None = None
@@ -245,7 +248,7 @@ class GoogleGmailClient:
         except GmailAuthError:
             raise
         except Exception as exc:
-            raise _map_api_error("list", exc) from exc
+            raise _map_api_error("list", exc, self._lang) from exc
         truncated = len(ids) > MAX_MESSAGES_PER_LIST or bool(page_token)
         return ids[:MAX_MESSAGES_PER_LIST], truncated
 
@@ -262,7 +265,7 @@ class GoogleGmailClient:
         except GmailAuthError:
             raise
         except Exception as exc:
-            raise _map_api_error("get", exc) from exc
+            raise _map_api_error("get", exc, self._lang) from exc
 
 
 def _http_reasons(exc: Exception) -> set[str]:
@@ -276,7 +279,9 @@ def _http_reasons(exc: Exception) -> set[str]:
         return set()
 
 
-def _map_api_error(action: str, exc: Exception) -> GmailAuthError | GmailApiError:
+def _map_api_error(
+    action: str, exc: Exception, lang: Lang = LEGACY_LANG
+) -> GmailAuthError | GmailApiError:
     """401/403 and a non-retryable ``RefreshError`` mean the authorization is
     gone (warn the owner); anything else is transient (retry next run)."""
     from google.auth.exceptions import RefreshError
@@ -288,7 +293,7 @@ def _map_api_error(action: str, exc: Exception) -> GmailAuthError | GmailApiErro
         isinstance(exc, RefreshError) and not exc.retryable
     ):
         return GmailAuthError(
-            f"Gmail rechazó la autorización ({action}): ejecuta `{AUTH_COMMAND}`."
+            t("panel.gmail.auth_rejected", lang, action=action, command=AUTH_COMMAND)
         )
     return GmailApiError(f"{action} failed: {type(exc).__name__}")
 
@@ -304,19 +309,24 @@ def run_auth_flow(
     token_path: Path,
     *,
     flow_factory: Callable[[Path, list[str]], Any] | None = None,
+    lang: Lang = LEGACY_LANG,
 ) -> None:
     """Interactive installed-app OAuth (browser) writing the token as ``0600``."""
     if not credentials_path.exists():
         raise GmailAuthError(
-            f"No encuentro el fichero de credenciales de Google en {credentials_path}."
+            t("panel.gmail.no_credentials", lang, path=credentials_path)
         )
     factory = flow_factory or _installed_app_flow
     try:
         flow = factory(credentials_path, [GMAIL_SCOPE])
     except Exception as exc:  # any malformed-secrets failure
         raise GmailAuthError(
-            f"El fichero de credenciales de Google no es válido ({credentials_path}): "
-            f"descarga de nuevo el cliente OAuth de escritorio. ({type(exc).__name__})"
+            t(
+                "panel.gmail.bad_credentials",
+                lang,
+                path=credentials_path,
+                error=type(exc).__name__,
+            )
         ) from exc
     try:
         credentials = flow.run_local_server(
@@ -324,18 +334,18 @@ def run_auth_flow(
         )
     except Exception as exc:  # denied consent, OAuth/browser errors
         raise GmailAuthError(
-            "No se completó la autorización de Gmail (consentimiento denegado o "
-            f"error de OAuth: {type(exc).__name__}). Vuelve a ejecutar el comando."
+            t("panel.gmail.flow_failed", lang, error=type(exc).__name__)
         ) from exc
     if not getattr(credentials, "refresh_token", None):
-        raise GmailAuthError(
-            "Google no devolvió un refresh token; no he tocado el token existente. "
-            "Revoca el acceso de la app en https://myaccount.google.com/permissions "
-            "y repite el comando."
-        )
+        raise GmailAuthError(t("panel.gmail.no_refresh_token", lang))
     try:
         write_token_file(token_path, credentials.to_json())
     except OSError as exc:
         raise GmailAuthError(
-            f"No pude guardar el token en {token_path}: {type(exc).__name__}."
+            t(
+                "panel.gmail.save_failed",
+                lang,
+                path=token_path,
+                error=type(exc).__name__,
+            )
         ) from exc

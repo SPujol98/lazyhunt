@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from cva.claimsdb import ClaimsDB
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.match.apply_instructions import ApplyInstruction
 from cva.match.interview_prep import CompanyFact
 from cva.match.language import infer_language
@@ -36,6 +37,9 @@ from cva.profile_persona import LetterBase
 
 _logger = logging.getLogger(__name__)
 
+# Validator problems are fed back to the model in the retry prompt in Spanish
+# (the owner's golden prompts); the warnings shown to the owner use ui_language.
+FEEDBACK_LANG: Final[Lang] = "es"
 MIN_WORDS: Final[int] = 150
 MAX_WORDS: Final[int] = 220
 # Validation tolerates a margin around the requested 150-220 words.
@@ -321,8 +325,9 @@ def validate_text(
     hard_max: int,
     min_words: int,
     max_words: int,
+    lang: Lang = FEEDBACK_LANG,
 ) -> list[str]:
-    """Spanish problem descriptions for one text; empty when it is fine.
+    """Problem descriptions (in ``lang``) for one text; empty when it is fine.
 
     The word count must fall in ``[hard_min, hard_max]`` (the margin around the
     requested ``min_words``-``max_words``); the rest of the checks (banned
@@ -332,21 +337,21 @@ def validate_text(
     words = len(text.split())
     if not hard_min <= words <= hard_max:
         problems.append(
-            f"tiene {words} palabras (debe tener entre {min_words} y {max_words})"
+            t("bot.check.words", lang, words=words, low=min_words, high=max_words)
         )
     folded = _fold(text)
     for phrase in BANNED_PHRASES:
         if _fold(phrase) in folded:
-            problems.append(f"contiene la frase prohibida «{phrase}»")
+            problems.append(t("bot.check.banned", lang, phrase=phrase))
     if _EM_DASH in text:
-        problems.append(f"contiene un guion largo ({_EM_DASH}), no debe usarse")
+        problems.append(t("bot.check.em_dash", lang, dash=_EM_DASH))
     if _EN_DASH_PUNCT.search(text):
-        problems.append("contiene un guion medio (–) como signo de puntuación")
+        problems.append(t("bot.check.en_dash", lang))
     inferred = infer_language(text)
     # Catalan and Spanish share most function words: a Catalan letter read as
     # Spanish is not flagged, only a clear mismatch is.
     if inferred != language and not (language == "ca" and inferred == "es"):
-        problems.append(f"no parece estar escrita en el idioma pedido ({language})")
+        problems.append(t("bot.check.language", lang, language=language))
     return problems
 
 
@@ -479,29 +484,29 @@ def _salutation_ok(text: str, version: str, language: str, company: str) -> bool
     )
 
 
-def _tone_problems(text: str) -> list[str]:
+def _tone_problems(text: str, lang: Lang = FEEDBACK_LANG) -> list[str]:
     problems: list[str] = []
     body = letter_body(text)
     sentences = split_sentences(body)
     counts = [len(sentence.split()) for sentence in sentences]
     if counts and min(counts) > _SHORT_SENTENCE_WORDS:
-        problems.append(
-            f"no tiene ninguna frase corta (de {_SHORT_SENTENCE_WORDS} palabras "
-            "o menos); alterna frases cortas y largas"
-        )
+        problems.append(t("bot.check.no_short", lang, n=_SHORT_SENTENCE_WORDS))
     long_count = sum(1 for n in counts if n > _LONG_SENTENCE_WORDS)
     if long_count > _MAX_LONG_SENTENCES:
         problems.append(
-            f"tiene {long_count} frases de más de {_LONG_SENTENCE_WORDS} palabras "
-            f"(máximo {_MAX_LONG_SENTENCES})"
+            t(
+                "bot.check.long",
+                lang,
+                count=long_count,
+                words=_LONG_SENTENCE_WORDS,
+                max=_MAX_LONG_SENTENCES,
+            )
         )
     triads = sum(len(_TRIAD.findall(sentence)) for sentence in sentences)
     if triads > _MAX_TRIADS:
-        problems.append(
-            "usa más de una enumeración de tres elementos («X, Y y Z»); deja una como máximo"
-        )
+        problems.append(t("bot.check.triads", lang))
     if _NOT_ONLY.search(_fold(body)):
-        problems.append("usa la estructura «no solo… sino…» (o «not only… but also»)")
+        problems.append(t("bot.check.not_only", lang))
     if sentences:
         opening = _fold(sentences[0])[:_OPENING_WINDOW]
         raw_opening = sentences[0][:_OPENING_WINDOW].lower()
@@ -511,18 +516,20 @@ def _tone_problems(text: str) -> list[str]:
                 opener in _ACCENT_SENSITIVE_OPENERS
                 and re.search(rf"(?<!\w){re.escape(opener)}(?!\w)", raw_opening) is None
             ):
-                problems.append(
-                    f"abre con una apertura genérica («{opener}»); la primera frase "
-                    "debe nombrar la empresa, el producto o un problema del puesto"
-                )
+                problems.append(t("bot.check.opener", lang, opener=opener))
                 break
     return problems
 
 
 def validate_letter(
-    text: str, language: str, *, company: str = "", version: str = ""
+    text: str,
+    language: str,
+    *,
+    company: str = "",
+    version: str = "",
+    lang: Lang = FEEDBACK_LANG,
 ) -> list[str]:
-    """Spanish problem descriptions for one letter; empty when it is fine.
+    """Problem descriptions (in ``lang``) for one letter; empty when it is fine.
 
     Adds the cover-letter tone checks on top of :func:`validate_text`. The
     salutation shape is checked only when ``version`` (``formal``/``cercana``)
@@ -535,14 +542,12 @@ def validate_letter(
         hard_max=_HARD_MAX_WORDS,
         min_words=MIN_WORDS,
         max_words=MAX_WORDS,
+        lang=lang,
     )
-    problems.extend(_tone_problems(text))
+    problems.extend(_tone_problems(text, lang))
     if version and not _salutation_ok(text, version, language, company):
         expected = salutation_for(version, language, company)
-        problems.append(
-            f"el saludo no es el esperado (debe empezar con «{expected}» "
-            "o dirigirse por su nombre a la persona de la oferta)"
-        )
+        problems.append(t("bot.check.salutation", lang, expected=expected))
     return problems
 
 
@@ -591,7 +596,7 @@ class LetterParts(BaseModel):
 
 @dataclass(frozen=True)
 class CoverLetterResult:
-    """The assembled letter plus Spanish warnings for anything that still fails."""
+    """The assembled letter plus warnings (UI language) for anything that still fails."""
 
     text: str
     warnings: list[str] = field(default_factory=list)
@@ -690,9 +695,14 @@ def _fixed_words(base: LetterBase, language: str, company: str) -> int:
 
 
 def validate_parts(
-    parts: LetterParts, base: LetterBase, *, language: str, company: str
+    parts: LetterParts,
+    base: LetterBase,
+    *,
+    language: str,
+    company: str,
+    lang: Lang = FEEDBACK_LANG,
 ) -> list[str]:
-    """Spanish problem descriptions for the generated parts; empty when fine.
+    """Problem descriptions (in ``lang``) for the generated parts; empty when fine.
 
     The word count is checked on the whole assembled letter. The banned
     phrases, dashes, language and tone checks run on the generated parts only:
@@ -700,33 +710,47 @@ def validate_parts(
     """
     problems: list[str] = []
     for label, value in (
-        ("la frase de enlace", parts.linking),
-        ("el párrafo 2 (por qué la empresa)", parts.why_company),
-        ("el párrafo 3 (por qué el puesto)", parts.why_role),
+        ("linking", parts.linking),
+        ("p2_why", parts.why_company),
+        ("p3_why", parts.why_role),
     ):
         if not value.strip():
-            problems.append(f"falta {label}")
+            problems.append(
+                t("bot.check.missing", lang, part=t(f"bot.check.part.{label}", lang))
+            )
     if problems:
         return problems
     if len(split_sentences(_clean(parts.linking))) > 1:
-        problems.append("la frase de enlace debe ser una sola frase")
+        problems.append(t("bot.check.linking_one", lang))
     linking_words = len(parts.linking.split())
     if linking_words > _LINKING_MAX_WORDS:
         problems.append(
-            f"la frase de enlace tiene {linking_words} palabras (máximo {_LINKING_MAX_WORDS})"
+            t(
+                "bot.check.linking_words",
+                lang,
+                words=linking_words,
+                max=_LINKING_MAX_WORDS,
+            )
         )
     for label, value, (low, high) in (
-        ("el párrafo 2", parts.why_company, _P2_RANGE),
-        ("el párrafo 3", parts.why_role, _P3_RANGE),
+        ("p2", parts.why_company, _P2_RANGE),
+        ("p3", parts.why_role, _P3_RANGE),
     ):
         count = len(value.split())
         if not low <= count <= high:
             problems.append(
-                f"{label} tiene {count} palabras (debe tener entre {low} y {high})"
+                t(
+                    "bot.check.part_words",
+                    lang,
+                    part=t(f"bot.check.part.{label}", lang),
+                    words=count,
+                    low=low,
+                    high=high,
+                )
             )
     folded_parts = _fold(f"{parts.linking} {parts.why_company} {parts.why_role}")
     problems.extend(
-        f"contiene relleno genérico «{filler}»"
+        t("bot.check.filler", lang, filler=filler)
         for filler in _FILLER
         if re.search(rf"(?<!\w){re.escape(filler)}(?!\w)", folded_parts)
     )
@@ -734,9 +758,14 @@ def validate_parts(
     words = len(letter.split())
     if not LETTER_MIN_WORDS <= words <= LETTER_MAX_WORDS:
         problems.append(
-            f"la carta completa tiene {words} palabras (debe tener entre "
-            f"{LETTER_MIN_WORDS} y {LETTER_MAX_WORDS}; el texto fijo ya aporta "
-            f"{_fixed_words(base, language, company)})"
+            t(
+                "bot.check.letter_words",
+                lang,
+                words=words,
+                low=LETTER_MIN_WORDS,
+                high=LETTER_MAX_WORDS,
+                fixed=_fixed_words(base, language, company),
+            )
         )
     generated = "\n".join(
         _clean(value) for value in (parts.linking, parts.why_company, parts.why_role)
@@ -749,15 +778,16 @@ def validate_parts(
             hard_max=10**6,
             min_words=0,
             max_words=10**6,
+            lang=lang,
         )
     )
-    problems.extend(_tone_problems(generated))
+    problems.extend(_tone_problems(generated, lang))
     if language == "es":
         folded = _fold(generated)
         if normalize_register(parts.tone) == "formal" and _VOSOTROS.search(folded):
-            problems.append("registro formal: usa «ustedes», no «vosotros»")
+            problems.append(t("bot.check.formal", lang))
         if normalize_register(parts.tone) == "cercano" and _USTEDES.search(folded):
-            problems.append("registro cercano: usa «vosotros», no «ustedes»")
+            problems.append(t("bot.check.informal", lang))
     return problems
 
 
@@ -925,12 +955,14 @@ async def generate_cover_letter(
     review: bool = False,
     persona: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    ui_lang: Lang = LEGACY_LANG,
 ) -> CoverLetterResult:
     """Generate the parts, assemble the letter; one validated retry, then warn.
 
     With ``review`` on, one extra reviewer call revises the generated parts; the
     revision replaces them only when it passes validation. The fixed base text
-    never goes through the model.
+    never goes through the model. The retry prompt gets the problems in
+    Spanish (:data:`FEEDBACK_LANG`); the returned warnings are in ``ui_lang``.
     """
     system, user = build_letter_parts_prompt(
         offer_text=offer_text,
@@ -973,9 +1005,14 @@ async def generate_cover_letter(
                 parts, problems = revised, []
             else:
                 _logger.info("cover letter revision failed validation; kept original")
+    warnings = (
+        validate_parts(parts, base, language=language, company=company, lang=ui_lang)
+        if problems
+        else []
+    )
     return CoverLetterResult(
         text=assemble_letter(base, parts, language=language, company=company),
-        warnings=problems,
+        warnings=warnings,
         register=normalize_register(parts.tone),
         facts=list(facts),
         thin_company=not facts,

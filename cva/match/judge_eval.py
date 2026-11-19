@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Final, NamedTuple
 
 from cva.claimsdb import ClaimsDB
+from cva.i18n import LEGACY_LANG, Lang
 from cva.llm import LlmClient
 from cva.match.judge import _DEFAULT_THRESHOLD, judge_offer
 
@@ -47,6 +48,7 @@ async def run_judge_eval(
     *,
     model: str | None = None,
     threshold: int = _DEFAULT_THRESHOLD,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Judge every ``eval/labels.json`` offer; return the formatted report.
 
@@ -66,7 +68,9 @@ async def run_judge_eval(
     """
     raw: dict[str, object] = json.loads(labels_path.read_text(encoding="utf-8"))
     tolerance_value = raw.get("tolerance", _DEFAULT_TOLERANCE)
-    tolerance = tolerance_value if isinstance(tolerance_value, int) else _DEFAULT_TOLERANCE
+    tolerance = (
+        tolerance_value if isinstance(tolerance_value, int) else _DEFAULT_TOLERANCE
+    )
     entries = raw.get("offers", [])
     rows: list[EvalRow] = []
     failures: list[EvalFailure] = []
@@ -76,7 +80,7 @@ async def run_judge_eval(
             text = offer_path.read_text(encoding="utf-8")
             try:
                 judgment = await judge_offer(
-                    text, claims, llm, model=model, threshold=threshold
+                    text, claims, llm, model=model, threshold=threshold, lang=lang
                 )
             except Exception as exc:  # noqa: BLE001 — the report row IS the surface
                 failures.append(

@@ -49,6 +49,7 @@ TOKEN_KEY: Final[str] = "CVA_TELEGRAM_TOKEN"
 SECRET_KEY: Final[str] = "CVA_BRIDGE_SECRET"
 DEFAULT_PROFILE: Final[str] = "profiles/me"
 DEFAULT_BRIDGE_PORT: Final[int] = 8765
+UI_LANGUAGES: Final[tuple[str, ...]] = ("auto", "en", "es")
 PROVIDERS: Final[tuple[str, ...]] = ("claude_code", "anthropic", "openai_compatible")
 _PROVIDER_KEY: Final[dict[str, str]] = {
     "anthropic": "ANTHROPIC_API_KEY",
@@ -172,7 +173,7 @@ def _read_toml(path: Path) -> dict[str, object]:
 
 
 def _check_prerequisites(io: WizardIO, runner: Runner, which: Which) -> None:
-    io.print("Step 1/6 - Prerequisites")
+    io.print("Step 1/7 - Prerequisites")
     found = sys.version_info[:2]
     version = ".".join(str(part) for part in sys.version_info[:3])
     if found >= _MIN_PYTHON:
@@ -253,9 +254,40 @@ def _propose(
     return False
 
 
+def _step_language(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> str:
+    io.print("")
+    io.print("Step 2/7 - Bot language")
+    current = existing_toml.get("ui_language")
+    default = (
+        current if isinstance(current, str) and current in UI_LANGUAGES else "auto"
+    )
+    io.print(
+        "  The language of the Telegram bot, the command line and the dashboard. "
+        "CVs and cover letters keep following each offer's language. "
+        "auto = your system language; choose en or es to force one."
+    )
+    while True:
+        language = _ask(
+            io, f"  Language ({', '.join(UI_LANGUAGES)}) [{default}]: ", default
+        ).lower()
+        if language in UI_LANGUAGES:
+            break
+        io.print(f"  Please choose one of: {', '.join(UI_LANGUAGES)}.")
+    _propose(
+        io,
+        plan.toml,
+        existing_toml,
+        "ui_language",
+        language,
+        where=LOCAL_TOML,
+        secret=False,
+    )
+    return language
+
+
 def _step_provider(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> str:
     io.print("")
-    io.print("Step 2/6 - AI provider")
+    io.print("Step 3/7 - AI provider")
     current = existing_toml.get("llm_provider")
     default = (
         current if isinstance(current, str) and current in PROVIDERS else PROVIDERS[0]
@@ -294,7 +326,7 @@ def _step_telegram(
     existing_toml: dict[str, object],
 ) -> None:
     io.print("")
-    io.print("Step 3/6 - Telegram")
+    io.print("Step 4/7 - Telegram")
     io.print(
         "  Bot token: in Telegram, open @BotFather, send /newbot and follow the "
         "steps; it replies with a token like 123456789:AA... Keep it private."
@@ -340,7 +372,7 @@ def _step_bridge_secret(
     io: WizardIO, plan: _Plan, existing_env: dict[str, str]
 ) -> None:
     io.print("")
-    io.print("Step 4/6 - Extension bridge secret")
+    io.print("Step 5/7 - Extension bridge secret")
     io.print(
         "  The browser extension sends offers to the bot over 127.0.0.1 with a "
         "shared secret."
@@ -370,7 +402,7 @@ def _step_profile(
     demo_profile: Path,
 ) -> None:
     io.print("")
-    io.print("Step 5/6 - Profile directory")
+    io.print("Step 6/7 - Profile directory")
     io.print(
         "  Everything lazyhunt knows about you (claims, base CVs, voice, "
         "preferences) lives in one directory. It holds personal data: keep it out "
@@ -426,7 +458,7 @@ def _step_profile(
 
 def _step_gmail(io: WizardIO) -> None:
     io.print("")
-    io.print("Step 6/6 - Gmail (optional, off by default)")
+    io.print("Step 7/7 - Gmail (optional, off by default)")
     io.print(
         "  Gmail sync is read-only and uses an OAuth client you create in your own "
         "Google Cloud project. To enable it later, follow docs/gmail.md, run "
@@ -738,6 +770,7 @@ def _run(
     plan = _Plan()
 
     _check_prerequisites(io, runner, which)
+    _step_language(io, plan, existing_toml)
     _step_provider(io, plan, existing_toml)
     _step_telegram(io, plan, existing_env, existing_toml)
     _step_bridge_secret(io, plan, existing_env)

@@ -19,6 +19,7 @@ from random import uniform
 from typing import TYPE_CHECKING, Any, Final
 
 from cva.beacons import SweepResult
+from cva.i18n import Lang, t
 from cva.ingest.sources import is_inline_source
 from cva.tracker import BeaconRow, OfferRow
 
@@ -70,6 +71,7 @@ async def heartbeat(context: Any) -> SweepResult:
 
     service: JobService = context.application.bot_data[SERVICE_KEY]
     owner = int(context.application.bot_data[OWNER_KEY])
+    lang = service.ui_language
     # Catch up a tracker.xlsx refresh that failed on a locked file (no-op when
     # the tracker is disabled or clean); first so a failing sweep cannot skip it.
     await service.retry_tracker_refresh()
@@ -117,17 +119,18 @@ async def heartbeat(context: Any) -> SweepResult:
             new_job_message(
                 title=notification.title,
                 company=notification.company,
-                age=notification.age or "reciente",
+                age=notification.age or t("notifier.age_recent", lang),
                 job_id=notification.job_id,
                 threshold=service.threshold,
+                lang=lang,
             ),
-            reply_markup=new_job_keyboard(notification.job_id),
+            reply_markup=new_job_keyboard(notification.job_id, lang=lang),
         )
     for alert in sweep.paused_alerts:
         await context.bot.send_message(
             owner,
-            beacon_paused_message(alert),
-            reply_markup=beacon_alert_keyboard(alert.beacon_id),
+            beacon_paused_message(alert, lang=lang),
+            reply_markup=beacon_alert_keyboard(alert.beacon_id, lang=lang),
         )
     try:
         due = service.deadline_alert()
@@ -145,20 +148,20 @@ async def heartbeat(context: Any) -> SweepResult:
     except Exception:  # noqa: BLE001 — a failing alert must not break the sweep
         _LOG.exception("deadline alert failed")
     try:
-        await _send_followups(context.bot, service, owner)
+        await _send_followups(context.bot, service, owner, lang)
     except Exception:  # noqa: BLE001 — a failing follow-up must not break the sweep
         _LOG.exception("follow-up reminders failed")
     if not paused:
         try:
             await _run_gmail_sync(
-                context.bot, context.application.bot_data.get(GMAIL_KEY), owner
+                context.bot, context.application.bot_data.get(GMAIL_KEY), owner, lang
             )
         except Exception:  # noqa: BLE001 — Gmail sync must never break the heartbeat
             _LOG.exception("gmail sync failed")
     return sweep
 
 
-async def _run_gmail_sync(bot: Any, sync: Any, owner: int) -> None:
+async def _run_gmail_sync(bot: Any, sync: Any, owner: int, lang: Lang) -> None:
     """Gmail poll behind its own every-N-minutes gate (the heartbeat ticks
     every 10 minutes; ``sync.due()`` decides). Proposals and the one-time auth
     warning go to the owner; the sync itself never raises."""
@@ -169,8 +172,8 @@ async def _run_gmail_sync(bot: Any, sync: Any, owner: int) -> None:
     async def send_proposal(proposal: Any) -> None:
         await bot.send_message(
             owner,
-            gmail_proposal_message(proposal),
-            reply_markup=gmail_proposal_keyboard(proposal.message_id),
+            gmail_proposal_message(proposal, lang=lang),
+            reply_markup=gmail_proposal_keyboard(proposal.message_id, lang=lang),
         )
 
     async def send_warning(text: str) -> None:
@@ -179,7 +182,9 @@ async def _run_gmail_sync(bot: Any, sync: Any, owner: int) -> None:
     await sync.run(send_proposal, send_warning)
 
 
-async def _send_followups(bot: Any, service: "JobService", owner: int) -> None:
+async def _send_followups(
+    bot: Any, service: "JobService", owner: int, lang: Lang
+) -> None:
     """Daily follow-up job: message the owner about silent sent offers.
 
     Nothing is sent externally. An item is marked only after its message was
@@ -204,14 +209,14 @@ async def _send_followups(bot: Any, service: "JobService", owner: int) -> None:
         try:
             resume = service.followup_resume(item)
             if item.kind == "proposal":
-                markup = followup_proposal_keyboard(item.offer.id)
+                markup = followup_proposal_keyboard(item.offer.id, lang=lang)
             else:
-                markup = followup_keyboard(item.offer.id)
+                markup = followup_keyboard(item.offer.id, lang=lang)
             if resume is not None:
                 text, delivered = resume
             elif item.kind == "proposal":
                 text = followup_proposal_message(
-                    item.offer, days_silent=item.days_silent
+                    item.offer, days_silent=item.days_silent, lang=lang
                 )
             else:
                 draft = await service.followup_draft(
@@ -225,6 +230,7 @@ async def _send_followups(bot: Any, service: "JobService", owner: int) -> None:
                     number=item.followups + 1,
                     draft=draft.text,
                     warnings=draft.warnings,
+                    lang=lang,
                 )
             stored = service.followup_chunks(item) if resume is not None else None
             parts = stored if stored is not None else chunk_message(text)

@@ -45,3 +45,4 @@ repo_beacons/
 # fictional demo profile is tracked.
 /profiles/*
 !/profiles/demo/
+!/profiles/README.md

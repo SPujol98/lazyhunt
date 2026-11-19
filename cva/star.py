@@ -24,45 +24,19 @@ from typing import Final
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from cva.claimsdb import Claim, ClaimsDB
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.tracker import STAR_PLACEHOLDER, StarStory
 
 ST: Final[str] = "st"
 MAX_CANDIDATES: Final[int] = 6
 _TITLE_MAX: Final[int] = 120
 
-STAR_FIELDS: Final[tuple[tuple[str, str], ...]] = (
-    ("situation", "Situación (contexto, 1-3 frases)"),
-    ("task", "Tarea (tu responsabilidad)"),
-    ("action", "Acción (qué hiciste tú, concreto)"),
-    ("result", "Resultado (qué pasó; cifra si la hay)"),
-    (
-        "use_for",
-        (
-            "¿Para qué tipo de preguntas sirve? "
-            "(p. ej. trabajo en equipo, problema técnico difícil)"
-        ),
-    ),
-)
-_FIELD_LABELS: Final[dict[str, str]] = {
-    "situation": "Situación",
-    "task": "Tarea",
-    "action": "Acción",
-    "result": "Resultado",
-    "use_for": "Sirve para",
-}
-_FIELD_NAMES_ES: Final[dict[str, str]] = {
-    "situation": "situación",
-    "task": "tarea",
-    "action": "acción",
-    "result": "resultado",
-    "use_for": "para qué sirve",
-}
-_EDIT_LABELS: Final[tuple[str, ...]] = (
-    "Situación",
-    "Tarea",
-    "Acción",
-    "Resultado",
-    "Uso",
+_FIELD_KEYS: Final[tuple[str, ...]] = (
+    "situation",
+    "task",
+    "action",
+    "result",
+    "use_for",
 )
 _PROJECT_OVERVIEW: Final = re.compile(r"^proj-(.+)-overview$")
 
@@ -130,20 +104,20 @@ def _candidate(key: str, claims: list[Claim]) -> StarCandidate:
     )
 
 
-def candidates_message(candidates: Sequence[StarCandidate], *, first: bool) -> str:
+def candidates_message(
+    candidates: Sequence[StarCandidate], *, first: bool, lang: Lang = LEGACY_LANG
+) -> str:
     """Intro for the candidate picker."""
     if not candidates:
-        return "⭐ Ya has empezado una historia con cada experiencia y proyecto."
-    intro = (
-        "⭐ Aún no tienes historias STAR. Elige una experiencia o proyecto y "
-        "te iré preguntando, un mensaje cada vez."
-        if first
-        else "⭐ Elige otra experiencia o proyecto para una nueva historia."
-    )
-    return intro + "\nLas respuestas las pones tú; yo no invento nada."
+        return t("prompts.star.all_started", lang)
+    intro = t("prompts.star.first" if first else "prompts.star.another", lang)
+    return intro + "\n" + t("prompts.star.your_answers", lang)
 
 
-def candidates_keyboard(candidates: Sequence[StarCandidate]) -> InlineKeyboardMarkup:
+def candidates_keyboard(
+    candidates: Sequence[StarCandidate], lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
+    """One ➕ button per candidate; titles are data, so ``lang`` changes nothing."""
     return InlineKeyboardMarkup(
         [
             [
@@ -156,102 +130,147 @@ def candidates_keyboard(candidates: Sequence[StarCandidate]) -> InlineKeyboardMa
     )
 
 
-def intro_message(story: StarStory, source_texts: Sequence[str]) -> str:
+def intro_message(
+    story: StarStory, source_texts: Sequence[str], lang: Lang = LEGACY_LANG
+) -> str:
     """Opening of the guided flow: the real claims the story rests on."""
-    lines = [
-        f"⭐ «{story.title}»",
-        (
-            "Te haré 5 preguntas, una por mensaje. Responde con tus palabras; "
-            "/skip deja un campo sin rellenar. Tienes 30 min entre respuestas."
-        ),
-    ]
+    lines = [f"⭐ «{story.title}»", t("prompts.star.intro", lang)]
     if source_texts:
-        lines.append("\nLo que consta en tu perfil:")
+        lines.append("\n" + t("prompts.star.profile", lang))
         lines.extend(f"• {t[:160]}" for t in source_texts[:4])
     return "\n".join(lines)
 
 
-def question_message(position: int, total: int, field: str) -> str:
-    return f"{position}/{total} · {field_question(field)}"
+def star_fields(lang: Lang = LEGACY_LANG) -> tuple[tuple[str, str], ...]:
+    """(field key, question text) for every STAR field, in ask order."""
+    return tuple((f, t(f"prompts.star.{f}.q", lang)) for f in _FIELD_KEYS)
 
 
-def field_question(field: str) -> str:
-    return next(q for f, q in STAR_FIELDS if f == field)
+STAR_FIELDS: Final[tuple[tuple[str, str], ...]] = star_fields(LEGACY_LANG)
 
 
-def field_label(field: str) -> str:
-    """Spanish display name of a STAR field key (situation -> situación)."""
-    return _FIELD_NAMES_ES.get(field, field)
+def question_message(
+    position: int, total: int, field: str, lang: Lang = LEGACY_LANG
+) -> str:
+    return f"{position}/{total} · {field_question(field, lang)}"
 
 
-def story_message(story: StarStory) -> str:
-    mark = "✅ completa" if story.complete else "✏️ incompleta"
+def field_question(field: str, lang: Lang = LEGACY_LANG) -> str:
+    return next(q for f, q in star_fields(lang) if f == field)
+
+
+def field_label(field: str, lang: Lang = LEGACY_LANG) -> str:
+    """Display name of a STAR field key (es: situation -> situación)."""
+    return t(f"prompts.star.{field}.name", lang) if field in _FIELD_KEYS else field
+
+
+def story_message(story: StarStory, lang: Lang = LEGACY_LANG) -> str:
+    mark = t(
+        "prompts.star.complete" if story.complete else "prompts.star.incomplete", lang
+    )
     lines = [f"⭐ #{story.id} · {story.title} · {mark}"]
-    for field, _question in STAR_FIELDS:
-        lines.append(f"{_FIELD_LABELS[field]}: {getattr(story, field)}")
+    for field in _FIELD_KEYS:
+        lines.append(
+            f"{t(f'prompts.star.{field}.label', lang)}: {getattr(story, field)}"
+        )
     missing = [
-        field_label(f) for f, _q in STAR_FIELDS if getattr(story, f) == STAR_PLACEHOLDER
+        field_label(f, lang)
+        for f in _FIELD_KEYS
+        if getattr(story, f) == STAR_PLACEHOLDER
     ]
     if missing:
-        lines.append(f"Falta: {', '.join(missing)}")
+        lines.append(t("prompts.star.missing", lang, fields=", ".join(missing)))
     return "\n".join(lines)
 
 
-def list_message(stories: Sequence[StarStory]) -> str:
-    lines = ["⭐ Tus historias STAR:"]
+def list_message(stories: Sequence[StarStory], lang: Lang = LEGACY_LANG) -> str:
+    lines = [t("prompts.star.list_head", lang)]
     for number, story in enumerate(stories, start=1):
         lines.append(f"{number}. {'✅' if story.complete else '✏️'} {story.title}")
-    lines.append(f"\n✅ completa · ✏️ faltan partes ({STAR_PLACEHOLDER}).")
+    lines.append("\n" + t("prompts.star.legend", lang, placeholder=STAR_PLACEHOLDER))
     return "\n".join(lines)
 
 
-def list_keyboard(stories: Sequence[StarStory]) -> InlineKeyboardMarkup:
+def list_keyboard(
+    stories: Sequence[StarStory], lang: Lang = LEGACY_LANG
+) -> InlineKeyboardMarkup:
     rows = [
         [
-            InlineKeyboardButton(f"👁 Ver {n}", callback_data=f"{ST}:v:{s.id}"),
-            InlineKeyboardButton(f"✏️ Editar {n}", callback_data=f"{ST}:e:{s.id}"),
-            InlineKeyboardButton(f"🗑 Borrar {n}", callback_data=f"{ST}:d:{s.id}"),
+            InlineKeyboardButton(
+                t("prompts.star.btn.view_n", lang, n=n), callback_data=f"{ST}:v:{s.id}"
+            ),
+            InlineKeyboardButton(
+                t("prompts.star.btn.edit_n", lang, n=n), callback_data=f"{ST}:e:{s.id}"
+            ),
+            InlineKeyboardButton(
+                t("prompts.star.btn.delete_n", lang, n=n),
+                callback_data=f"{ST}:d:{s.id}",
+            ),
         ]
         for n, s in enumerate(stories, start=1)
     ]
-    rows.append([InlineKeyboardButton("➕ Añadir otra", callback_data=f"{ST}:add")])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                t("prompts.star.btn.add", lang), callback_data=f"{ST}:add"
+            )
+        ]
+    )
     return InlineKeyboardMarkup(rows)
 
 
-def story_keyboard(story_id: int) -> InlineKeyboardMarkup:
+def story_keyboard(story_id: int, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✏️ Editar", callback_data=f"{ST}:e:{story_id}"),
-                InlineKeyboardButton("🗑 Borrar", callback_data=f"{ST}:d:{story_id}"),
+                InlineKeyboardButton(
+                    t("prompts.star.btn.edit", lang), callback_data=f"{ST}:e:{story_id}"
+                ),
+                InlineKeyboardButton(
+                    t("prompts.star.btn.delete", lang),
+                    callback_data=f"{ST}:d:{story_id}",
+                ),
             ],
-            [InlineKeyboardButton("⬅️ Volver", callback_data=f"{ST}:l")],
+            [
+                InlineKeyboardButton(
+                    t("prompts.star.btn.back", lang), callback_data=f"{ST}:l"
+                )
+            ],
         ]
     )
 
 
-def edit_keyboard(story_id: int) -> InlineKeyboardMarkup:
+def edit_keyboard(story_id: int, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
     buttons = [
         InlineKeyboardButton(label, callback_data=f"{ST}:f:{story_id}:{i}")
-        for i, label in enumerate(_EDIT_LABELS)
+        for i, label in enumerate(
+            t(f"prompts.star.{f}.edit", lang) for f in _FIELD_KEYS
+        )
     ]
     return InlineKeyboardMarkup(
         [
             buttons[:3],
             buttons[3:],
-            [InlineKeyboardButton("⬅️ Volver", callback_data=f"{ST}:l")],
+            [
+                InlineKeyboardButton(
+                    t("prompts.star.btn.back", lang), callback_data=f"{ST}:l"
+                )
+            ],
         ]
     )
 
 
-def delete_keyboard(story_id: int) -> InlineKeyboardMarkup:
+def delete_keyboard(story_id: int, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "🗑 Sí, borrar", callback_data=f"{ST}:dy:{story_id}"
+                    t("prompts.star.btn.delete_yes", lang),
+                    callback_data=f"{ST}:dy:{story_id}",
                 ),
-                InlineKeyboardButton("Cancelar", callback_data=f"{ST}:l"),
+                InlineKeyboardButton(
+                    t("prompts.star.btn.cancel", lang), callback_data=f"{ST}:l"
+                ),
             ]
         ]
     )

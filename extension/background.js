@@ -8,6 +8,7 @@ import { reschedule } from './core/schedule.js';
 import { runRound } from './core/round.js';
 import { handleMessage } from './core/messages.js';
 import { warn } from './core/util.js';
+import { loadUiLanguage } from './i18n.js';
 
 async function prepare(installed) {
   try {
@@ -28,6 +29,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // Answers asynchronously: returning true keeps the channel open.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  handleMessage(message).then(sendResponse);
+  loadUiLanguage().then(() => handleMessage(message)).then(sendResponse);
   return true;
 });

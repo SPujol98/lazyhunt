@@ -260,6 +260,15 @@
   "intervalWarning": {
     "message": "Por debajo de 30 minutos los portales pueden limitarte o bloquearte."
   },
+  "languageAuto": {
+    "message": "Auto"
+  },
+  "languageAutoTitle": {
+    "message": "Seguir el idioma del navegador"
+  },
+  "languageLabel": {
+    "message": "Idioma"
+  },
   "lastScan": {
     "message": "Último escaneo"
   },

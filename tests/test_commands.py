@@ -10,13 +10,15 @@ from telegram.ext import CommandHandler
 
 import bot
 from cva.commands import (
-    BUTTONS_SECTION_TITLE,
     COMMANDS,
     SECTIONS,
+    help_text,
     menu_commands,
+    section_title,
 )
 from cva.config import Settings
 from cva.fetch import FetchResponse
+from cva.i18n import LANGS, Lang
 from cva.notifier import help_message
 from tests.test_bot import FakeFetcher, FakeUpdate, make_service
 
@@ -38,12 +40,14 @@ def test_every_registered_command_is_in_table_and_help(
     tmp_path: Path, clean_settings: Callable[..., Settings]
 ) -> None:
     registered = _handler_names(clean_settings(), tmp_path)
-    known = {c.name for c in COMMANDS} | {a for c in COMMANDS for a in c.aliases}
+    known = {n for c in COMMANDS for n in c.names} | {
+        a for c in COMMANDS for a in c.aliases
+    }
     assert registered, "no CommandHandler found"
     assert registered <= known, f"undocumented: {registered - known}"
-    text = help_message()
+    documented = {lang: help_text(lang=lang) for lang in LANGS}
     for name in registered:
-        assert f"/{name}" in text, name
+        assert any(f"/{name}" in text for text in documented.values()), name
 
 
 def test_table_has_no_phantom_commands(
@@ -53,8 +57,13 @@ def test_table_has_no_phantom_commands(
     assert {c.name for c in COMMANDS} <= registered
 
 
-def test_menu_respects_telegram_limits() -> None:
-    menu = menu_commands()
+def test_every_table_command_has_exactly_one_bot_handler() -> None:
+    assert set(bot._COMMAND_HANDLERS) == {c.name for c in COMMANDS}
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_menu_respects_telegram_limits(lang: Lang) -> None:
+    menu = menu_commands(lang)
     assert 1 <= len(menu) <= 100
     names = [name for name, _ in menu]
     assert len(names) == len(set(names))
@@ -63,24 +72,28 @@ def test_menu_respects_telegram_limits() -> None:
         assert 1 <= len(description) <= 256, name
 
 
-def test_every_command_has_section_explanation_and_example() -> None:
-    for command in COMMANDS:
+@pytest.mark.parametrize("lang", LANGS)
+def test_every_command_has_section_explanation_and_example(lang: Lang) -> None:
+    from cva.commands import commands_for
+
+    for command in commands_for(lang=lang):
         assert command.section in SECTIONS
         assert command.explanation.strip()
         assert command.example.startswith(f"/{command.name}")
 
 
-def test_help_is_grouped_and_fits_one_message() -> None:
-    text = help_message()
+@pytest.mark.parametrize("lang", LANGS)
+def test_help_is_grouped_and_fits_one_message(lang: Lang) -> None:
+    text = help_text(lang=lang)
     assert len(text) < 4096
     for section in SECTIONS:
-        assert section in text
+        assert section_title(section, lang) in text
     assert "/panel" in text
 
 
 def test_help_documents_every_card_button() -> None:
     text = help_message()
-    assert BUTTONS_SECTION_TITLE in text
+    assert section_title("buttons", "es") in text
     for label in (
         "Analizar",
         "Generar CV",
@@ -181,15 +194,15 @@ def test_register_menu_sets_commands_and_chains_previous_hook() -> None:
 
     app = FakeApp(FakeMenuBot())
     app.post_init = previous  # type: ignore[assignment]
-    bot.register_menu(app)  # type: ignore[arg-type]
+    bot.register_menu(app, "es")  # type: ignore[arg-type]
     asyncio.run(app.post_init(app))  # type: ignore[misc]
-    assert app.bot.calls == [list(menu_commands())]
+    assert app.bot.calls == [list(menu_commands("es"))]
     assert order == ["previous"]
 
 
 def test_register_menu_failure_never_raises() -> None:
     app = FakeApp(FakeMenuBot(fail=True))
-    bot.register_menu(app)  # type: ignore[arg-type]
+    bot.register_menu(app, "es")  # type: ignore[arg-type]
     asyncio.run(app.post_init(app))  # type: ignore[misc]
 
 
@@ -201,12 +214,12 @@ def test_register_menu_failure_still_runs_previous_hook() -> None:
 
     app = FakeApp(FakeMenuBot(fail=True))
     app.post_init = previous  # type: ignore[assignment]
-    bot.register_menu(app)  # type: ignore[arg-type]
+    bot.register_menu(app, "es")  # type: ignore[arg-type]
     asyncio.run(app.post_init(app))  # type: ignore[misc]
     assert order == ["previous"]
 
 
-@pytest.mark.parametrize("name", [c.name for c in COMMANDS])
+@pytest.mark.parametrize("name", [n for c in COMMANDS for n in (*c.names, *c.aliases)])
 def test_names_are_valid(name: str) -> None:
     assert _NAME_RE.match(name)
 

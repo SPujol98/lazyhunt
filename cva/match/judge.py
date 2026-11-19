@@ -70,6 +70,7 @@ from cva.calibration import (
 )
 from cva.claimsdb import ClaimsDB
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.llm import LlmClient, LlmResponseError
 from cva.match.persona import JudgePersona
 from cva.match.persona_defaults import OWNER_JUDGE_PERSONA
@@ -112,7 +113,7 @@ class OfferJudgment(BaseModel):
     gaps: list[str] = Field(default_factory=list)
     cv_base: CvBase
     tailoring_hints: list[str] = Field(default_factory=list, max_length=3)
-    rationale: str = Field(min_length=1)  # Spanish — the owner reads Spanish
+    rationale: str = Field(min_length=1)  # in the UI language
 
 
 class JudgeError(LlmResponseError):
@@ -221,12 +222,14 @@ def _wrap_offer_as_data(text: str) -> str:
     return f"{_OFFER_DATA_INSTRUCTION}\n\n<offer>\n{escaped}\n</offer>"
 
 
-_OUTPUT_INSTRUCTIONS: Final[str] = (
-    "Respond with ONLY one JSON object - no markdown, no code fences, no "
-    "explanations before or after. Every fit[].claim_ids entry MUST be an "
-    "existing claim id copied verbatim from the list below; cite at least "
-    "one claim id per fit item. rationale MUST be written in Spanish."
-)
+def _output_instructions(lang: Lang) -> str:
+    return (
+        "Respond with ONLY one JSON object - no markdown, no code fences, no "
+        "explanations before or after. Every fit[].claim_ids entry MUST be an "
+        "existing claim id copied verbatim from the list below; cite at least "
+        "one claim id per fit item. rationale MUST be written in "
+        f"{t('prompts.judge_rationale_lang', lang)}."
+    )
 
 
 def build_claims_digest(claims: ClaimsDB) -> str:
@@ -252,6 +255,7 @@ def build_system_prompt(
     anchor_thresholds: Mapping[str, int] | None = None,
     persona: JudgePersona = OWNER_JUDGE_PERSONA,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Rubric + calibration + candidate facts + claims digest + output shape.
 
@@ -266,7 +270,8 @@ def build_system_prompt(
     (profile -> notify threshold) lets each line be judged against its own
     profile's threshold; a profile missing from it uses ``threshold``.
     ``families`` (the profile's role families) normalizes each example's
-    profile and names it in the line.
+    profile and names it in the line. ``lang`` is the UI language the
+    rationale is written in (the prompt otherwise stays as is).
     """
     digest = build_claims_digest(claims)
     calibration = "\n".join(
@@ -279,7 +284,7 @@ def build_system_prompt(
         calibration,
         persona.facts,
         f"Candidate claims (id: text) - the ONLY ids fit[].claim_ids may cite:\n{digest}",
-        _OUTPUT_INSTRUCTIONS,
+        _output_instructions(lang),
     ]
     sections = [section for section in sections if section]
     if extra_anchors:
@@ -329,7 +334,9 @@ def _validate_claim_ids(judgment: OfferJudgment, claims: ClaimsDB) -> None:
 _PLACEHOLDER_TOKENS: Final[frozenset[str]] = frozenset(
     {"placeholder", "todo", "n/a", "na", "lorem", "tbd", "...", "xxx"}
 )
-_STRIP_EDGE_PUNCTUATION: Final[re.Pattern[str]] = re.compile(r"^[\W_]+|[\W_]+$", re.UNICODE)
+_STRIP_EDGE_PUNCTUATION: Final[re.Pattern[str]] = re.compile(
+    r"^[\W_]+|[\W_]+$", re.UNICODE
+)
 
 
 def _is_blank_or_placeholder(text: str) -> bool:
@@ -375,7 +382,9 @@ def _validate_texts(judgment: OfferJudgment) -> None:
         raise JudgeError(f"judge returned blank/placeholder text: {joined}")
 
 
-def derive_verdict(score: int, walls: list[Wall], *, threshold: int = _DEFAULT_THRESHOLD) -> Verdict:
+def derive_verdict(
+    score: int, walls: list[Wall], *, threshold: int = _DEFAULT_THRESHOLD
+) -> Verdict:
     """Sole verdict authority: score band + hard walls (see module docstring).
 
     Any hard wall forces ``discard``, overriding the score entirely.
@@ -406,6 +415,7 @@ async def judge_offer(
     anchor_thresholds: Mapping[str, int] | None = None,
     persona: JudgePersona = OWNER_JUDGE_PERSONA,
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> OfferJudgment:
     """Holistic judgment of one offer against the claims DB.
 
@@ -423,6 +433,7 @@ async def judge_offer(
         anchor_thresholds=anchor_thresholds,
         persona=persona,
         families=families,
+        lang=lang,
     )
     user = _wrap_offer_as_data(text)
     judgment = await llm.json_completion(system, user, OfferJudgment, model=model)

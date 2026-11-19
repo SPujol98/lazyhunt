@@ -38,6 +38,9 @@ def _isolate_default_output_paths(
     # opts out (``legacy_profile`` fixture or an explicit ``profile_dir``); a
     # developer's own profile_dir must never leak in either.
     monkeypatch.setenv("CVA_PROFILE_DIR", str(DEMO_DIR))
+    # The suite pins today's Spanish UI (bot-i18n S5); tests of the English
+    # default opt in with ``CVA_UI_LANGUAGE=en`` or by deleting the variable.
+    monkeypatch.setenv("CVA_UI_LANGUAGE", "es")
     # Callers that resolve "the" profile without a directory get the demo
     # persona; an explicit argument, including None, still resolves exactly as in
     # production. Patched at the source and in EVERY module that bound the

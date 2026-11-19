@@ -14,6 +14,7 @@ from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from cva.i18n import LEGACY_LANG, Lang, t
 from cva.match.judge import OfferJudgment
 from cva.tracker.repo import STAR_PLACEHOLDER, StarStory
 
@@ -134,9 +135,9 @@ class PrepInputs:
     salary_text: str
 
 
-SYSTEM_PROMPT: Final[str] = (
+_SYSTEM_TEMPLATE: Final[str] = (
     "You prepare a job candidate for ONE interview stage. Write the content "
-    "in Spanish (the candidate reads Spanish); quote terms of the offer as-is. "
+    "@LANG@; quote terms of the offer as-is. "
     "Return JSON only, with exactly these keys: explain [{topic, detail}] "
     "(what they will ask the candidate to explain: CV and project deep-dives "
     "using the candidate's REAL figures), topics [{topic, why}] (probable "
@@ -149,7 +150,7 @@ SYSTEM_PROMPT: Final[str] = (
     "invent experience, tools, companies, dates, numbers or percentages. If a "
     "figure is not in the inputs, do not write it.\n"
     "2. Give topics, not literal questions: nobody knows the real questions. "
-    "Never claim that something will be asked; use wording like 'es probable'.\n"
+    "Never claim that something will be asked; use wording like '@LIKELY@'.\n"
     "3. For each gap, answer honestly in this order: acknowledge the gap "
     "plainly; point to REAL adjacent experience from the claims or stories (or "
     "leave it empty); then a realistic learning path. Never pretend experience.\n"
@@ -163,15 +164,27 @@ SYSTEM_PROMPT: Final[str] = (
     "7. Tailor topics and questions to the stage given in the user message."
 )
 
-FACTS_SYSTEM_PROMPT: Final[str] = (
+_FACTS_TEMPLATE: Final[str] = (
     "You research verifiable public facts about a company using web search, "
     "for a candidate preparing an interview: what it does, size, products, "
     "recent public news. Never invent a fact or a source: only report what "
     "you actually found on a page you consulted, with its real URL as "
     "source_url. Do not scrape Glassdoor or social profiles of people. Answer "
     'with JSON only: {"items": [{"fact": str, "source_url": str}]}. Write '
-    "each fact in Spanish. If you find nothing reliable, return an empty list."
+    "each fact in @FACTS_LANG@. If you find nothing reliable, return an empty list."
 )
+
+
+def system_prompt(lang: Lang = LEGACY_LANG) -> str:
+    """Pack system prompt; the pack is written in the UI language ``lang``."""
+    return _SYSTEM_TEMPLATE.replace("@LANG@", t("prompts.prep_lang", lang)).replace(
+        "@LIKELY@", t("prompts.prep_likely", lang)
+    )
+
+
+def facts_system_prompt(lang: Lang = LEGACY_LANG) -> str:
+    """Company-facts system prompt; facts are written in ``lang``."""
+    return _FACTS_TEMPLATE.replace("@FACTS_LANG@", t("prompts.facts_lang", lang))
 
 
 def _judge_block(judge: OfferJudgment | None) -> str:
@@ -212,7 +225,7 @@ def _stories_block(stories: list[StarStory]) -> str:
     return "\n".join(blocks)
 
 
-def build_prep_prompt(inputs: PrepInputs) -> tuple[str, str]:
+def build_prep_prompt(inputs: PrepInputs, lang: Lang = LEGACY_LANG) -> tuple[str, str]:
     """(system, user) prompt pair for the pack completion (pure)."""
     letter = (
         inputs.cover_letter.strip()
@@ -234,12 +247,14 @@ def build_prep_prompt(inputs: PrepInputs) -> tuple[str, str]:
         f"<sent_letter>\n{letter}\n</sent_letter>\n\n"
         f"<offer>\n{inputs.posting_text}\n</offer>"
     )
-    return SYSTEM_PROMPT, user
+    return system_prompt(lang), user
 
 
-def build_facts_prompt(*, company: str, position: str) -> tuple[str, str]:
+def build_facts_prompt(
+    *, company: str, position: str, lang: Lang = LEGACY_LANG
+) -> tuple[str, str]:
     """(system, user) pair for the web-search company-facts completion."""
-    return FACTS_SYSTEM_PROMPT, f"Company: {company}\nPosition: {position}"
+    return facts_system_prompt(lang), f"Company: {company}\nPosition: {position}"
 
 
 def verified_facts(facts: CompanyFacts) -> list[CompanyFact]:
@@ -297,8 +312,8 @@ def pack_text(pack: PrepPack) -> str:
     parts: list[str] = []
     for e in pack.explain:
         parts += [e.topic, e.detail]
-    for t in pack.topics:
-        parts += [t.topic, t.why]
+    for topic in pack.topics:
+        parts += [topic.topic, topic.why]
     for g in pack.gaps:
         parts += [g.gap, g.acknowledge, g.adjacent, g.learning]
     parts += [s.why for s in pack.stories]

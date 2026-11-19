@@ -94,10 +94,11 @@ def wizard(
     )
 
 
-# Fresh-install answers, in prompt order: provider (default), owner id,
+# Fresh-install answers, in prompt order: bot language (default), provider
+# (default), owner id,
 # profile dir (default), profile kind (skeleton), final confirmation, show the
 # bridge secret (no). The bot token goes through getpass.
-FRESH_ANSWERS = ["", OWNER_ID, "", "1", "y", "n"]
+FRESH_ANSWERS = ["", "", OWNER_ID, "", "1", "y", "n"]
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -142,7 +143,7 @@ def test_secrets_never_appear_in_printed_output(tmp_path: Path) -> None:
 
 
 def test_bridge_secret_is_printed_once_only_on_request(tmp_path: Path) -> None:
-    scripted = ScriptedIO(["", OWNER_ID, "", "1", "y", "y"], [TOKEN])
+    scripted = ScriptedIO(["", "", OWNER_ID, "", "1", "y", "y"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -152,7 +153,7 @@ def test_bridge_secret_is_printed_once_only_on_request(tmp_path: Path) -> None:
 
 
 def test_declining_the_final_confirmation_writes_nothing(tmp_path: Path) -> None:
-    scripted = ScriptedIO(["", OWNER_ID, "", "1", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", OWNER_ID, "", "1", "n"], [TOKEN])
 
     assert wizard(tmp_path, scripted) == 0
 
@@ -170,7 +171,7 @@ def test_existing_keys_are_not_overwritten_without_confirmation(tmp_path: Path) 
     )
     # provider, keep the existing token (n), owner id, keep the existing owner
     # id (n), keep the existing secret (n), profile dir, kind, confirm, no show.
-    scripted = ScriptedIO(["", "n", OWNER_ID, "n", "n", "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "n", OWNER_ID, "n", "n", "", "1", "y", "n"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -197,7 +198,7 @@ def test_existing_keys_are_replaced_when_confirmed(tmp_path: Path) -> None:
     )
     # provider, replace the token (y), owner id, replace the owner id (y),
     # profile dir, kind, confirm, no show (no secret yet: one is generated).
-    scripted = ScriptedIO(["", "y", OWNER_ID, "y", "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "y", OWNER_ID, "y", "", "1", "y", "n"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -216,7 +217,7 @@ def test_rerun_with_the_same_answers_changes_nothing(tmp_path: Path) -> None:
 
     # provider, same owner id, keep the bridge secret (n), profile dir (exists:
     # no kind question), no secret show.
-    second = ScriptedIO(["", OWNER_ID, "n", "", "n"], [TOKEN])
+    second = ScriptedIO(["", "", OWNER_ID, "n", "", "n"], [TOKEN])
     assert wizard(tmp_path, second) == 0
 
     assert (tmp_path / ".env").read_text(encoding="utf-8") == env_before
@@ -247,7 +248,7 @@ def test_skeleton_profile_copies_the_demo_structure_with_placeholders(
 
 
 def test_demo_profile_option_copies_the_demo_verbatim(tmp_path: Path) -> None:
-    wizard(tmp_path, ScriptedIO(["", OWNER_ID, "", "2", "y", "n"], [TOKEN]))
+    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "2", "y", "n"], [TOKEN]))
 
     profile = tmp_path / "profiles" / "me"
     assert (profile / "voice.md").read_bytes() == (
@@ -261,7 +262,7 @@ def test_existing_profile_is_never_overwritten(tmp_path: Path) -> None:
     profile.mkdir(parents=True)
     (profile / "voice.md").write_text("mine", encoding="utf-8")
     # No profile-kind question: the existing directory is reused as is.
-    scripted = ScriptedIO(["", OWNER_ID, "", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", OWNER_ID, "", "y", "n"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -300,7 +301,9 @@ def test_claude_logged_out_is_reported(tmp_path: Path) -> None:
 
 
 def test_invalid_telegram_id_is_asked_again(tmp_path: Path) -> None:
-    scripted = ScriptedIO(["", "not-a-number", OWNER_ID, "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(
+        ["", "", "not-a-number", OWNER_ID, "", "1", "y", "n"], [TOKEN]
+    )
 
     wizard(tmp_path, scripted)
 
@@ -377,7 +380,7 @@ def test_profile_outside_the_base_or_inside_the_demo_is_asked_again(
     base.mkdir()
     outside = tmp_path / "outside"
     answer = answer.replace("{abs}", str(outside))
-    scripted = ScriptedIO(["", OWNER_ID, answer, "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", OWNER_ID, answer, "", "1", "y", "n"], [TOKEN])
     assert wizard(base, scripted) == 0
     assert not (tmp_path / "x").exists()
     assert not outside.exists()
@@ -393,7 +396,7 @@ def test_duplicate_env_keys_are_all_replaced(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
         "CVA_TELEGRAM_TOKEN=old1\nOTHER=1\nCVA_TELEGRAM_TOKEN=old2\n", encoding="utf-8"
     )
-    scripted = ScriptedIO(["", "y", OWNER_ID, "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "y", OWNER_ID, "", "1", "y", "n"], [TOKEN])
     assert wizard(tmp_path, scripted) == 0
     text = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "old1" not in text and "old2" not in text
@@ -407,9 +410,50 @@ def test_an_unreadable_config_writes_nothing_at_all(tmp_path: Path) -> None:
     (tmp_path / "config.local.toml").write_text(
         '"owner_telegram_id" = 3\n', encoding="utf-8"
     )
-    scripted = ScriptedIO(["", OWNER_ID, "y", "", "1", "y"], [TOKEN])
+    scripted = ScriptedIO(["", "", OWNER_ID, "y", "", "1", "y"], [TOKEN])
     with pytest.raises(tomllib.TOMLDecodeError):
         wizard(tmp_path, scripted)
     assert not (tmp_path / ".env").exists()
     assert not (tmp_path / "profiles").exists()
     assert (tmp_path / "config.local.toml").read_text() == '"owner_telegram_id" = 3\n'
+
+
+def test_bot_language_defaults_to_auto_and_is_written(tmp_path: Path) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    local = tomllib.loads((tmp_path / "config.local.toml").read_text(encoding="utf-8"))
+    assert local["ui_language"] == "auto"
+    assert "auto, en, es" in scripted.transcript
+
+
+def test_bot_language_english_is_written(tmp_path: Path) -> None:
+    assert wizard(tmp_path, ScriptedIO(["en", *FRESH_ANSWERS[1:]], [TOKEN])) == 0
+    local = tomllib.loads((tmp_path / "config.local.toml").read_text(encoding="utf-8"))
+    assert local["ui_language"] == "en"
+
+
+def test_bot_language_spanish_is_written_once(tmp_path: Path) -> None:
+    scripted = ScriptedIO(["es", *FRESH_ANSWERS[1:]], [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    text = (tmp_path / "config.local.toml").read_text(encoding="utf-8")
+    assert tomllib.loads(text)["ui_language"] == "es"
+    assert text.count("ui_language") == 1
+
+
+def test_unknown_bot_language_is_asked_again(tmp_path: Path) -> None:
+    scripted = ScriptedIO(["fr", "es", *FRESH_ANSWERS[1:]], [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    assert "auto, en, es" in scripted.transcript
+    local = tomllib.loads((tmp_path / "config.local.toml").read_text(encoding="utf-8"))
+    assert local["ui_language"] == "es"
+
+
+def test_rerun_keeps_the_previous_bot_language_as_default(tmp_path: Path) -> None:
+    wizard(tmp_path, ScriptedIO(["es", *FRESH_ANSWERS[1:]], [TOKEN]))
+    before = (tmp_path / "config.local.toml").read_text(encoding="utf-8")
+
+    second = ScriptedIO(["", "", OWNER_ID, "n", "", "n"], [TOKEN])
+    assert wizard(tmp_path, second) == 0
+
+    assert (tmp_path / "config.local.toml").read_text(encoding="utf-8") == before
+    assert "Nothing to change" in second.transcript

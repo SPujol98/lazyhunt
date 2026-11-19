@@ -16,13 +16,16 @@ import os
 import stat
 import tempfile
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Final, Literal
 
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.i18n import LEGACY_LANG, Lang, t
+from cva.match.gates import gate_reason
+from cva.match.stack_wall import stack_wall_display
 from cva.tracker.repo import OfferRow
 from cva.tracker.xlsx import ESTADO_FILLS
 from cva.tracker.xlsx import _is_sent as is_sent
@@ -58,7 +61,6 @@ _MATCH_BUCKETS: Final[tuple[tuple[str, int, int], ...]] = (
     ("80-100", 80, 100),
 )
 _NO_VALUE: Final[str] = "—"
-_SPANISH_LABELS: Final[dict[str, str]] = {"AI": "IA"}
 DISCARDED_DAYS: Final[int] = 7
 NEAR_THRESHOLD_POINTS: Final[int] = 10
 REASON_MAX: Final[int] = 120
@@ -97,10 +99,14 @@ def _safe_url(url: str | None) -> str:
     return text if text.lower().startswith(("http://", "https://")) else ""
 
 
-def _bar_chart(items: Sequence[tuple[str, int, str | None]], title: str) -> str:
+def _bar_chart(
+    items: Sequence[tuple[str, int, str | None]],
+    title: str,
+    lang: Lang = LEGACY_LANG,
+) -> str:
     """Horizontal inline-SVG bars: (label, value, fill colour or None)."""
     if not items:
-        return '<p class="muted">Sin datos.</p>'
+        return f'<p class="muted">{t("panel.no_data", lang)}</p>'
     peak = max(value for _, value, _ in items) or 1
     row_h, label_w, bar_w, width = 24, 112, 150, 320
     parts = [
@@ -128,8 +134,12 @@ def _pct(part: int, whole: int) -> str:
     return f"{round(100 * part / whole)}%" if whole else _NO_VALUE
 
 
-def _estado_label(estado: str) -> str:
-    return estado.replace("_", " ")
+def _estado_label(estado: str, lang: Lang = LEGACY_LANG) -> str:
+    key = f"panel.estado.{estado}"
+    try:
+        return t(key, lang)
+    except KeyError:
+        return estado.replace("_", " ")
 
 
 def _week_key(day: date) -> str:
@@ -197,21 +207,30 @@ def compute_stats(rows: list[OfferRow], now: datetime) -> dict[str, object]:
     }
 
 
-def _alert_items(pairs: list[tuple[int, OfferRow]], template: str) -> str:
+def _deadline_text(days: int, lang: Lang) -> str:
+    key = "today" if days == 0 else "one" if days == 1 else "many"
+    return t(f"panel.deadline_{key}", lang, n=days)
+
+
+def _alert_items(
+    pairs: list[tuple[int, OfferRow]], render: Callable[[int], str]
+) -> str:
     items = []
     for number, r in pairs:
         who = f"#{r.id} {r.empresa or _NO_VALUE} — {r.posicion or _NO_VALUE}"
-        items.append(f"<li>{html.escape(who)} · {template.format(n=number)}</li>")
+        items.append(f"<li>{html.escape(who)} · {render(number)}</li>")
     return "".join(items)
 
 
-def _family_tag(profile: str, families: FamilyRegistry) -> str:
+def _family_tag(
+    profile: str, families: FamilyRegistry, lang: Lang = LEGACY_LANG
+) -> str:
     """The family label shown on the panel (unknown: the default family).
 
-    The panel is in Spanish: the label ``AI`` (the built-in ``ai``) reads "IA".
+    In Spanish the label ``AI`` (the built-in ``ai``) reads "IA".
     """
     family = families.get(families.normalize(profile)) or families.default
-    return _SPANISH_LABELS.get(family.label, family.label)
+    return t("panel.family_ai", lang) if family.label == "AI" else family.label
 
 
 def _json_blob(rows: list[OfferRow], default_profile: str = "ai") -> str:
@@ -288,7 +307,7 @@ var q=document.getElementById('q'),fe=document.getElementById('f-estado'),
 fp=document.getElementById('f-perfil'),fo=document.getElementById('f-portal');
 function fill(sel,key){var seen={};rows.forEach(function(r){seen[r[key]]=1});
 Object.keys(seen).sort().forEach(function(v){var o=document.createElement('option');
-o.value=v;o.textContent=v.replace(/_/g,' ');sel.appendChild(o)})}
+o.value=v;o.textContent=@@LABEL:v@@;sel.appendChild(o)})}
 fill(fe,'estado');fill(fp,'perfil');fill(fo,'portal');
 function cell(tr,text){var td=document.createElement('td');td.textContent=text;
 tr.appendChild(td);return td}
@@ -299,18 +318,45 @@ if(fo.value&&r.portal!==fo.value)return;
 if(t&&(r.empresa+' '+r.posicion+' '+r.portal+' '+r.estado).toLowerCase().indexOf(t)<0)return;
 n++;var tr=document.createElement('tr');cell(tr,'#'+r.id);cell(tr,r.empresa);
 var td=cell(tr,'');
-if(r.url){var a=document.createElement('a');a.textContent=r.posicion||'oferta';
+if(r.url){var a=document.createElement('a');a.textContent=r.posicion||'@@OFFER@@';
 a.setAttribute('href',r.url);a.setAttribute('rel','noopener noreferrer');
 a.setAttribute('target','_blank');td.appendChild(a)}else{td.textContent=r.posicion}
 cell(tr,r.perfil);cell(tr,r.portal);
 var s=cell(tr,'');var c=document.createElement('span');
 c.className='chip e-'+r.estado.replace(/[^a-z_]/g,'');
-c.textContent=r.estado.replace(/_/g,' ');s.appendChild(c);
+c.textContent=@@LABEL:r.estado@@;s.appendChild(c);
 cell(tr,r.match===null?'—':String(r.match));cell(tr,r.envio);cell(tr,r.update);
 body.appendChild(tr)});
-document.getElementById('count').textContent=n+' de '+rows.length}
+document.getElementById('count').textContent=n+'@@OF@@'+rows.length}
 [q,fe,fp,fo].forEach(function(el){el.addEventListener('input',draw)});draw()})();
 """
+
+
+def _js(lang: Lang) -> str:
+    """The table script; estado labels follow ``lang`` (Spanish keeps the raw
+    value with underscores replaced, as before)."""
+    labels = {
+        name: _estado_label(name, lang)
+        for name in ESTADO_FILLS
+        if _estado_label(name, lang) != name.replace("_", " ")
+    }
+    prefix = f"var EL={json.dumps(labels, ensure_ascii=True)};" if labels else ""
+
+    def label(expr: str) -> str:
+        plain = f"{expr}.replace(/_/g,' ')"
+        return f"(EL[{expr}]||{plain})" if labels else plain
+
+    script = (
+        _JS.replace("@@LABEL:v@@", label("v"))
+        .replace("@@LABEL:r.estado@@", label("r.estado"))
+        .replace("@@OFFER@@", t("panel.js.offer", lang))
+        .replace("@@OF@@", t("panel.js.of", lang))
+    )
+    return (
+        script.replace("(function(){\n", "(function(){\n" + prefix, 1)
+        if prefix
+        else script
+    )
 
 
 def render_panel(
@@ -318,11 +364,14 @@ def render_panel(
     now: datetime,
     discarded: Sequence[DiscardedOffer] = (),
     families: FamilyRegistry = BUILTIN_REGISTRY,
+    *,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """The whole dashboard as one HTML document (no I/O, deterministic).
 
     ``families`` (the profile's role families) label the discarded offers and
-    give legacy NULL profiles their default family.
+    give legacy NULL profiles their default family. ``lang`` is the UI
+    language of every label (and of ``<html lang>``).
     """
     stats = compute_stats(rows, now)
     sent = int(stats["sent"])  # type: ignore[call-overload]
@@ -332,11 +381,11 @@ def render_panel(
     offers = int(stats["offers"])  # type: ignore[call-overload]
 
     tiles = [
-        ("Analizadas", str(analyzed)),
-        ("Enviadas", str(sent)),
-        ("Tasa de respuesta", str(stats["response_rate"])),
-        ("Entrevistas", str(interviews)),
-        ("Ofertas", str(offers)),
+        (t("panel.tile.analyzed", lang), str(analyzed)),
+        (t("panel.tile.sent", lang), str(sent)),
+        (t("panel.tile.response_rate", lang), str(stats["response_rate"])),
+        (t("panel.tile.interviews", lang), str(interviews)),
+        (t("panel.tile.offers", lang), str(offers)),
     ]
     tiles_html = "".join(
         f'<div class="tile"><span class="muted">{html.escape(name)}</span>'
@@ -345,17 +394,18 @@ def render_panel(
     )
     funnel = _bar_chart(
         [
-            ("Analizadas", analyzed, None),
-            ("Enviadas", sent, None),
-            ("Respuesta", responded, None),
-            ("Entrevista", interviews, None),
-            ("Oferta", offers, None),
+            (t("panel.funnel.analyzed", lang), analyzed, None),
+            (t("panel.funnel.sent", lang), sent, None),
+            (t("panel.funnel.response", lang), responded, None),
+            (t("panel.funnel.interview", lang), interviews, None),
+            (t("panel.funnel.offer", lang), offers, None),
         ],
-        "Embudo",
+        t("panel.funnel.title", lang),
+        lang,
     )
     by_estado: dict[str, int] = stats["by_estado"]  # type: ignore[assignment]
     estado_items = [
-        (_estado_label(name), count, ESTADO_FILLS.get(name))
+        (_estado_label(name, lang), count, ESTADO_FILLS.get(name))
         for name, count in sorted(by_estado.items(), key=lambda kv: (-kv[1], kv[0]))
     ]
     by_origen: dict[str, int] = stats["by_origen"]  # type: ignore[assignment]
@@ -368,51 +418,60 @@ def render_panel(
 
     deadline = _alert_items(
         stats["deadline_alerts"],  # type: ignore[arg-type]
-        "vence en {n} día(s)",
+        lambda days: _deadline_text(days, lang),
     )
     silent = _alert_items(
         stats["silent_alerts"],  # type: ignore[arg-type]
-        "sin novedades desde hace {n} días",
+        lambda days: t("panel.silent_since", lang, n=days),
     )
     alerts_html = ""
     if deadline:
-        alerts_html += f"<h3>Fecha límite próxima</h3><ul>{deadline}</ul>"
+        alerts_html += f"<h3>{t('panel.deadlines', lang)}</h3><ul>{deadline}</ul>"
     if silent:
-        alerts_html += f"<h3>Enviadas sin respuesta</h3><ul>{silent}</ul>"
+        alerts_html += f"<h3>{t('panel.silent', lang)}</h3><ul>{silent}</ul>"
     if not alerts_html:
-        alerts_html = '<p class="muted">Sin alertas.</p>'
+        alerts_html = f'<p class="muted">{t("panel.no_alerts", lang)}</p>'
 
     stamp = html.escape(now.strftime("%Y-%m-%d %H:%M"))
+    title = t("panel.title", lang)
+    by_status = t("panel.by_status", lang)
+    by_portal = t("panel.by_portal", lang)
+    sent_per_week = t("panel.sent_per_week", lang)
+    match_title = t("panel.match", lang)
+    columns = "".join(
+        f"<th>{t(f'panel.col.{col}', lang)}</th>"
+        for col in ("company", "role", "profile", "portal", "status", "match")
+    ) + "".join(
+        f"<th>{t(f'panel.col.{col}', lang)}</th>" for col in ("sent", "updated")
+    )
     return (
-        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        "<title>Panel de candidaturas</title>"
+        f"<title>{title}</title>"
         f"<style>{_CSS}{_estado_css()}</style></head><body>"
-        f'<h1>Panel de candidaturas</h1><p class="muted">Generado {stamp}</p>'
+        f'<h1>{title}</h1><p class="muted">{t("panel.generated", lang, stamp=stamp)}</p>'
         f'<div class="kpis">{tiles_html}</div>'
-        f'<div class="card alerts"><h2>Alertas</h2>{alerts_html}</div>'
+        f'<div class="card alerts"><h2>{t("panel.alerts", lang)}</h2>{alerts_html}</div>'
         '<div class="grid">'
-        f'<div class="card"><h2>Embudo</h2>{funnel}</div>'
-        f'<div class="card"><h2>Por estado</h2>{_bar_chart(estado_items, "Por estado")}</div>'
-        f'<div class="card"><h2>Por portal</h2>{_bar_chart(origen_items, "Por portal")}</div>'
-        f'<div class="card"><h2>Enviadas por semana</h2>'
-        f"{_bar_chart([(k, v, None) for k, v in by_week.items()], 'Por semana')}</div>"
-        f'<div class="card"><h2>Match</h2>'
-        f"{_bar_chart([(k, v, None) for k, v in by_match.items()], 'Por match')}</div>"
+        f'<div class="card"><h2>{t("panel.funnel.title", lang)}</h2>{funnel}</div>'
+        f'<div class="card"><h2>{by_status}</h2>{_bar_chart(estado_items, by_status, lang)}</div>'
+        f'<div class="card"><h2>{by_portal}</h2>{_bar_chart(origen_items, by_portal, lang)}</div>'
+        f'<div class="card"><h2>{sent_per_week}</h2>'
+        f"{_bar_chart([(k, v, None) for k, v in by_week.items()], t('panel.by_week', lang), lang)}</div>"
+        f'<div class="card"><h2>{match_title}</h2>'
+        f"{_bar_chart([(k, v, None) for k, v in by_match.items()], t('panel.by_match', lang), lang)}</div>"
         "</div>"
-        f"{_discarded_html(discarded, families)}"
-        '<div class="card"><h2>Ofertas <span id="count" class="muted"></span></h2>'
+        f"{_discarded_html(discarded, families, lang)}"
+        f'<div class="card"><h2>{t("panel.offers", lang)} <span id="count" class="muted"></span></h2>'
         '<div class="filters">'
-        '<input id="q" type="search" placeholder="Buscar empresa, puesto…">'
-        '<select id="f-estado"><option value="">Estado</option></select>'
-        '<select id="f-perfil"><option value="">Perfil</option></select>'
-        '<select id="f-portal"><option value="">Portal</option></select></div>'
-        '<div class="tablewrap"><table><thead><tr><th>#</th><th>Empresa</th>'
-        "<th>Puesto</th><th>Perfil</th><th>Portal</th><th>Estado</th><th>Match</th>"
-        "<th>Envío</th><th>Update</th></tr></thead>"
+        f'<input id="q" type="search" placeholder="{t("panel.search", lang)}">'
+        f'<select id="f-estado"><option value="">{t("panel.filter.status", lang)}</option></select>'
+        f'<select id="f-perfil"><option value="">{t("panel.filter.profile", lang)}</option></select>'
+        f'<select id="f-portal"><option value="">{t("panel.filter.portal", lang)}</option></select></div>'
+        f'<div class="tablewrap"><table><thead><tr><th>#</th>{columns}</tr></thead>'
         '<tbody id="rows"></tbody></table></div></div>'
         f'<script id="panel-data" type="application/json">{_json_blob(rows, families.default.id)}</script>'
-        f"<script>{_JS}</script></body></html>"
+        f"<script>{_js(lang)}</script></body></html>"
     )
 
 
@@ -420,15 +479,17 @@ def _cut(text: str, limit: int = REASON_MAX) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _ago(days: int) -> str:
+def _ago(days: int, lang: Lang = LEGACY_LANG) -> str:
     if days <= 0:
-        return "hoy"
-    return "hace 1 día" if days == 1 else f"hace {days} días"
+        return t("panel.ago_today", lang)
+    if days == 1:
+        return t("panel.ago_one", lang)
+    return t("panel.ago_many", lang, days=days)
 
 
-def _discarded_cells(item: DiscardedOffer) -> tuple[str, str]:
+def _discarded_cells(item: DiscardedOffer, lang: Lang = LEGACY_LANG) -> tuple[str, str]:
     """The shared ``#id``/title/company/portal cells and the trailing hint."""
-    label = html.escape(item.title or "oferta")
+    label = html.escape(item.title or t("panel.js.offer", lang))
     url = _safe_url(item.url)
     title = (
         f'<a href="{html.escape(url)}" rel="noopener noreferrer" '
@@ -441,16 +502,22 @@ def _discarded_cells(item: DiscardedOffer) -> tuple[str, str]:
         f"<td>{html.escape(item.company or _NO_VALUE)}</td>"
         f"<td>{html.escape(item.portal or _NO_VALUE)}</td>"
     )
+    # ``reason`` is stored in Spanish (gate or stack-wall text): translate for display.
+    reason = html.escape(
+        _cut(stack_wall_display(gate_reason(item.reason, lang), lang)) or _NO_VALUE
+    )
     tail = (
-        f"<td>{html.escape(_cut(item.reason) or _NO_VALUE)}</td>"
-        f"<td>{_ago(item.days_ago)}</td>"
-        f"<td><code>/rescatar {item.offer_id}</code></td>"
+        f"<td>{reason}</td>"
+        f"<td>{_ago(item.days_ago, lang)}</td>"
+        f"<td><code>{t('panel.rescue_cmd', lang, id=item.offer_id)}</code></td>"
     )
     return head, tail
 
 
 def _discarded_html(
-    items: Sequence[DiscardedOffer], families: FamilyRegistry = BUILTIN_REGISTRY
+    items: Sequence[DiscardedOffer],
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
 ) -> str:
     """Two cards: discarded by score (open) and by wall (collapsed)."""
     below = sorted(
@@ -459,42 +526,59 @@ def _discarded_html(
     )
     walled = [i for i in items if i.kind == "walled"]
     near = sum(1 for i in below if i.threshold - i.score < NEAR_THRESHOLD_POINTS)
+    common = "".join(
+        f"<th>{t(f'panel.col.{col}', lang)}</th>"
+        for col in ("role", "company", "portal")
+    )
+
+    def trailing(first: str) -> str:
+        return "".join(
+            f"<th>{t(f'panel.col.{col}', lang)}</th>"
+            for col in (first, "seen", "rescue")
+        )
+
     if below:
         rows = ""
         for item in below:
-            head, tail = _discarded_cells(item)
-            tag = html.escape(_family_tag(item.profile, families))
+            head, tail = _discarded_cells(item, lang)
+            tag = html.escape(_family_tag(item.profile, families, lang))
             rows += (
                 f"<tr>{head}<td>{item.score} / {item.threshold} ({tag})</td>{tail}</tr>"
             )
+        summary = t(
+            "panel.discarded.summary",
+            lang,
+            count=len(below),
+            near=near,
+            points=NEAR_THRESHOLD_POINTS,
+        )
         below_html = (
-            f'<p class="muted">{len(below)} descartadas por nota esta semana · '
-            f"{near} a menos de {NEAR_THRESHOLD_POINTS} puntos del umbral</p>"
-            '<div class="tablewrap"><table><thead><tr><th>#</th><th>Puesto</th>'
-            "<th>Empresa</th><th>Portal</th><th>Nota / umbral</th>"
-            "<th>Motivo</th><th>Visto</th><th>Rescatar</th></tr></thead>"
+            f'<p class="muted">{summary}</p>'
+            f'<div class="tablewrap"><table><thead><tr><th>#</th>{common}'
+            f"<th>{t('panel.col.score_threshold', lang)}</th>"
+            f"{trailing('reason')}</tr></thead>"
             f"<tbody>{rows}</tbody></table></div>"
         )
     else:
-        below_html = '<p class="muted">Nada descartado por nota esta semana.</p>'
+        below_html = f'<p class="muted">{t("panel.discarded.none_score", lang)}</p>'
     if walled:
         rows = ""
         for item in walled:
-            head, tail = _discarded_cells(item)
+            head, tail = _discarded_cells(item, lang)
             rows += f"<tr>{head}<td>{html.escape(item.location or _NO_VALUE)}</td>{tail}</tr>"
         walled_html = (
-            '<div class="tablewrap"><table><thead><tr><th>#</th><th>Puesto</th>'
-            "<th>Empresa</th><th>Portal</th><th>Ubicación</th>"
-            "<th>Muro</th><th>Visto</th><th>Rescatar</th></tr></thead>"
+            f'<div class="tablewrap"><table><thead><tr><th>#</th>{common}'
+            f"<th>{t('panel.col.location', lang)}</th>"
+            f"{trailing('wall')}</tr></thead>"
             f"<tbody>{rows}</tbody></table></div>"
         )
     else:
-        walled_html = '<p class="muted">Nada descartado por muro esta semana.</p>'
+        walled_html = f'<p class="muted">{t("panel.discarded.none_wall", lang)}</p>'
     return (
-        '<div class="card"><h2>Descartadas por nota '
-        f'<span class="muted">(últimos {DISCARDED_DAYS} días)</span></h2>'
+        f'<div class="card"><h2>{t("panel.discarded.score", lang)} '
+        f'<span class="muted">{t("panel.discarded.last_days", lang, days=DISCARDED_DAYS)}</span></h2>'
         f"{below_html}</div>"
-        '<details class="card"><summary><b>Descartadas por muro</b> '
+        f'<details class="card"><summary><b>{t("panel.discarded.wall", lang)}</b> '
         f'<span class="muted">({len(walled)})</span></summary>{walled_html}</details>'
     )
 
