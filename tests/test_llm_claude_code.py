@@ -524,3 +524,37 @@ def test_child_env_excludes_cva_prefixed_keys_regardless_of_which_ones_are_set(
     env = _child_env()
 
     assert not any(key.startswith("CVA_") for key in env)
+
+
+class _Draft(BaseModel):
+    text: str
+
+
+def test_double_encoded_text_field_is_unwrapped() -> None:
+    """Live follow-up bug (2026-11-19): the model put the whole JSON answer
+    inside the ``text`` field, so Telegram showed ``{"text": "Hola,\\n\\n..."}``."""
+    inner = json.dumps({"text": "Hola,\n\nSigo interesado.\n\nUn saludo"})
+    run = _FakeRun(
+        stdout=_envelope(
+            type="result", is_error=False, structured_output={"text": inner}, result=""
+        )
+    )
+
+    reply = asyncio.run(_client(run).json_completion("sys", "text", _Draft))
+
+    assert reply.text == "Hola,\n\nSigo interesado.\n\nUn saludo"
+
+
+def test_text_that_merely_starts_with_a_brace_is_kept() -> None:
+    run = _FakeRun(
+        stdout=_envelope(
+            type="result",
+            is_error=False,
+            structured_output={"text": '{"other": "x"} es un ejemplo'},
+            result="",
+        )
+    )
+
+    reply = asyncio.run(_client(run).json_completion("sys", "text", _Draft))
+
+    assert reply.text == '{"other": "x"} es un ejemplo'

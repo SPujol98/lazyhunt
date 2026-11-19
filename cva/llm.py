@@ -418,7 +418,7 @@ def _parse_anthropic[CompletionT: BaseModel](
         raise LlmResponseError("malformed Anthropic message envelope: no text content")
     data = _extract_json_object(text, finish_reason=str(stop_reason))
     try:
-        return schema.model_validate(data)
+        return schema.model_validate(_unwrap_double_encoded(data))
     except ValidationError as exc:
         raise LlmResponseError(
             f"completion does not satisfy {schema.__name__}"
@@ -703,7 +703,7 @@ def _parse_claude_output[CompletionT: BaseModel](
             result, finish_reason=envelope.get("type"), label="envelope_type"
         )
     try:
-        return schema.model_validate(data)
+        return schema.model_validate(_unwrap_double_encoded(data))
     except ValidationError as exc:
         raise LlmResponseError(
             f"claude CLI output does not satisfy {schema.__name__}"
@@ -741,7 +741,7 @@ def _parse_completion[CompletionT: BaseModel](
     )
     data = _extract_json_object(content, finish_reason=finish_reason)
     try:
-        return schema.model_validate(data)
+        return schema.model_validate(_unwrap_double_encoded(data))
     except ValidationError as exc:
         raise LlmResponseError(
             f"completion does not satisfy {schema.__name__}"
@@ -770,6 +770,34 @@ def _no_json_diagnostic(
         f"({label}={finish_reason!r}, content head: {head!r})"
     )
 
+
+
+def _unwrap_double_encoded(data: object) -> object:
+    """Undo a model answer whose string field holds the whole JSON answer again.
+
+    Observed live (2026-11-19, follow-up drafts): ``{"text": "{\\"text\\":
+    \\"Hola,\\n\\n...\\"}"}`` reached Telegram as raw JSON with literal
+    ``\\n``. A string field is replaced by the same key of the JSON object it
+    encodes, only when the whole string parses as an object that has that key
+    with a string value (repeated, for deeper nesting). Any other text, even
+    one that starts with a brace, is kept as is.
+    """
+    if not isinstance(data, dict):
+        return data
+    fixed: dict[object, object] = {}
+    for key, value in data.items():
+        for _ in range(3):
+            if not (isinstance(value, str) and value.strip().startswith("{")):
+                break
+            try:
+                inner = json.loads(value)
+            except json.JSONDecodeError:
+                break
+            if not (isinstance(inner, dict) and isinstance(inner.get(key), str)):
+                break
+            value = inner[key]
+        fixed[key] = value
+    return fixed
 
 def _extract_json_object(
     content: str, *, finish_reason: str | None = None, label: str = "finish_reason"
