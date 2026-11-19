@@ -89,6 +89,8 @@ export async function postOffers(settings, beacon, offers) {
       location: orNull(card.location),
       url: card.link,
       text: orNull(text),
+      // Sent only when the card carries the LinkedIn Easy Apply badge.
+      ...(card.easyApply === true ? { easy_apply: true } : {}),
     })),
   });
   let response;

@@ -61,6 +61,7 @@ EN: Final[dict[str, str]] = {
     "notifier.deadline_today": "⏰ Closes today",
     "notifier.deadline_in": "⏰ Closes in {days} ({date})",
     "notifier.stale_posting": "🕰️ Posted {days} ago (may be closed)",
+    "notifier.easy_apply": "⚡ Easy Apply",
     "notifier.deadline_alert_head": (
         "⏰ Offers about to close that you haven't sent yet:"
     ),
@@ -274,6 +275,7 @@ ES: Final[dict[str, str]] = {
     "notifier.deadline_today": "⏰ Cierra hoy",
     "notifier.deadline_in": "⏰ Cierra en {days} ({date})",
     "notifier.stale_posting": "🕰️ Publicada hace {days} (puede estar cerrada)",
+    "notifier.easy_apply": "⚡ Solicitud sencilla",
     "notifier.deadline_alert_head": "⏰ Ofertas por cerrar que aún no has enviado:",
     "notifier.deadline_entry": "• {position} · {company} — cierra {when}",
     "notifier.deadline_when_today": "hoy",

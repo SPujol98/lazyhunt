@@ -111,8 +111,8 @@ def _old_db(path: Path, version: int = 8) -> None:
 
 def test_fresh_db_has_nullable_column_at_v9(tmp_path: Path) -> None:
     repo = OfferRepository(sqlite3.connect(tmp_path / "new.db"))
-    assert SCHEMA_VERSION == 23
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert SCHEMA_VERSION == 24
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     oid = repo.upsert_offer(
         OfferInput(title="t", url="https://x/1", text="x", source="link")
     )
@@ -123,7 +123,7 @@ def test_migration_v9_adds_column_to_old_db(tmp_path: Path) -> None:
     path = tmp_path / "old.db"
     _old_db(path)
     repo = OfferRepository(sqlite3.connect(path))
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert repo.get_offer(1).carta_presentacion is None
     repo.set_cover_letter(1, "hola")
     assert repo.get_offer(1).carta_presentacion == "hola"

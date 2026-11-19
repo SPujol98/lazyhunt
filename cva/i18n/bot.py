@@ -61,6 +61,7 @@ EN: Final[dict[str, str]] = {
     "bot.letter_label": "✉️ Letter",
     "bot.letter_warnings": "⚠️ Careful, review it before using it:",
     "bot.letter_saved": "Letter saved on the offer",
+    "bot.letter_pdf_failed": "⚠️ Could not create the letter PDF: {reason}",
     "bot.researching_salary": "🔎 Researching the salary on the web…",
     "bot.salary_failed": "⚠️ The salary research failed: {reason}",
     "bot.no_company": "(no company)",
@@ -96,6 +97,17 @@ EN: Final[dict[str, str]] = {
     "bot.err.not_analyzed": "Offer #{id} has not been analyzed yet.",
     "bot.err.unreadable": (
         "The stored analysis of #{id} cannot be read: analyze it again with /analyze."
+    ),
+    "bot.err.sent_not_analyzed": (
+        "Offer #{id} has not been analyzed yet. Analyze it first with the 🔍 button "
+        "or /analyze <url>."
+    ),
+    "bot.err.cv_language": (
+        "There is no {role}_{lang} CV: the {family} family has CVs in {languages}."
+    ),
+    "bot.err.empty_offer": (
+        "The offer has no readable text once hidden characters are removed; "
+        "paste it again as plain text."
     ),
     "bot.err.not_sent": "Offer #{id} is not marked as sent yet.",
     "bot.err.estado": "Invalid status: {estado}",
@@ -248,6 +260,7 @@ ES: Final[dict[str, str]] = {
     "bot.letter_label": "✉️ Carta",
     "bot.letter_warnings": "⚠️ Ojo, revisa antes de usarla:",
     "bot.letter_saved": "Guardada la carta en la oferta",
+    "bot.letter_pdf_failed": "⚠️ No se pudo crear el PDF de la carta: {reason}",
     "bot.researching_salary": "🔎 Investigando salario en la web…",
     "bot.salary_failed": "⚠️ La investigación salarial falló: {reason}",
     "bot.no_company": "(sin empresa)",
@@ -284,6 +297,17 @@ ES: Final[dict[str, str]] = {
     "bot.err.unreadable": (
         "El análisis guardado de #{id} no se puede leer: vuelve a "
         "analizarla con /analyze."
+    ),
+    "bot.err.sent_not_analyzed": (
+        "La oferta #{id} todavía no está analizada. Analízala primero con el botón "
+        "🔍 o /analyze <url>."
+    ),
+    "bot.err.cv_language": (
+        "No existe el CV {role}_{lang}: la familia {family} tiene CVs en {languages}."
+    ),
+    "bot.err.empty_offer": (
+        "La oferta no tiene texto legible al quitar los caracteres ocultos; "
+        "pégala de nuevo como texto plano."
     ),
     "bot.err.not_sent": "La oferta #{id} todavía no está marcada como enviada.",
     "bot.err.estado": "Estado no válido: {estado}",

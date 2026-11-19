@@ -101,7 +101,7 @@ def _repo(
 
 def test_fresh_db_is_v11_with_dedup_column_and_index(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    assert SCHEMA_VERSION == 23
+    assert SCHEMA_VERSION == 24
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(offers)")]
     assert "dedup_key" in cols
     idx = [r[1] for r in repo._conn.execute("PRAGMA index_list(offers)")]
@@ -129,7 +129,7 @@ def test_v10_db_migrates_and_backfills_existing_rows(tmp_path: Path) -> None:
     repo._conn.commit()
     repo._conn.close()
     migrated = OfferRepository(sqlite3.connect(path))
-    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert migrated._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     keys = {r.id: r.dedup_key for r in migrated.all_offers()}
     assert keys == {1: "acme_ai-engineer", 2: None, 3: "beta_dev"}
 

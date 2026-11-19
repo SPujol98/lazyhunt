@@ -243,12 +243,18 @@ def _cmd_rejudge(
 
 
 def _cmd_cv(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
-    pdf_path = asyncio.run(service.generate_cv(args.offer_id, args.role, args.lang))
+    try:
+        pdf_path = asyncio.run(service.generate_cv(args.offer_id, args.role, args.lang))
+    except ServiceError as exc:
+        return f"⚠️ {exc.text(lang)}"
     return t("panel.cli.cv_done", lang, path=pdf_path)
 
 
 def _cmd_sent(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
-    service.mark_sent(args.offer_id)
+    try:
+        service.mark_sent(args.offer_id)
+    except ServiceError as exc:
+        return f"⚠️ {exc.text(lang)}"
     return sent_message(
         args.offer_id, service.offer(args.offer_id).match or 0, lang=lang
     )

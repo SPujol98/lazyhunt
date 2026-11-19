@@ -196,6 +196,12 @@ def scenarios(kw: dict[str, Any]) -> dict[str, Any]:
             notifier.date_card_lines(None, "2026-11-19", _TODAY, **kw),
             notifier.date_card_lines(None, "2026-11-23", _TODAY, **kw),
         ],
+        # pending-maintenance S3: only a LinkedIn offer with the badge.
+        "easy_apply_line": [
+            notifier.easy_apply_line("linkedin", True, **kw),
+            notifier.easy_apply_line("linkedin", None, **kw),
+            notifier.easy_apply_line("infojobs", True, **kw),
+        ],
         "deadline_alert": notifier.deadline_alert_message(due, _TODAY, **kw),
         "deadline_batch": notifier.deadline_alert_batch(due * 6, _TODAY, **kw),
         "breakdown": notifier.breakdown_message(
@@ -410,6 +416,7 @@ GOLDEN_ES: dict[str, Any] = {
         "⏰ Cierra en 1 día (19/11)",
         "⏰ Cierra en 5 días (23/11)",
     ],
+    "easy_apply_line": ["⚡ Solicitud sencilla", "", ""],
     "deadline_alert": "⏰ Ofertas por cerrar que aún no has enviado:\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días",
     "deadline_batch": [
         "⏰ Ofertas por cerrar que aún no has enviado:\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días\n• P1 · E1 — cierra hoy\n  https://u\n• (sin título) · (sin empresa) — cierra en 1 día\n• P5 · E5 — cierra en 5 días\n… y 3 más",
@@ -794,6 +801,7 @@ def test_english_cards_read_in_english() -> None:
         "⏰ Closes in 1 day (19/11)",
         "⏰ Closes in 5 days (23/11)",
     ]
+    assert en["easy_apply_line"] == ["⚡ Easy Apply", "", ""]
     assert en["round"].splitlines()[0] == "📊 Round 'b&lt;1&gt;': 9 analyzed"
     assert "… and 2 more" in en["round"]
     assert en["judge"].splitlines()[0] == "✅ Offer #12 — score 81/100 (apply)"

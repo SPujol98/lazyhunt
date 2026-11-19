@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-19
+
+### Added
+
+- LinkedIn offer cards show a discreet "⚡ Easy Apply" line ("⚡ Solicitud sencilla" in Spanish) when the posting is Easy Apply.
+- The chosen cover letter and `/cartabase` also arrive as a one-page PDF in the CV font, ready to attach.
+- README roadmap.
+
+### Changed
+
+- The database schema moves to v24 (a new nullable `easy_apply` column) and migrates automatically on start-up; existing data is unchanged.
+- Errors a user can trigger (for example `/sent` on an offer that was never analysed) are now clear messages in the interface language; the CLI prints them instead of a traceback.
+- fpdf2 2.9 (demo CVs regenerated, visually identical) and anyio 4.16.
+
+### Fixed
+
+- Two processes opening the same old database at once (for example the bot starting while a CLI command runs) no longer fail with "duplicate column name".
+- A LinkedIn "Postulación sencilla" badge line is no longer taken as the company name.
+
 ## [0.3.0] - 2026-11-19
 
 ### Added
@@ -47,7 +66,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/SPujol98/lazyhunt/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SPujol98/lazyhunt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SPujol98/lazyhunt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SPujol98/lazyhunt/releases/tag/v0.1.0

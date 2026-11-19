@@ -27,7 +27,7 @@ from cva.ingest.sources import (
 )
 from cva.tracker.history import PRE_SEND_ESTADOS, HistoryRecord, log_marker
 
-SCHEMA_VERSION: Final[int] = 23
+SCHEMA_VERSION: Final[int] = 24
 NOTE_SEPARATOR: Final[str] = " · "
 # app_state key of the persistent global pause ("1"/"0"; absent = never toggled).
 PAUSED_STATE_KEY: Final[str] = "paused"
@@ -398,6 +398,10 @@ _MIGRATION_V23: Final[str] = (
     "COMMIT;"
 )
 
+# v24 (pending-maintenance S3): the LinkedIn Easy Apply badge of the offer
+# (1/0; NULL = unknown: legacy rows, pasted offers, other portals).
+_MIGRATION_V24: Final[str] = "ALTER TABLE offers ADD COLUMN easy_apply INTEGER;"
+
 # Ordered by provenance: "paste" rows are always 'otro'. "link" and
 # "bridge-inline" rows take the portal id from the offer URL host (the sources
 # registry), so a new portal needs no change here; without a registered host a
@@ -438,6 +442,8 @@ class OfferInput(BaseModel):
     fecha_limite: str | None = None
     # v20: the portal's location field (None = unknown / keep the stored one).
     location: str | None = None
+    # v24: the LinkedIn Easy Apply badge (None = unknown / keep the stored one).
+    easy_apply: bool | None = None
 
     @field_validator("profile")
     @classmethod
@@ -487,6 +493,8 @@ class OfferRow(BaseModel):
     ingest_source: str | None = None
     # v20: the portal's structured location (None = unknown / pasted offer).
     ubicacion: str | None = None
+    # v24: the LinkedIn Easy Apply badge (None = unknown).
+    easy_apply: bool | None = None
 
 
 class SentSnapshot(BaseModel):
@@ -803,9 +811,35 @@ class OfferRepository:
                 raise
             finally:
                 conn.execute("PRAGMA foreign_keys=ON")
+        if version < 24:
+            conn.commit()
+            self._migrate_v24()
         if version < SCHEMA_VERSION:
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
+
+    def _migrate_v24(self) -> None:
+        """Add ``easy_apply`` (when absent) and bump the version atomically."""
+        self._add_offers_column("easy_apply", _MIGRATION_V24, 24)
+
+    def _add_offers_column(self, column: str, ddl: str, version: int) -> None:
+        """Add one ``offers`` column and set ``user_version`` in ONE write
+        transaction. The column check runs AFTER ``BEGIN IMMEDIATE`` takes the
+        write lock, so a second process opening the same old database waits,
+        sees the column and only bumps the version (never "duplicate column")."""
+        conn = self._conn
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(offers)")}
+            if column not in cols:
+                for statement in filter(None, (s.strip() for s in ddl.split(";"))):
+                    conn.execute(statement)
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.execute("COMMIT")
+        except sqlite3.Error:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
 
     def _migrate_v22(self) -> None:
         """Create ``gmail_messages`` (when absent) and bump the version atomically."""
@@ -829,14 +863,7 @@ class OfferRepository:
 
     def _migrate_v20(self) -> None:
         """Add ``ubicacion`` (when absent) and bump the version atomically."""
-        conn = self._conn
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(offers)")}
-        body = "" if "ubicacion" in cols else _MIGRATION_V20
-        try:
-            conn.executescript(f"BEGIN;{body}PRAGMA user_version = 20;COMMIT;")
-        except sqlite3.Error:
-            conn.rollback()
-            raise
+        self._add_offers_column("ubicacion", _MIGRATION_V20, 20)
 
     def _migrate_v19(self) -> None:
         """Create ``offer_cards`` (when absent) and bump the version atomically."""
@@ -936,6 +963,7 @@ class OfferRepository:
                     "fecha_publicacion = COALESCE(?, fecha_publicacion), "
                     "fecha_limite = COALESCE(?, fecha_limite), dedup_key = ?, "
                     "ubicacion = COALESCE(?, ubicacion), "
+                    "easy_apply = COALESCE(?, easy_apply), "
                     "ingest_source = CASE WHEN ingest_source = 'bridge-inline' "
                     "AND ? = 'link' THEN ingest_source ELSE ? END WHERE id = ?",
                     (
@@ -948,6 +976,7 @@ class OfferRepository:
                         o.fecha_limite,
                         dedup_key(o.company, o.title),
                         o.location,
+                        o.easy_apply,
                         o.source,
                         o.source,
                         offer_id,
@@ -958,8 +987,8 @@ class OfferRepository:
         cursor = self._conn.execute(
             "INSERT INTO offers (empresa, posicion, origen, url_oferta, source_data, "
             "fecha_update, perfil, fecha_alta, fecha_publicacion, fecha_limite, "
-            "dedup_key, ingest_source, ubicacion) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "dedup_key, ingest_source, ubicacion, easy_apply) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 o.company,
                 o.title,
@@ -974,6 +1003,7 @@ class OfferRepository:
                 dedup_key(o.company, o.title),
                 o.source,
                 o.location,
+                o.easy_apply,
             ),
         )
         if cursor.lastrowid is None:

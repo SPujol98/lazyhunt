@@ -2,6 +2,10 @@
 
 The ✉️ button writes one letter per offer, in the offer's language (es, en, ca).
 
+## PDF
+
+Choosing a letter (✅ button) saves it on the offer and sends it as a PDF too, for portals that ask for the letter as a file; `/cartabase` does the same for the generic letter. One A4 page (a second one only if the text does not fit at 10 pt): your name and contact line from the identity claims, today's date in the letter's language, then the letter verbatim, in the CV font (`cv_font`). File: `<output>/<id>_<company>/<file_slug>_Carta_Presentacion.pdf` (`Cover_Letter` in English, `Carta_Presentacio` in Catalan), next to the offer's CV; the generic one goes to `<output>/base_letter_<lang>/`. If the PDF fails, the letter is still saved and the bot says why.
+
 ## Structure
 
 The letter is the profile's **base letter** plus three generated parts:

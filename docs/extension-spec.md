@@ -407,7 +407,7 @@ least one offer to send. One request per beacon:
 
 - `POST <bridgeUrl>`, headers `Content-Type: application/json` and
   `X-CVA-Bridge-Secret: <secret>`.
-- Body: `{ beacon: <beacon name>, profile: 'ai'|'backend', jobs: [{ title, company, location, url, text }] }`
+- Body: `{ beacon: <beacon name>, profile: <family id>, jobs: [{ title, company, location, url, text, easy_apply? }] }` (`easy_apply: true` only for LinkedIn Easy Apply cards; omitted otherwise)
   where empty `title`/`company`/`location`/`text` are sent as `null` and `url`
   is the card's link. The bot validates the URL (portal job URL with an id),
   rejects disabled portals with 400 and answers 503 while paused.
@@ -504,8 +504,10 @@ output: a promise of `[{ id, title, company, location, link }]`:
    3. last resort: every link to `/jobs/view/<digits>` on the page; the card is
       its closest `li`, else closest element with `data-job-id`, else its
       parent; lines = the link's first text line followed by the card's lines.
-3. Per card: skip ids already collected (first occurrence wins); trim the lines,
-   drop empty ones and LinkedIn "noise" lines (whole-line, case-insensitive):
+3. Per card: skip ids already collected (first occurrence wins); trim the lines;
+   an Easy Apply badge line ("Easy Apply", "Solicitud sencilla", "Candidatura
+   simplificada", "Postulación sencilla") sets `easyApply: true` on the card
+   (absent otherwise) before being dropped; drop empty lines and LinkedIn "noise" lines (whole-line, case-insensitive):
    promoted / sponsored / viewed / applied / saved / new / reposted / easy apply
    badges in English and Spanish ("Promocionado", "Visto", "Aplicados",
    "Guardado", "Solicitud sencilla"), "today/yesterday/hoy/ayer", relative

@@ -362,6 +362,19 @@ def date_card_lines(
     return "\n".join(lines)
 
 
+def easy_apply_line(
+    origen: str | None, easy_apply: bool | None, *, lang: Lang = LEGACY_LANG
+) -> str:
+    """The "⚡ Easy Apply" line of a LinkedIn offer with the badge, or ``""``.
+
+    Discreet on purpose (pending-maintenance S3): no line when the offer is
+    not Easy Apply, unknown, or from another portal.
+    """
+    if origen == "linkedin" and easy_apply is True:
+        return t("notifier.easy_apply", lang)
+    return ""
+
+
 _DEADLINE_ALERT_MAX_LINES: Final[int] = 15
 
 

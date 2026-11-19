@@ -82,8 +82,8 @@ def test_migration_adds_nullable_perfil_to_an_old_schema_db(tmp_path: Path) -> N
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert SCHEMA_VERSION == 23
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert SCHEMA_VERSION == 24
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert repo.get_offer(1).perfil is None  # legacy rows stay NULL
 
     # Idempotent: reopening a migrated DB changes nothing and does not raise.

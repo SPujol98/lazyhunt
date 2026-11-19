@@ -141,7 +141,7 @@ def test_v22_database_migrates_to_v23_preserving_every_row(tmp_path: Path) -> No
 
     migrated = sqlite3.connect(path)
     OfferRepository(migrated)
-    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == 24
     assert [r[1] for r in migrated.execute("PRAGMA table_info(offers)")] == columns
     assert _dump(migrated) == before
     assert _indexes_and_triggers(migrated) == pre_schema
@@ -185,7 +185,7 @@ def test_fresh_database_has_the_same_offers_schema_as_a_migrated_one(
     assert [tuple(r) for r in fresh.execute("PRAGMA table_info(offers)")] == [
         tuple(r) for r in migrated.execute("PRAGMA table_info(offers)")
     ]
-    assert fresh.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert fresh.execute("PRAGMA user_version").fetchone()[0] == 24
 
 
 def test_v23_migration_is_idempotent(tmp_path: Path) -> None:
@@ -199,7 +199,7 @@ def test_v23_migration_is_idempotent(tmp_path: Path) -> None:
     OfferRepository(again)
     OfferRepository(again)
     assert (_offers_ddl(again), _dump(again), _indexes_and_triggers(again)) == once
-    assert again.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert again.execute("PRAGMA user_version").fetchone()[0] == 24
     assert (
         again.execute(
             "SELECT count(*) FROM sqlite_master WHERE name LIKE 'offers_v%'"

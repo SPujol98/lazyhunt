@@ -123,7 +123,7 @@ def test_card_roundtrip_replace_and_forget(tmp_path: Path) -> None:
 
 
 def test_offer_cards_table_and_idempotent_migration(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 23
+    assert SCHEMA_VERSION == 24
     repo = _repo(tmp_path)
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(offer_cards)")]
     assert cols == [
@@ -140,14 +140,14 @@ def test_offer_cards_table_and_idempotent_migration(tmp_path: Path) -> None:
     repo._conn.commit()
     repo._conn.close()
     again = _repo(tmp_path)
-    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert again.get_card(oid) is not None  # data kept
     again._conn.execute("DROP TABLE offer_cards")
     again._conn.execute("PRAGMA user_version = 18")
     again._conn.commit()
     again._conn.close()
     third = _repo(tmp_path)
-    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert third.get_card(oid) is None
 
 
@@ -359,15 +359,15 @@ def test_keyboard_json_is_plain_json() -> None:
 
 
 def test_ubicacion_column_and_idempotent_migration_v20(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 23
+    assert SCHEMA_VERSION == 24
     repo = _repo(tmp_path)
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(offers)")]
-    assert cols[-1] == "ubicacion"
+    assert cols[-2:] == ["ubicacion", "easy_apply"]
     oid = _add(repo, LI)
     repo._conn.execute("UPDATE offers SET ubicacion = 'Girona' WHERE id = ?", (oid,))
     repo._conn.execute("PRAGMA user_version = 19")  # interrupted: column exists
     repo._conn.commit()
     repo._conn.close()
     again = _repo(tmp_path)
-    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert again.get_offer(oid).ubicacion == "Girona"  # data kept

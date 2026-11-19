@@ -174,6 +174,7 @@ On an offer card:
 
 - **📄 Generar CV** builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
 - **✉️ Carta de presentación** keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
+- **✅ Usar esta** saves the letter on the offer and also sends it as a one-page PDF (same font as your CVs, next to the offer's CV), for portals that want the letter as a file; `/basecover` (`/cartabase`) sends the generic letter as a PDF too.
 - **✅ Marcar enviada** (or `/sent 42`) records that you applied.
 
 ### 8. Day to day
@@ -318,7 +319,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v0.3.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v0.4.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.
@@ -326,6 +327,14 @@ lazyhunt is an early release (`v0.3.0`, see the [changelog](CHANGELOG.md)) and w
 - The setup wizard (`cli.py init`) covers the first configuration; finer settings are edited by hand (see [Configuration](#configuration)).
 - The extension is loaded unpacked from this repository; it is not published in a browser store.
 - The CV engine renders with Carlito (SIL OFL 1.1, metric-compatible with Calibri), shipped in `cvgen/fonts/carlito/`. If you own Microsoft's Calibri, put `calibri.ttf`, `calibrib.ttf`, `calibrii.ttf` and `calibriz.ttf` in `cvgen/fonts/` and set `cv_font = "calibri"`; Calibri is never redistributed.
+
+### Roadmap
+
+What is planned next, in no fixed order:
+
+- **More regions.** Location rules are pluggable; packs beyond Catalonia and Spain.
+- **Custom role families on par with the built-ins.** The stack wall and the skill-based search suggestions work for `ai` and `backend` today; custom families get the rest.
+- **More portals.** New adapters are a skill away (see [Customization](#customization)); contributions are welcome.
 
 <details>
 <summary><b>Repository layout</b></summary>

@@ -403,7 +403,7 @@ def _offer(repo: OfferRepository) -> int:
 
 
 def test_prep_packs_table_and_idempotent_migration(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 23
+    assert SCHEMA_VERSION == 24
     repo = repo_at(tmp_path)
     cols = [r[1] for r in repo._conn.execute("PRAGMA table_info(prep_packs)")]
     assert cols == ["id", "offer_id", "stage", "created_at", "html", "json"]
@@ -413,14 +413,14 @@ def test_prep_packs_table_and_idempotent_migration(tmp_path: Path) -> None:
     repo._conn.commit()
     repo._conn.close()
     again = repo_at(tmp_path)
-    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert again._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert again.latest_prep_pack(oid, "rrhh") is not None  # data kept
     again._conn.execute("DROP TABLE prep_packs")
     again._conn.execute("PRAGMA user_version = 17")
     again._conn.commit()
     again._conn.close()
     third = repo_at(tmp_path)
-    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert third._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert third.latest_prep_pack(oid, "rrhh") is None
 
 

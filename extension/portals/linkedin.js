@@ -5,7 +5,8 @@
 const VIEW_URL = 'https://www.linkedin.com/jobs/view/';
 
 // Page function: cards of a LinkedIn job search results page, as a promise of
-// [{ id, title, company, location, link }]. Injected with
+// [{ id, title, company, location, link, easyApply? }] (easyApply: true only
+// when the card shows the Easy Apply badge; absent otherwise). Injected with
 // chrome.scripting.executeScript, so it must stay self-contained (no imports,
 // no module-scope bindings) and keep its name.
 async function extractJobsFromPage() {
@@ -13,7 +14,7 @@ async function extractJobsFromPage() {
   const noise = [
     /^(promoted|promocionado|sponsored|patrocinado)$/,
     /^(viewed|visto|applied|aplicados?|solicitado|saved|guardado)$/,
-    /^(new|nuevo|reposted|publicado de nuevo|easy apply|solicitud sencilla)$/,
+    /^(new|nuevo|reposted|publicado de nuevo)$/,
     /^(today|yesterday|hoy|ayer)$/,
     /^(reposted |posted )?\d+\+? (second|minute|hour|day|week|month|year)s? ago$/,
     /^(publicado |volvió a publicarse )?hace (\d+|un|una|más de \d+) .+$/,
@@ -25,6 +26,9 @@ async function extractJobsFromPage() {
     /^.*\bantiguos? alumnos?\b.*$/,
     /^(\d+|un|una|tu|tus)\b.*\bde contacto\b.*$/,
   ];
+  // The Easy Apply badge (pending-maintenance S3): flags the card, never a field.
+  const easyApplyBadge = /^(easy apply|solicitud sencilla|candidatura simplificada|postulación sencilla)$/;
+  const isEasyApply = (line) => easyApplyBadge.test(line.toLowerCase());
   const isNoise = (line) => noise.some((re) => re.test(line.toLowerCase()));
   const linesOf = (el) => String((el && el.innerText) || '').split('\n');
   const idFromLink = (a) => {
@@ -53,9 +57,13 @@ async function extractJobsFromPage() {
   const add = (id, lines) => {
     if (!id || taken.has(id)) return;
     taken.add(id);
-    const kept = lines.map((line) => line.trim()).filter((line) => line && !isNoise(line));
+    const trimmed = lines.map((line) => line.trim());
+    const easyApply = trimmed.some(isEasyApply);
+    const kept = trimmed.filter((line) => line && !isEasyApply(line) && !isNoise(line));
     const [title = '', company = '', location = ''] = kept;
-    cards.push({ id, title: title.slice(0, 200), company, location, link: `https://www.linkedin.com/jobs/view/${id}/` });
+    const card = { id, title: title.slice(0, 200), company, location, link: `https://www.linkedin.com/jobs/view/${id}/` };
+    if (easyApply) card.easyApply = true;
+    cards.push(card);
   };
 
   // 1. Current UI: the id is in the card's componentkey.

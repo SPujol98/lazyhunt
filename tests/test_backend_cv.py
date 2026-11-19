@@ -91,8 +91,8 @@ def test_migration_v7_widens_cv_base_check_and_keeps_every_column(tmp_path: Path
     legacy.close()
 
     repo = OfferRepository(sqlite3.connect(path))
-    assert SCHEMA_VERSION == 23
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert SCHEMA_VERSION == 24
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     row = repo.get_offer(1)
     assert row.cv_base == "DS_EN" and row.perfil is None
     repo.record_cv(1, cv_base="BACKEND_EN", cv_path="x.pdf", cambios="c")
@@ -126,7 +126,7 @@ def test_migration_v7_keeps_dependent_rows(tmp_path: Path) -> None:
     path = tmp_path / "v6.db"
     oid = _v6_db_with_dependents(path)
     repo = OfferRepository(sqlite3.connect(path))  # runs the v7 rebuild
-    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 23
+    assert repo._conn.execute("PRAGMA user_version").fetchone()[0] == 24
     assert repo.get_offer(oid).url_oferta == URL
     assert repo.latest_match(oid) is not None
     assert repo._conn.execute("PRAGMA foreign_key_check").fetchall() == []

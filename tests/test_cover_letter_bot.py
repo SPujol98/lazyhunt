@@ -35,9 +35,13 @@ class _Msg:
         self.message_id = 11
         self.text: str | None = None  # text-less card: nothing to re-send
         self.replies: list[tuple[str, object]] = []
+        self.documents: list[str | None] = []
 
     async def reply_text(self, text: str, reply_markup: object = None) -> None:
         self.replies.append((text, reply_markup))
+
+    async def reply_document(self, document: object, filename: str | None = None) -> None:
+        self.documents.append(filename)
 
 
 class _Query:

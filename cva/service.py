@@ -46,6 +46,13 @@ from cva.cvgen.base_pdfs import (
     variant_key,
 )
 from cva.cvgen.engine import generic_output_path
+from cva.cvgen.fonts import DEFAULT_CV_FONT, CvFont
+from cva.cvgen.letter_pdf import (
+    letter_identity,
+    offer_letter_path,
+    open_letter_path,
+    render_letter_pdf,
+)
 from cva.fetch import Fetcher, HttpxFetcher
 from cva.i18n import LEGACY_LANG, Lang, t
 from cva.ingest import (
@@ -114,6 +121,7 @@ from cva.notifier import (
     cv_keyboard,
     date_card_lines,
     deadline_alert_batch,
+    easy_apply_line,
     judge_breakdown_message,
     keyboard_to_json,
     new_job_keyboard,
@@ -693,7 +701,7 @@ def _guard_offer(fetched: FetchedOffer) -> tuple[FetchedOffer, GuardReport]:
     title = clean_text(fetched.title) if fetched.title else None
     company = clean_text(fetched.company) if fetched.company else None
     if not body.text.strip():
-        raise ServiceError("offer text is empty after removing hidden characters")
+        raise ServiceError.keyed("bot.err.empty_offer")
     parts = [r for r in (body, title, company) if r is not None]
     report = GuardReport(
         text=body.text,
@@ -762,8 +770,11 @@ class JobService:
         cover_letter_review: bool = False,
         paused_default: bool = False,
         ui_language: Lang = LEGACY_LANG,
+        cv_font: CvFont = DEFAULT_CV_FONT,
     ) -> None:
         self._repo = repo
+        # Settings.cv_font: the family of the CVs, reused by the letter PDFs.
+        self._cv_font: CvFont = cv_font
         # Settings.ui_language: every text this service renders for the owner.
         self._lang: Lang = ui_language
         # Kill-switch default (Settings.paused); the persisted toggle wins.
@@ -889,6 +900,7 @@ class JobService:
             cover_letter_review=settings.cover_letter_review,
             paused_default=settings.paused,
             ui_language=settings.ui_language,
+            cv_font=settings.cv_font,
         )
 
     @property
@@ -931,7 +943,7 @@ class JobService:
             self._guard_reports.pop(offer_id, None)
 
     def card_extras(self, offer_id: int) -> str:
-        """Extra card lines: salary line plus deadline/age lines (blank-free)."""
+        """Extra card lines: salary, deadline/age and Easy Apply (blank-free)."""
         offer = self._repo.get_offer(offer_id)
         lines = [
             warning_line(self._guard_reports.get(offer_id), self._lang),
@@ -942,6 +954,7 @@ class JobService:
                 self._now().date(),
                 lang=self._lang,
             ),
+            easy_apply_line(offer.origen, offer.easy_apply, lang=self._lang),
         ]
         return "\n".join(line for line in lines if line)
 
@@ -1480,6 +1493,51 @@ class JobService:
         self._repo.set_cover_letter(offer_id, letter.text)
         self._refresh_tracker()
         return letter.text
+
+    def cover_letter_pdf(self, offer_id: int) -> Path:
+        """The offer's saved letter as a PDF next to its CV; return the path.
+
+        ``<out_dir>/<id>_<company>/<file_slug>_<LetterName>.pdf`` with the
+        letter-language name (``Carta_Presentacion`` / ``Cover_Letter`` /
+        ``Carta_Presentacio``), dated today in the letter's language (the
+        language the letter was generated in). Re-saving rewrites the file.
+        ``ServiceError`` when the offer has no saved letter.
+        """
+        offer = self._repo.get_offer(offer_id)
+        text = offer.carta_presentacion
+        if not text:
+            raise ServiceError.keyed("bot.err.no_letter")
+        language = infer_language(offer.source_data or "")
+        out = offer_letter_path(
+            offer_id,
+            offer.empresa,
+            language,
+            self._output_dir,
+            self._identity.file_slug,
+        )
+        return self._render_letter(text, language, out)
+
+    def open_letter_pdf(self, text: str, language: str) -> Path:
+        """The ``/cartabase`` letter as a PDF; return the path.
+
+        ``<out_dir>/base_letter_<lang>/<file_slug>_<LetterName>.pdf``,
+        rewritten on every call (the base is read live).
+        """
+        out = open_letter_path(language, self._output_dir, self._identity.file_slug)
+        return self._render_letter(text, language, out)
+
+    def _render_letter(self, text: str, language: str, out: Path) -> Path:
+        header = letter_identity(
+            self._db, owner_name(self._db, self._identity), language, self._identity
+        )
+        return render_letter_pdf(
+            text,
+            identity=header,
+            language=language,
+            out_path=out,
+            date=self._now().date(),
+            font=self._cv_font,
+        )
 
     def _prep_salary_text(self, offer_id: int) -> str:
         """Existing salary knowledge only (research or reference); never new."""
@@ -2585,9 +2643,12 @@ class JobService:
         resolved: str = lang if lang is not None else infer_language(offer.source_data)
         if resolved not in family.languages:
             if lang is not None:
-                raise ServiceError(
-                    f"invalid role/language combination: {role}_{lang} (the "
-                    f"{family.id} family has CVs in {', '.join(family.languages)})"
+                raise ServiceError.keyed(
+                    "bot.err.cv_language",
+                    role=role,
+                    lang=lang,
+                    family=family.id,
+                    languages=", ".join(family.languages),
                 )
             resolved = family.languages[0]
         variant = variant_key(family.role, resolved)
@@ -2626,7 +2687,7 @@ class JobService:
             path = Path(offer.cv_adaptado)
         match_row = self._repo.latest_match(offer_id)
         if match_row is None:
-            raise ServiceError(f"offer {offer_id} has no analysis; call analyze first")
+            raise ServiceError.keyed("bot.err.sent_not_analyzed", id=offer_id)
         first_send = self._repo.mark_sent(
             offer_id,
             cv_path=None if path is None else str(path),

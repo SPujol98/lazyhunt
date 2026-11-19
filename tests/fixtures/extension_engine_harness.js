@@ -152,6 +152,37 @@ async function areaLinkedin() {
     ['ML Engineer', 'Initech', 'Valencia'],
   ]);
   check('titles are cut to 200 characters', t.jobs && t.jobs[3] && t.jobs[3].title.length, 200);
+  check('S3: the Easy Apply badge flags the card, absent otherwise',
+    (t.jobs || []).map((j) => ('easyApply' in j ? j.easyApply : 'absent')), [true, true, 'absent', 'absent']);
+
+  const badges = [
+    { id: '21', lines: ['AI Engineer', 'Acme', 'Madrid', '  EASY APPLY  '] },
+    { id: '22', lines: ['AI Engineer', 'Acme', 'Madrid', 'Candidatura simplificada'] },
+    { id: '23', lines: ['AI Engineer', 'Postulación sencilla', 'Acme', 'Madrid'] },
+    { id: '24', lines: ['Easy Apply Engineer', 'Acme', 'Madrid'] },
+  ];
+  await boot('S3: badge variants, never part of the fields', roundStore([]), { pages: { [LI_A]: liPage(badges) } });
+  const v = await send({ type: 'test-scrape', url: LI_A });
+  check('badge variants: fields', (v.jobs || []).map((j) => [j.title, j.company, j.location]), [
+    ['AI Engineer', 'Acme', 'Madrid'],
+    ['AI Engineer', 'Acme', 'Madrid'],
+    ['AI Engineer', 'Acme', 'Madrid'],
+    ['Easy Apply Engineer', 'Acme', 'Madrid'],
+  ]);
+  check('badge variants: flags', (v.jobs || []).map((j) => ('easyApply' in j ? j.easyApply : 'absent')), [true, true, true, 'absent']);
+
+  await boot('S3: easy_apply reaches the bridge only when set', roundStore([beacon('b1', LI_A)]), {
+    pages: { [LI_A]: liPage([
+      { id: '31', lines: ['AI Engineer', 'Acme', 'Madrid', 'Solicitud sencilla'] },
+      { id: '32', lines: ['ML Engineer', 'Globex', 'Madrid'] },
+    ]) },
+  });
+  await send({ type: 'run-now' });
+  const posted = b.calls.fetches.filter((f) => f.url === BRIDGE).flatMap((f) => (f.body && f.body.jobs) || []);
+  check('bridge jobs', posted.map((j) => [j.url, 'easy_apply' in j ? j.easy_apply : 'absent']), [
+    ['https://www.linkedin.com/jobs/view/31/', true],
+    ['https://www.linkedin.com/jobs/view/32/', 'absent'],
+  ]);
 }
 
 async function areaReport() {

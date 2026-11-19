@@ -275,6 +275,10 @@ def _validated(
             value = job.get(field)
             if value is not None and not isinstance(value, str):
                 raise _BadRequest(f"'{field}' must be a string or null")
+        # pending-maintenance S3: the LinkedIn Easy Apply badge (absent = unknown).
+        easy_apply = job.get("easy_apply")
+        if easy_apply is not None and not isinstance(easy_apply, bool):
+            raise _BadRequest("'easy_apply' must be a boolean or null")
         # A title matching a family's title terms wins over the beacon (built-
         # ins: an AI title beats a backend beacon, whose filter passes any
         # "Engineer"); otherwise the beacon's profile applies. An 'ai' beacon
@@ -578,6 +582,7 @@ def _process_payload(
                 fecha_publicacion=dates.publicacion,
                 fecha_limite=dates.limite,
                 location=_clean_location(job.get("location")),
+                easy_apply=job.get("easy_apply"),
             )
         )
         if reopen:

@@ -782,6 +782,18 @@ async def _send_pdf(reply, pdf_path) -> None:
         await reply.reply_document(document, filename=pdf_path.name)
 
 
+async def _send_letter_pdf(reply, render: Callable[[], Path], lang: Lang) -> None:
+    """Render a letter PDF and send it; a failure only warns (the text stays)."""
+    try:
+        pdf_path = render()
+        await _send_pdf(reply, pdf_path)
+    except Exception as exc:  # noqa: BLE001 — the text letter already went out
+        _LOG.warning("letter PDF not delivered: %s", exc)
+        await reply.reply_text(
+            t("bot.letter_pdf_failed", lang, reason=_reason(exc, lang))
+        )
+
+
 def _parse_id(raw: str) -> int | None:
     return int(raw) if raw.isdigit() else None
 
@@ -943,8 +955,13 @@ async def cartabase_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except ProfileError as exc:
         await update.message.reply_text(t("bot.letter_base_error", lang, error=exc))
         return
-    await update.message.reply_text(assemble_open_letter(bases[language]))
+    letter = assemble_open_letter(bases[language])
+    await update.message.reply_text(letter)
     await update.message.reply_text(t("bot.cartabase_note", lang))
+    service = _service(context)
+    await _send_letter_pdf(
+        update.message, lambda: service.open_letter_pdf(letter, language), lang
+    )
 
 
 async def beacon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1308,6 +1325,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.message.reply_text(_err(exc, ui))
             return
         await query.message.reply_text(t("bot.letter_saved", ui))
+        await _send_letter_pdf(
+            query.message, lambda: service.cover_letter_pdf(offer_id), ui
+        )
     elif (
         kind == PREP
         and len(parts) in (1, 2)

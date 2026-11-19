@@ -79,7 +79,7 @@ async function main() {
 
   // --- LinkedIn card strategies ---------------------------------------------------------
   check('linkedin componentkey strategy', await extract(linkedin, fixture('linkedin_componentkey.html')), [
-    { id: '1000000001', title: 'AI Engineer', company: 'Acme Robotics', location: 'Barcelona, Catalonia, Spain', link: 'https://www.linkedin.com/jobs/view/1000000001/' },
+    { id: '1000000001', title: 'AI Engineer', company: 'Acme Robotics', location: 'Barcelona, Catalonia, Spain', link: 'https://www.linkedin.com/jobs/view/1000000001/', easyApply: true },
     { id: '1000000002', title: 'Backend Developer', company: 'Globex', location: 'Madrid, Spain', link: 'https://www.linkedin.com/jobs/view/1000000002/' },
   ]);
   check('linkedin legacy list strategy', await extract(linkedin, fixture('linkedin_legacy.html')), [
