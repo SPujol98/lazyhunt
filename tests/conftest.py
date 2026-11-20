@@ -63,3 +63,21 @@ def _isolate_default_output_paths(
 def legacy_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     """Opt out of the demo profile: the unset-``profile_dir`` (owner) layout."""
     monkeypatch.delenv("CVA_PROFILE_DIR", raising=False)
+
+
+@pytest.fixture()
+def windows_newlines(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make text-mode writes translate ``\\n`` to ``\\r\\n`` as on Windows.
+
+    ``open``/``os.fdopen``/``Path.write_text`` go through the pure-Python
+    ``_pyio`` layer, which takes its write newline from ``os.linesep``; set to
+    ``"\\r\\n"`` it reproduces a Windows text-mode write on any OS. Binary
+    writes are untouched, exactly as on Windows.
+    """
+    import _pyio
+    import io
+    import os
+
+    monkeypatch.setattr(os, "linesep", "\r\n")
+    monkeypatch.setattr(io, "open", _pyio.open)
+    monkeypatch.setattr(os, "fdopen", _pyio.open)

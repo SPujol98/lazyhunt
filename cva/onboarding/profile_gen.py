@@ -463,7 +463,7 @@ def _validate(profile_dir: Path) -> None:
 class _Previous:
     """An existing file this call rewrites: its bytes and permissions."""
 
-    text: str
+    data: bytes
     mode: int
 
 
@@ -476,7 +476,7 @@ def _rollback(
     for rel in created:
         (profile_dir / rel).unlink(missing_ok=True)
     for rel, previous in replaced.items():
-        atomic_write(profile_dir / rel, previous.text, mode=previous.mode)
+        atomic_write(profile_dir / rel, previous.data, mode=previous.mode)
     judge = profile_dir / "judge"
     if judge_created and judge.is_dir() and not any(judge.iterdir()):
         judge.rmdir()
@@ -491,14 +491,15 @@ def _merged_claims(
     path = profile_dir / "claims.json"
     if not path.is_file():
         return None
-    old = path.read_text("utf-8")
+    raw = path.read_bytes()
+    old = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     try:
         merged = merge_setup_claims(old, setup_claims(answers, lang))
     except ValueError:
         return None
     if merged == old:
         return None
-    return merged, _Previous(old, stat.S_IMODE(path.stat().st_mode))
+    return merged, _Previous(raw, stat.S_IMODE(path.stat().st_mode))
 
 
 def generate_minimal_profile(

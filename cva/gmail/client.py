@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
+from cva.fsutil import display_path
 from cva.i18n import LEGACY_LANG, Lang, t
 
 _LOG = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ def write_token_file(path: Path, content: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(content)
         os.chmod(tmp, 0o600)
         os.replace(tmp, path)
@@ -314,7 +315,7 @@ def run_auth_flow(
     """Interactive installed-app OAuth (browser) writing the token as ``0600``."""
     if not credentials_path.exists():
         raise GmailAuthError(
-            t("panel.gmail.no_credentials", lang, path=credentials_path)
+            t("panel.gmail.no_credentials", lang, path=display_path(credentials_path))
         )
     factory = flow_factory or _installed_app_flow
     try:
@@ -324,7 +325,7 @@ def run_auth_flow(
             t(
                 "panel.gmail.bad_credentials",
                 lang,
-                path=credentials_path,
+                path=display_path(credentials_path),
                 error=type(exc).__name__,
             )
         ) from exc
@@ -345,7 +346,7 @@ def run_auth_flow(
             t(
                 "panel.gmail.save_failed",
                 lang,
-                path=token_path,
+                path=display_path(token_path),
                 error=type(exc).__name__,
             )
         ) from exc

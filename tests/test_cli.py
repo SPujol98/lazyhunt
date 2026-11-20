@@ -536,7 +536,7 @@ def test_sent_export_keywords_wire_to_service(tmp_path: Path) -> None:
     target = tmp_path / "out.xlsx"
     out = run(["export", "--out", str(target)], service)
     assert ("export", (target,)) in service.calls
-    assert str(target) in out
+    assert target.as_posix() in out
 
     out = run(["keywords", "default"], service)
     assert ("keywords", ("default",)) in service.calls

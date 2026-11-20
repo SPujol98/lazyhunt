@@ -43,6 +43,7 @@ from cva.beacons import BeaconPausedAlert
 from cva.card_links import search_links
 from cva.commands import help_text
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, Family, FamilyRegistry
+from cva.fsutil import display_path
 from cva.i18n import CATALOGS, LANGS, LEGACY_LANG, Lang, t
 from cva.llm import LlmResponseError
 from cva.match import MatchResult
@@ -974,7 +975,7 @@ def cv_ready_message(
     text = t(
         "notifier.cv_ready",
         lang,
-        path=pdf_path,
+        path=display_path(pdf_path),
         pages=pages_fragment,
         link=link_fragment,
     )

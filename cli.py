@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.fsutil import display_path
 from cva.gmail.client import (
     DEFAULT_CREDENTIALS_PATH,
     DEFAULT_TOKEN_PATH,
@@ -239,7 +240,7 @@ def _cmd_rejudge(
             tokens=result.estimated_tokens,
         )
     footer = (
-        "\n\n" + t("panel.cli.report", lang, path=result.report_path)
+        "\n\n" + t("panel.cli.report", lang, path=display_path(result.report_path))
         if result.report_path
         else ""
     )
@@ -251,7 +252,7 @@ def _cmd_cv(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
         pdf_path = asyncio.run(service.generate_cv(args.offer_id, args.role, args.lang))
     except ServiceError as exc:
         return f"⚠️ {exc.text(lang)}"
-    return t("panel.cli.cv_done", lang, path=pdf_path)
+    return t("panel.cli.cv_done", lang, path=display_path(pdf_path))
 
 
 def _cmd_sent(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
@@ -266,7 +267,7 @@ def _cmd_sent(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
 
 def _cmd_export(service: JobService, args: argparse.Namespace, lang: Lang) -> str:
     path = service.export(Path(args.out) if args.out else None)
-    return t("panel.cli.exported", lang, path=path)
+    return t("panel.cli.exported", lang, path=display_path(path))
 
 
 def _cmd_import_history(
@@ -348,7 +349,9 @@ def _cmd_gmail_auth(
         run_auth_flow(credentials_path, token_path, lang=lang)
     except GmailAuthError as exc:
         return f"⚠️ {exc}"
-    return t("panel.cli.gmail_ok", lang, scope=GMAIL_SCOPE, path=token_path)
+    return t(
+        "panel.cli.gmail_ok", lang, scope=GMAIL_SCOPE, path=display_path(token_path)
+    )
 
 
 def _families(service: object) -> FamilyRegistry:

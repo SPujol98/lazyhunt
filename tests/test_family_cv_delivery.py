@@ -162,7 +162,7 @@ def test_declared_family_delivers_its_manifest_base_cv(
     row = repo.get_offer(oid)
     assert row.cv_base == key
     assert row.estado == "preparada"
-    assert row.cv_adaptado == str(pdf)
+    assert row.cv_adaptado == pdf.as_posix()
     assert pdf == tmp_path / "adaptadas" / f"{oid}_Acme" / name
     assert pdf.read_bytes() == (base / f"CV_{key}.pdf").read_bytes()
     assert row.cambios is not None and key in row.cambios

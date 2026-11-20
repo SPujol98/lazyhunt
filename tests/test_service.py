@@ -826,7 +826,7 @@ def test_generate_cv_generic_name_in_per_offer_folder(tmp_path: Path) -> None:
     row = repo.get_offer(offer_id)
     assert pdf_path.name == "Alex_Rivera_AI_Engineer.pdf"
     assert pdf_path.parent.name == f"{offer_id}_Acme"
-    assert row.cv_adaptado == str(pdf_path)
+    assert row.cv_adaptado == pdf_path.as_posix()
     assert pdf_path.is_file()
 
 
@@ -878,7 +878,7 @@ def test_mark_sent_records_enviada(tmp_path: Path) -> None:
     row = repo.get_offer(offer_id)
     assert row.estado == "enviada"
     assert row.fecha_envio is not None
-    assert row.cv_adaptado == str(pdf_path)
+    assert row.cv_adaptado == pdf_path.as_posix()
     assert row.match == 50
 
 

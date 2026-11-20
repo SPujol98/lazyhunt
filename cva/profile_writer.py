@@ -147,7 +147,7 @@ def _plain(value: Any) -> Any:
 def _replace(path: Path, text: str) -> None:
     """Keep the previous file as ``<name>.bak``, then swap ``text`` in."""
     if path.is_file():
-        atomic_write(path.with_name(f"{path.name}.bak"), path.read_text("utf-8"))
+        atomic_write(path.with_name(f"{path.name}.bak"), path.read_bytes())
     atomic_write(path, text)
 
 

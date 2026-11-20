@@ -187,6 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         + "\n",
         encoding="utf-8",
+        newline="",
     )
     for variant, entry in entries.items():
         print(f"{variant}: {entry['file']} {entry['sha256'][:12]}")

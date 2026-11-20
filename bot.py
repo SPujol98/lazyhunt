@@ -68,6 +68,7 @@ from cva.commands import (
 )
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
+from cva.fsutil import display_path
 from cva.gmail.client import GoogleGmailClient
 from cva.gmail.sync import GmailSync, should_propose
 from cva.i18n import CATALOGS, LEGACY_LANG, Lang, t
@@ -924,7 +925,9 @@ async def sent_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     path = _service(context).export()
-    await update.message.reply_text(t("bot.exported", _lang(context), path=path))
+    await update.message.reply_text(
+        t("bot.exported", _lang(context), path=display_path(path))
+    )
 
 
 async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

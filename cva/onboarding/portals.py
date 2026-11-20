@@ -104,7 +104,7 @@ def write_enabled_portals(config_path: Path, portals: Sequence[str]) -> list[str
     check_toml_settings(*documents, tomllib.loads(text))
     mode = stat.S_IMODE(config_path.stat().st_mode) if config_path.is_file() else None
     # A symlinked config (dotfiles) is written through: the link stays.
-    atomic_write(write_target(config_path), text, mode=mode, newline="")
+    atomic_write(write_target(config_path), text, mode=mode)
     return chosen
 
 

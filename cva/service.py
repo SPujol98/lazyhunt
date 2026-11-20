@@ -56,6 +56,7 @@ from cva.cvgen.letter_pdf import (
     render_letter_pdf,
 )
 from cva.fetch import Fetcher, HttpxFetcher
+from cva.fsutil import display_path
 from cva.i18n import LEGACY_LANG, Lang, t
 from cva.ingest import (
     FetchedOffer,
@@ -2618,7 +2619,7 @@ class JobService:
             report_path = _unique_report_path(
                 report_dir, self._now().strftime("%Y-%m-%d_%H%M%S")
             )
-            report_path.write_text(report_text, encoding="utf-8")
+            report_path.write_text(report_text, encoding="utf-8", newline="")
             return RejudgeResult(
                 dry_run=False,
                 report_only=True,
@@ -2698,7 +2699,7 @@ class JobService:
                 stopped_reason=stopped_reason,
                 lang=self._lang,
             )
-            report_path.write_text(text, encoding="utf-8")
+            report_path.write_text(text, encoding="utf-8", newline="")
             return text
 
         anchors = self._judge_anchors()
@@ -2851,7 +2852,7 @@ class JobService:
         self._repo.record_cv(
             offer_id,
             cv_base=variant,
-            cv_path=str(pdf_path),
+            cv_path=display_path(pdf_path),
             cambios=base_cambios(variant, self._base_pdfs_dir),
         )
         # Mirror projection AFTER the DB write (D7): best-effort copy to
@@ -2875,7 +2876,7 @@ class JobService:
             raise ServiceError.keyed("bot.err.sent_not_analyzed", id=offer_id)
         first_send = self._repo.mark_sent(
             offer_id,
-            cv_path=None if path is None else str(path),
+            cv_path=None if path is None else display_path(path),
             cambios=offer.cambios or (None if path is None else NEUTRAL_CAMBIOS),
             match=match_row.score,
             judgment=self._judgment_snapshot(offer),

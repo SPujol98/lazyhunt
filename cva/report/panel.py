@@ -591,7 +591,7 @@ def write_panel_atomic(content: str, path: Path) -> bool:
         fd, tmp_name = tempfile.mkstemp(
             dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp"
         )
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(content)
         # mkstemp creates 0600: keep the previous file's mode, else 0644.
         try:

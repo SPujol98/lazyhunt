@@ -729,10 +729,10 @@ def _create_profile(dest: Path, kind: str, demo_profile: Path) -> None:
             continue
         rel = path.relative_to(dest).as_posix()
         if path.suffix == ".md" and rel != "eval/README.md":
-            path.write_text(_md_placeholder(rel), encoding="utf-8")
+            path.write_text(_md_placeholder(rel), encoding="utf-8", newline="")
         elif path.suffix == ".toml":
             original = path.read_text(encoding="utf-8")
-            path.write_text(_toml_header(rel) + original, encoding="utf-8")
+            path.write_text(_toml_header(rel) + original, encoding="utf-8", newline="")
     labels = dest / "eval" / "labels.json"
     if labels.parent.is_dir():
         demo_labels = json.loads(
@@ -749,8 +749,9 @@ def _create_profile(dest: Path, kind: str, demo_profile: Path) -> None:
             )
             + "\n",
             encoding="utf-8",
+            newline="",
         )
-    (dest / "README.md").write_text(_PROFILE_README, encoding="utf-8")
+    (dest / "README.md").write_text(_PROFILE_README, encoding="utf-8", newline="")
 
 
 def _apply(plan: _Plan, base_dir: Path, demo_profile: Path) -> None:

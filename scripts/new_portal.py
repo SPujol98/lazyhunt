@@ -246,12 +246,12 @@ def scaffold(root: Path, portal_id: str, label: str, host: str) -> list[Path]:
     if existing:
         raise ScaffoldError(
             "refusing to overwrite, already exists: "
-            + ", ".join(str(p.relative_to(root)) for p in existing)
+            + ", ".join(p.relative_to(root).as_posix() for p in existing)
         )
     registry_path = ext / "portals" / "registry.js"
     if not registry_path.is_file():
         raise ScaffoldError(
-            f"missing {registry_path.relative_to(root)}: not a repo root?"
+            f"missing {registry_path.relative_to(root).as_posix()}: not a repo root?"
         )
 
     # Compute every edit in memory first, then write: a refusal leaves no trace.
@@ -271,13 +271,17 @@ def scaffold(root: Path, portal_id: str, label: str, host: str) -> list[Path]:
     )
     adapter.parent.mkdir(parents=True, exist_ok=True)
     fixtures.mkdir(parents=True, exist_ok=True)
-    adapter.write_text(adapter_src, encoding="utf-8")
-    html.write_text(_FIXTURE.format(label=label), encoding="utf-8")
-    expected.write_text(json.dumps(_EXPECTED, indent=2) + "\n", encoding="utf-8")
-    test.write_text(
-        _TEST.format(label=label, pid=portal_id, host=host), encoding="utf-8"
+    adapter.write_text(adapter_src, encoding="utf-8", newline="")
+    html.write_text(_FIXTURE.format(label=label), encoding="utf-8", newline="")
+    expected.write_text(
+        json.dumps(_EXPECTED, indent=2) + "\n", encoding="utf-8", newline=""
     )
-    registry_path.write_text(new_registry, encoding="utf-8")
+    test.write_text(
+        _TEST.format(label=label, pid=portal_id, host=host),
+        encoding="utf-8",
+        newline="",
+    )
+    registry_path.write_text(new_registry, encoding="utf-8", newline="")
     return created
 
 

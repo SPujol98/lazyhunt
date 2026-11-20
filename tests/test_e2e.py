@@ -155,7 +155,7 @@ def test_full_pipeline_paste_analyze_cv_send_export(
     row = repo.get_offer(offer_id)
     assert row.estado == "preparada"
     assert row.cv_base == "AI_ES"  # Spanish paste → inferred es
-    assert row.cv_adaptado == str(pdf_path)
+    assert row.cv_adaptado == pdf_path.as_posix()
 
     # 6. mark_sent → enviada + fecha_envio + match snapshot
     service.mark_sent(offer_id, pdf_path)

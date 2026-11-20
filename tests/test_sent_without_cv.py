@@ -115,7 +115,9 @@ def _tracker_row(path: Path, offer_id: int) -> dict[str, object]:
 
 def _mirror_files(tmp_path: Path) -> list[str]:
     root = tmp_path / "mirror"
-    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    return sorted(
+        p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
+    )
 
 
 # --- S1: the analysis card offers the button --------------------------------------
@@ -203,11 +205,11 @@ def test_sent_press_with_cv_still_moves_the_pdf(
     assert _mirror_files(tmp_path) == [f"enviados/{rel}"]
     offer = service.offer(offer_id)
     assert offer.estado == "enviada"
-    assert offer.cv_adaptado == str(pdf_path)
+    assert offer.cv_adaptado == pdf_path.as_posix()
     snapshot = repo.get_sent_snapshot(offer_id)
     assert snapshot is not None and snapshot.cv_file == pdf_path.name
     row = _tracker_row(tmp_path / "tracker.xlsx", offer_id)
-    assert row["cv_adaptado"] == str(pdf_path)
+    assert row["cv_adaptado"] == pdf_path.as_posix()
 
 
 # --- S4: /sent <id> also works without a CV ---------------------------------------

@@ -25,7 +25,7 @@ def test_gmail_auth_uses_explicit_paths(
     )
 
     assert calls == [(creds, token)]
-    assert str(token) in out
+    assert token.as_posix() in out
     assert "solo lectura" in out
 
 

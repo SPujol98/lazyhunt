@@ -416,7 +416,7 @@ def test_cv_ready_message_carries_path_and_pages() -> None:
 
     pdf = Path("adaptadas/Alex_Rivera_AI_Engineer_Acme.pdf")
     text = cv_ready_message(pdf, pages=1)
-    assert str(pdf) in text
+    assert pdf.as_posix() in text
     assert "1" in text
 
 

@@ -143,4 +143,4 @@ def test_backend_cv_file_name_uses_the_backend_label(tmp_path: Path) -> None:
     oid = _offer(repo, ES_TEXT, "backend")
     pdf = asyncio.run(svc.generate_cv(oid))
     assert pdf.is_file()
-    assert repo.get_offer(oid).cv_adaptado == str(pdf)
+    assert repo.get_offer(oid).cv_adaptado == pdf.as_posix()

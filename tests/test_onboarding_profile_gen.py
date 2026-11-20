@@ -71,7 +71,7 @@ def _confirmed(
 
 def _tree_digest(root: Path) -> dict[str, str]:
     return {
-        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+        p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(root.rglob("*"))
         if p.is_file()
     }
@@ -528,3 +528,19 @@ def test_a_failed_validation_puts_the_merged_claims_back(tmp_path: Path) -> None
     with pytest.raises(ProfileError, match="identity_claim_id"):
         generate_minimal_profile(profile, answers, "en")
     assert (profile / "claims.json").read_text("utf-8") == original
+
+
+def test_a_failed_validation_puts_back_the_exact_bytes_of_a_crlf_claims_file(
+    tmp_path: Path,
+) -> None:
+    profile, answers, _ = _hand_written(tmp_path)
+    claims = profile / "claims.json"
+    raw = claims.read_bytes().replace(b"\n", b"\r\n")
+    claims.write_bytes(raw)
+    toml = profile / "profile.toml"
+    toml.write_text(
+        toml.read_text("utf-8") + 'identity_claim_id = "missing-contact"\n', "utf-8"
+    )
+    with pytest.raises(ProfileError, match="identity_claim_id"):
+        generate_minimal_profile(profile, answers, "en")
+    assert claims.read_bytes() == raw

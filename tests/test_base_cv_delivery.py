@@ -168,7 +168,7 @@ def test_ai_offer_gets_generic_ai_name_in_offer_folder(tmp_path: Path) -> None:
         pdf == tmp_path / "adaptadas" / f"{oid}_Acme" / "Alex_Rivera_Ingeniero_IA.pdf"
     )
     row = repo.get_offer(oid)
-    assert row.cv_adaptado == str(pdf)
+    assert row.cv_adaptado == pdf.as_posix()
     assert (row.cambios or "").startswith(BASE_CAMBIOS)
     assert BASE_CAMBIOS != NEUTRAL_CAMBIOS
     assert _sha(pdf) == _sha(BASE / FILES["AI_ES"])
