@@ -19,6 +19,10 @@ the card). Silence is always PASS.
   PASS; mixed or unclear signals (several places, remote with visits outside
   Catalonia, office work without a place) → FLAG. Unknown places never fail.
 - Negation never erases a hit, it only downgrades it to FLAG (no false PASS).
+- Generic home (``[location] city``/``country`` outside the home region): the
+  same rules over the user's city (or country) matched by NAME, with no
+  distance; a FAIL becomes a FLAG, because a name list cannot tell a suburb
+  of the city from another city (see ``locations.generic_region``).
 """
 
 import re
@@ -31,10 +35,19 @@ from typing import Final, Literal
 from pydantic import BaseModel
 
 from cva.i18n import CATALOGS, Lang, join_list, t
-from cva.match.locations import PlaceHit, Region, find_places, fold_place, get_region
+from cva.match.locations import (
+    PlaceHit,
+    Region,
+    find_places,
+    fold_place,
+    generic_region,
+    get_region,
+)
 
 Gate = Literal["eligibility", "language", "location"]
 Verdict = Literal["PASS", "FLAG", "FAIL"]
+# "mixed": remote next to hybrid/office wording; "unknown": no work-mode wording.
+WorkMode = Literal["remote", "hybrid", "onsite", "mixed", "unknown"]
 
 _EVIDENCE_RADIUS: Final[int] = 70
 _EVIDENCE_MAX: Final[int] = 160
@@ -48,11 +61,15 @@ class GatePrefs:
     languages the profile speaks: any other mandatory language FAILs.
     ``flag_english_above_c1`` only applies when ``en`` is allowed.
     ``home_region`` is a key of ``cva.match.locations.REGIONS``.
+    ``city``/``country`` (``[location]``, by name) switch the location gate to
+    the generic by-name home unless the city is inside ``home_region``.
     """
 
     allowed_languages: tuple[str, ...] = ("es", "ca", "en")
     flag_english_above_c1: bool = True
     home_region: str = "catalonia"
+    city: str | None = None
+    country: str | None = None
 
 
 DEFAULT_GATE_PREFS: Final[GatePrefs] = GatePrefs()
@@ -723,18 +740,18 @@ def _result(
     )
 
 
-def location_gate(
-    text: str, location: str | None = None, prefs: GatePrefs = DEFAULT_GATE_PREFS
-) -> GateResult:
-    """On-site/hybrid outside the home region (Catalonia by default) → FAIL;
-    remote or any place inside it → PASS; mixed or unclear signals → FLAG.
+@dataclass(frozen=True)
+class _Mode:
+    """The work-mode reading of an offer (shared by the gate and the cards)."""
 
-    ``location`` is the portal's structured location field (authoritative:
-    its places are always strong evidence); the offer ``text`` supplies the
-    work-mode wording and, as a fallback, places mentioned as the work place.
-    """
-    region = get_region(prefs.home_region)
-    location = location.strip() if location and location.strip() else None
+    mode: WorkMode
+    blob: str
+    folded: str
+    office: list[re.Match[str]]
+    mode_tokens: list[re.Match[str]]
+
+
+def _read_mode(text: str, location: str | None) -> _Mode:
     blob = text if location is None else f"{text}\n{location}"
     folded = _fold(blob)
     remote = _non_negated(_REMOTE, folded)
@@ -752,18 +769,12 @@ def location_gate(
     hybrid = _non_negated(_HYBRID, folded) + perk_remote
     office = _non_negated(_OFFICE, folded, skip_ctx=True)
     strong_remote = bool(_non_negated(_STRONG_REMOTE, folded))
-    segments = _spans(folded)
     mode_tokens = [
         *hybrid,
         *office,
         *negated_remote,
     ]
-    mode_segments = [_span_of(segments, m.start()) for m in mode_tokens]
-    places = _places(blob, folded, len(text), location, mode_segments, region)
-    inside = [p for p in places if p.hit.inside]
-    outside = [p for p in places if not p.hit.inside]
-    strong_out = [p for p in outside if p.kind == "strong"]
-
+    mode: WorkMode
     if remote and not (hybrid or office):
         mode = "remote"
     elif remote and strong_remote:
@@ -778,6 +789,41 @@ def location_gate(
         mode = "onsite"
     else:
         mode = "unknown"
+    return _Mode(mode, blob, folded, office, mode_tokens)
+
+
+def work_mode(text: str, location: str | None = None) -> WorkMode:
+    """The offer's work mode as the location gate reads it (a remote mention
+    among benefits is a perk, so the mode is hybrid; no wording: unknown)."""
+    location = location.strip() if location and location.strip() else None
+    return _read_mode(text, location).mode
+
+
+def location_gate(
+    text: str, location: str | None = None, prefs: GatePrefs = DEFAULT_GATE_PREFS
+) -> GateResult:
+    """On-site/hybrid outside the home region (Catalonia by default) → FAIL;
+    remote or any place inside it → PASS; mixed or unclear signals → FLAG.
+
+    ``location`` is the portal's structured location field (authoritative:
+    its places are always strong evidence); the offer ``text`` supplies the
+    work-mode wording and, as a fallback, places mentioned as the work place.
+    With a generic home (``prefs.city``/``country`` outside the home region)
+    the same rules run over that city or country, and never FAIL.
+    """
+    home = get_region(prefs.home_region)
+    generic = generic_region(prefs.city, prefs.country, home)
+    region = home if generic is None else generic
+    location = location.strip() if location and location.strip() else None
+    read = _read_mode(text, location)
+    mode, blob, folded = read.mode, read.blob, read.folded
+    office, mode_tokens = read.office, read.mode_tokens
+    segments = _spans(folded)
+    mode_segments = [_span_of(segments, m.start()) for m in mode_tokens]
+    places = _places(blob, folded, len(text), location, mode_segments, region)
+    inside = [p for p in places if p.hit.inside]
+    outside = [p for p in places if not p.hit.inside]
+    strong_out = [p for p in outside if p.kind == "strong"]
 
     if mode == "remote":
         # Remote: only visits/presence outside the home region are worth a FLAG.
@@ -830,7 +876,9 @@ def location_gate(
         return GateResult(gate="location", verdict="PASS")
     if strong_out:
         structured_out = any(p.structured for p in strong_out)
-        if mode in ("onsite", "hybrid") or (mode == "unknown" and structured_out):
+        if generic is None and (
+            mode in ("onsite", "hybrid") or (mode == "unknown" and structured_out)
+        ):
             return _result(
                 "FAIL",
                 _reason(

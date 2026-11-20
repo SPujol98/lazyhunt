@@ -346,3 +346,103 @@ def find_places(
             continue
         hits.append(PlaceHit(m.start(), m.end(), name, name in region.inside))
     return hits
+
+
+# --- Generic home (onboarding-v2 S6): any city or country, by NAME -------------
+
+# Country names as offers write them (ES/EN/CA/native), one canonical id each.
+_COUNTRY_NAMES: Final[dict[str, str]] = {
+    "spain": "España, Spain, Espanya, Espagne, Spanien",
+    "portugal": "Portugal",
+    "france": "France, Francia, França, Frankreich",
+    "germany": "Germany, Alemania, Alemanya, Deutschland, Allemagne",
+    "italy": "Italy, Italia, Itàlia, Italie",
+    "uk": (
+        "United Kingdom, Reino Unido, Regne Unit, UK, Great Britain, "
+        "Gran Bretaña, England, Inglaterra, Scotland, Escocia"
+    ),
+    "ireland": "Ireland, Irlanda",
+    "netherlands": "Netherlands, The Netherlands, Países Bajos, Holanda, Nederland",
+    "belgium": "Belgium, Bélgica, Belgique, België",
+    "switzerland": "Switzerland, Suiza, Suïssa, Schweiz, Suisse",
+    "austria": "Austria, Österreich",
+    "poland": "Poland, Polonia, Polska",
+    "usa": "United States, Estados Unidos, USA, EEUU, EE UU",
+    "canada": "Canada, Canadá",
+    "mexico": "Mexico, México",
+    "argentina": "Argentina",
+    "colombia": "Colombia",
+    "chile": "Chile",
+}
+COUNTRY_ALIASES: Final[dict[str, frozenset[str]]] = {
+    key: _names(csv) for key, csv in _COUNTRY_NAMES.items()
+}
+# Every place of the shipped tables is in Spain (except the foreign list).
+_SPAIN_PLACES: Final[frozenset[str]] = CATALONIA | _names(
+    f"{_SPANISH_COMMUNITIES}, {_SPANISH_PROVINCES}, {_SPANISH_CITIES}"
+)
+_KNOWN_PLACES: Final[frozenset[str]] = (
+    CATALONIA | OUTSIDE | frozenset().union(*COUNTRY_ALIASES.values())
+)
+
+
+def _home_name(text: str | None) -> str | None:
+    """``"Madrid, España"`` -> ``"Madrid"``; blank -> None."""
+    name = (text or "").split(",")[0].strip()
+    return name or None
+
+
+def _country_names(country: str) -> frozenset[str]:
+    """All the names of ``country`` (its own folded name when not listed)."""
+    own = _names(country)
+    for aliases in COUNTRY_ALIASES.values():
+        if own & aliases:
+            return aliases | own
+    return own
+
+
+def generic_region(
+    city: str | None, country: str | None, home: Region
+) -> Region | None:
+    """The by-name region of ``[location] city``/``country``, or ``None`` when
+    the detailed ``home`` region applies.
+
+    ``home`` applies when neither is set (every existing profile) and when the
+    city is one of ``home``'s own places (a Barcelona user keeps the detailed
+    Catalonia gate). Otherwise the region's inside is the city (or, with no
+    city, every name of the country, plus the shipped Spanish places for
+    Spain) and its outside is every other known place and country name; the
+    home country's own names are no place at all when a city is set, so
+    "Madrid, Spain" is just Madrid. Names that contain the city ("Comunidad de
+    Madrid") are dropped so the city itself matches. ``label`` is the name
+    as the user wrote it.
+    """
+    city = _home_name(city)
+    country = _home_name(country)
+    city_names = _names(city) if city else frozenset()
+    if city_names and city_names <= home.inside:
+        return None
+    if not city_names and country is None:
+        return None
+    own = _country_names(country) if country else frozenset()
+    if city_names:
+        inside = city_names
+        words = [
+            re.compile(rf"(?<![a-z0-9]){re.escape(c)}(?![a-z0-9])") for c in city_names
+        ]
+        outside = {
+            n for n in _KNOWN_PLACES - own if not any(w.search(n) for w in words)
+        }
+    else:
+        inside = own | (
+            _SPAIN_PLACES if own & COUNTRY_ALIASES["spain"] else frozenset()
+        )
+        outside = set(_KNOWN_PLACES)
+    label = city or country or ""
+    return Region(
+        id="generic",
+        label=label,
+        inside=frozenset(inside),
+        structured_only=STRUCTURED_ONLY - inside,
+        pattern=_compile(inside | frozenset(outside)),
+    )

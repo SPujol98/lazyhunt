@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any, Final, NamedTuple
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from cva.beacons import BeaconPausedAlert
+from cva.card_links import search_links
 from cva.commands import help_text
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, Family, FamilyRegistry
 from cva.i18n import CATALOGS, LANGS, LEGACY_LANG, Lang, t
@@ -821,8 +822,12 @@ def cv_keyboard(
     cv_needed: bool = True,
     families: FamilyRegistry = BUILTIN_REGISTRY,
     ui_lang: Lang = LEGACY_LANG,
+    offer: OfferRow | None = None,
 ) -> InlineKeyboardMarkup:
     """Generate-CV keyboard: action + Lang/Variant toggles + Mark sent + Discard.
+
+    With the tracker ``offer`` a last row of "🔎 Search elsewhere" URL buttons
+    (:func:`search_elsewhere_row`) follows; the callback rows never change.
 
     ``lang`` is the CV language of the toggle; ``ui_lang`` the interface's.
 
@@ -874,8 +879,30 @@ def cv_keyboard(
                     _button("discard", ui_lang), callback_data=f"{DISCARD}:{offer_id}"
                 ),
             ],
+            *search_elsewhere_rows(offer, ui_lang),
         ]
     )
+
+
+def search_elsewhere_rows(
+    offer: OfferRow | None, lang: Lang
+) -> list[list[InlineKeyboardButton]]:
+    """The card's "🔎 Search elsewhere" row (URL buttons, no callback data):
+    the offer's title + company searched on other sites, its own portal
+    skipped. No row without an offer or with neither title nor company."""
+    if offer is None:
+        return []
+    links = search_links(
+        offer.posicion, offer.empresa, source=offer.origen, url=offer.url_oferta
+    )
+    if not links:
+        return []
+    return [
+        [
+            InlineKeyboardButton(t("notifier.search_on", lang, site=link.site), url=link.url)
+            for link in links
+        ]
+    ]
 
 
 def sent_keyboard(

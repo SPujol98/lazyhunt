@@ -9,9 +9,11 @@ prompt) leaves the installation untouched. It writes:
   (the bridge secret is shown once, and only on request, at the very end);
 * non-secret settings (``llm_provider``, ``owner_telegram_id``,
   ``profile_dir``) to ``config.local.toml``;
-* a new profile directory, either a skeleton with clearly marked placeholders
-  or a verbatim copy of the fictional demo profile. An existing profile
-  directory is never modified.
+* a new profile directory: empty (recommended; the bot starts in setup mode
+  and the guided ``/setup`` in Telegram fills it in), a skeleton with clearly
+  marked placeholders, or a verbatim copy of the fictional demo profile. An
+  existing profile directory is never modified. ``profile_dir`` is always
+  written explicitly, so the bot never falls back to the legacy layout.
 
 A key that already has a different value is replaced only after an explicit
 "yes". Re-running with the same answers changes nothing.
@@ -28,7 +30,6 @@ temporary directory.
 
 import getpass as _getpass
 import json
-import os
 import re
 import secrets
 import shutil
@@ -39,6 +40,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
+
+from cva.fsutil import atomic_write
 
 Runner = Callable[[Sequence[str]], tuple[int, str]]
 Which = Callable[[str], str | None]
@@ -60,6 +63,8 @@ DEMO_PROFILE: Final[Path] = _REPO_ROOT / "profiles" / "demo"
 _MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
 _TOKEN_SHAPE: Final[re.Pattern[str]] = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
 _UNSET: Final[tuple[object, ...]] = (None, "", 0)
+# Answer of the profile-kind question -> what ``_create_profile`` makes.
+_PROFILE_KINDS: Final[dict[str, str]] = {"1": "skeleton", "2": "demo", "3": "empty"}
 
 
 @dataclass(frozen=True)
@@ -104,7 +109,7 @@ class _Plan:
     toml: dict[str, str | int] = field(default_factory=dict)
     profile_dest: Path | None = None
     profile_label: str = ""
-    profile_kind: str = ""  # "skeleton" or "demo"
+    profile_kind: str = ""  # "empty", "skeleton" or "demo"
 
     def is_empty(self) -> bool:
         return not self.env and not self.toml and self.profile_dest is None
@@ -437,14 +442,18 @@ def _step_profile(
             "  [1] a skeleton with the demo's layout and clearly marked placeholders"
         )
         io.print("  [2] a copy of the fictional demo profile, to try lazyhunt first")
+        io.print(
+            "  [3] an empty profile: start the bot and answer its guided /setup "
+            "in Telegram (recommended)"
+        )
         while True:
-            kind = _ask(io, "  Start from [1]: ", "1")
-            if kind in ("1", "2"):
+            kind = _ask(io, "  Start from [3]: ", "3")
+            if kind in _PROFILE_KINDS:
                 break
-            io.print("  Please answer 1 or 2.")
+            io.print("  Please answer 1, 2 or 3.")
         plan.profile_dest = dest
         plan.profile_label = answer
-        plan.profile_kind = "skeleton" if kind == "1" else "demo"
+        plan.profile_kind = _PROFILE_KINDS[kind]
     _propose(
         io,
         plan.toml,
@@ -486,11 +495,89 @@ def _print_summary(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) 
         io.print(f"  create {plan.profile_label}/ ({plan.profile_kind})")
 
 
-def _toml_value(value: str | int) -> str:
+def _toml_value(value: str | int | list[str]) -> str:
+    if isinstance(value, list):  # an array of strings, on one line
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
     if isinstance(value, int):
         return str(value)
     # A JSON string without ASCII escaping is a valid TOML basic string.
     return json.dumps(value, ensure_ascii=False)
+
+
+def _open_brackets(line: str) -> int:
+    """``[`` minus ``]`` in ``line``, outside strings and before a comment."""
+    depth, quote = 0, ""
+    for char in line:
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char == "#":
+            break
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+    return depth
+
+
+def _trailing_comment(line: str) -> str:
+    """The comment ending ``line`` (with the blanks before it, without the
+    line ending), outside strings; ``""`` when there is none."""
+    quote = ""
+    body = line.rstrip("\r\n")
+    for i, char in enumerate(body):
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char == "#":
+            start = len(body[:i].rstrip(" \t"))
+            return body[start:]
+    return ""
+
+
+def toml_set_key(base_text: str, key: str, value: str | int | list[str]) -> str:
+    """``base_text`` with the top-level ``key`` set to ``value``.
+
+    The line that assigns ``key`` before the first table (with the following
+    lines of a multi-line array) becomes ``key = <value>``; without one, that
+    line is added right before the first table (at the end without a
+    table); a comment that ended the replaced value is kept after the new
+    one. Every other line keeps its exact bytes, line endings included.
+    The result is parsed back (``ValueError`` when it is not TOML or does not
+    hold ``value``), so a file the bot could not read is never returned.
+    """
+    lines = base_text.splitlines(keepends=True)
+    first_table = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")),
+        len(lines),
+    )
+    eol = "\r\n" if "\r\n" in base_text else "\n"
+    assign = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    start = next((i for i in range(first_table) if assign.match(lines[i])), None)
+    if start is None:
+        if first_table == len(lines) and lines and not lines[-1].endswith("\n"):
+            lines[-1] += eol
+        lines.insert(first_table, f"{key} = {_toml_value(value)}{eol}")
+    else:
+        end, depth = start, _open_brackets(lines[start].split("=", 1)[1])
+        while depth > 0 and end + 1 < len(lines):
+            end += 1
+            depth += _open_brackets(lines[end])
+        last = lines[end]
+        ending = last[len(last.rstrip("\r\n")) :]
+        tail = last.split("=", 1)[1] if end == start else last
+        comment = _trailing_comment(tail)
+        lines[start : end + 1] = [f"{key} = {_toml_value(value)}{comment}{ending}"]
+    text = "".join(lines)
+    try:
+        parsed = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"the result is not valid TOML: {exc}") from exc
+    if parsed.get(key) != value:
+        raise ValueError(f"{key} could not be set")
+    return text
 
 
 def _profile_destination(
@@ -526,22 +613,6 @@ def _env_text(changes: dict[str, str], base_text: str) -> str:
         out.append(line)
     out.extend(f"{key}={value}" for key, value in changes.items() if key not in written)
     return "\n".join(out) + "\n"
-
-
-def _atomic_write(path: Path, text: str, mode: int | None = None) -> None:
-    """Write ``text`` to a temporary file next to ``path`` and rename it over
-    ``path``, so a crash never leaves a truncated file."""
-    tmp = path.with_name(f".{path.name}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if mode else 0o644)
-    try:
-        if mode is not None and hasattr(os, "fchmod"):
-            os.fchmod(fd, mode)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(tmp, path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 def _toml_text(changes: dict[str, str | int], base_text: str) -> str:
@@ -639,6 +710,10 @@ def _skeleton_ignore(directory: str, names: list[str]) -> set[str]:
 
 def _create_profile(dest: Path, kind: str, demo_profile: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "empty":
+        # Nothing to copy: the bot starts in setup mode (cva/setup_mode.py).
+        dest.mkdir()
+        return
     if kind == "demo":
         shutil.copytree(demo_profile, dest)
         return
@@ -695,9 +770,9 @@ def _apply(plan: _Plan, base_dir: Path, demo_profile: Path) -> None:
         else None
     )
     if env_text is not None:
-        _atomic_write(env_path, env_text, mode=0o600)
+        atomic_write(env_path, env_text, mode=0o600)
     if toml_text is not None:
-        _atomic_write(toml_path, toml_text)
+        atomic_write(toml_path, toml_text)
     if plan.profile_dest is not None:
         _create_profile(plan.profile_dest, plan.profile_kind, demo_profile)
 
@@ -706,6 +781,8 @@ def _print_next_steps(
     io: WizardIO,
     existing_toml: dict[str, object],
     profile_dir: object,
+    *,
+    empty_profile: bool = False,
 ) -> None:
     port = existing_toml.get("bridge_port", DEFAULT_BRIDGE_PORT)
     io.print("")
@@ -725,7 +802,12 @@ def _print_next_steps(
         "permission to that single domain. Some portals (notably LinkedIn) prohibit "
         "automated access and your account could be restricted."
     )
-    if isinstance(profile_dir, str) and profile_dir:
+    if empty_profile:
+        io.print(
+            "  4. Your profile is empty: once the bot runs, send /setup to it in "
+            "Telegram to set up your profile."
+        )
+    elif isinstance(profile_dir, str) and profile_dir:
         io.print(f"  4. Fill in your profile in {profile_dir} (see its README.md).")
     else:
         io.print(
@@ -791,7 +873,9 @@ def _run(
         )
 
     profile_dir = plan.toml.get("profile_dir", existing_toml.get("profile_dir"))
-    _print_next_steps(io, existing_toml, profile_dir)
+    _print_next_steps(
+        io, existing_toml, profile_dir, empty_profile=plan.profile_kind == "empty"
+    )
     secret = plan.env.get(SECRET_KEY) or existing_env.get(SECRET_KEY)
     if secret and _yes(
         io, "Show the bridge secret now to paste it into the extension?"

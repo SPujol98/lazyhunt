@@ -76,6 +76,12 @@ def load_identity(profile_toml: Path | None) -> Identity:
         data = tomllib.loads(profile_toml.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ProfileError(f"profile.toml unreadable ({profile_toml}): {exc}") from exc
+    return identity_from_data(data)
+
+
+def identity_from_data(data: dict[str, Any]) -> Identity:
+    """Validate a parsed ``profile.toml`` document; used by :func:`load_identity`
+    and by the writer (``cva/profile_writer.py``) before it replaces the file."""
     table = data.get("identity", {})
     if not isinstance(table, dict):
         raise ProfileError("profile.toml [identity] must be a table")

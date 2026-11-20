@@ -6,6 +6,8 @@ Verbs (``check|ingest|analyze|cv|sent|export|import-history|keywords|beacon``) m
 service use-cases — no business logic here. ``init`` is the exception: the
 interactive first-run wizard (``cva/setup/wizard.py``, English text) runs
 before any settings exist, so ``main`` dispatches it without building them.
+Before ``init`` has written the Telegram token, ``--help``, usage errors and
+``check`` still work; every other verb prints one line pointing at ``init``.
 User-facing strings follow ``Settings.ui_language`` (English or Spanish; the
 catalog is ``cva/i18n/panel.py``); code and comments are English.
 """
@@ -16,7 +18,9 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
+
+from pydantic import ValidationError
 
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
@@ -515,7 +519,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         if code:
             raise SystemExit(code)
         return
-    settings = Settings()
+    settings = _load_settings_or_none()
+    if settings is None:
+        settings = _settings_without_token(arguments)
     print(
         run(
             arguments,
@@ -524,6 +530,55 @@ def main(argv: Sequence[str] | None = None) -> None:
             lang=settings.ui_language,
         )
     )
+
+
+# Commands that work before ``init`` has written a Telegram token: ``check``
+# runs the due beacons and prints to the terminal, it never talks to Telegram.
+_TOKENLESS_COMMANDS: frozenset[str] = frozenset({"check"})
+
+# Never sent anywhere: it only satisfies the required field for a tokenless
+# command (``check``), which does not use Telegram.
+_PLACEHOLDER_TOKEN = "unset-run-cli-init"
+
+NO_TOKEN_MESSAGE = (
+    "CVA_TELEGRAM_TOKEN is not set (no .env with it here). "
+    "Run `uv run cli.py init` first, from the lazyhunt folder."
+)
+
+
+def _load_settings_or_none() -> Settings | None:
+    """``Settings()``, or ``None`` when only the Telegram token is missing.
+
+    Any other configuration error still raises: it names a real problem the
+    user has to fix, not a fresh clone that has not run ``init`` yet.
+    """
+    try:
+        return Settings()
+    except ValidationError as exc:
+        errors = exc.errors()
+        if errors and all(
+            error["type"] == "missing" and error["loc"] == ("CVA_TELEGRAM_TOKEN",)
+            for error in errors
+        ):
+            return None
+        raise
+
+
+def _settings_without_token(arguments: Sequence[str]) -> Settings:
+    """Settings for a run with no token: help, usage errors and ``check`` work.
+
+    Arguments are parsed first (in the configured UI language, with the
+    built-in role families: no service is built yet), so ``--help`` prints and
+    usage errors exit 2 as usual. ``check`` gets a placeholder token; any other
+    command stops with one friendly line on stderr and exit code 1.
+    """
+    placeholder: dict[str, Any] = {"CVA_TELEGRAM_TOKEN": _PLACEHOLDER_TOKEN}
+    settings = Settings(**placeholder)
+    args = build_parser(BUILTIN_REGISTRY, settings.ui_language).parse_args(arguments)
+    if args.command not in _TOKENLESS_COMMANDS:
+        print(NO_TOKEN_MESSAGE, file=sys.stderr)
+        raise SystemExit(1)
+    return settings
 
 
 if __name__ == "__main__":

@@ -46,7 +46,9 @@ def test_every_registered_command_is_in_table_and_help(
     assert registered, "no CommandHandler found"
     assert registered <= known, f"undocumented: {registered - known}"
     documented = {lang: help_text(lang=lang) for lang in LANGS}
-    for name in registered:
+    # Unlisted commands (/setup until onboarding-v2 T4) stay out of /help.
+    unlisted = {n for c in COMMANDS if not c.listed for n in c.names}
+    for name in registered - unlisted:
         assert any(f"/{name}" in text for text in documented.values()), name
 
 
@@ -229,3 +231,38 @@ def test_pause_commands_are_in_the_menu_and_help() -> None:
     assert {"pausa", "reanudar"} <= names
     text = help_message()
     assert "/pausa" in text and "/reanudar" in text
+
+
+# --- onboarding-v2 T4: /setup (/configurar) is listed again in the full app ----
+# T1 hid it while it only answered "coming soon"; with the guided setup it is
+# advertised in /help and the menu (and /help still fits one message).
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_full_help_and_menu_advertise_setup(lang: Lang) -> None:
+    name = "setup" if lang == "en" else "configurar"
+    text = help_text(lang=lang)
+    assert f"/{name}" in text
+    assert name in {n for n, _ in menu_commands(lang)}
+    assert len(text) < 4096
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_setup_menu_still_lists_setup(lang: Lang) -> None:
+    from cva.commands import SETUP_COMMANDS
+
+    names = {name for name, _ in menu_commands(lang, only=SETUP_COMMANDS)}
+    assert names == {"setup" if lang == "en" else "configurar", "help"}
+
+
+# --- onboarding-v2 T9: /setup [section] re-runs one section --------------------
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_help_advertises_setup_with_an_optional_section(lang: Lang) -> None:
+    name = "setup" if lang == "en" else "configurar"
+    section = "salary" if lang == "en" else "salario"
+    text = help_text(lang=lang)
+    assert f"/{name} [" in text
+    assert f"/{name} {section}" in text
+    assert len(text) < 4096

@@ -482,6 +482,232 @@ def test_mutation_during_retry_leaves_the_tracker_dirty(
     assert service.tracker_dirty is True
 
 
+# --- deferred (bot-mode) writes -----------------------------------------------
+
+
+def _deferred_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, debounce: float = 0.05
+) -> tuple[JobService, OfferRepository, int, Path]:
+    """Tracker service already written once (ingest), then switched to the
+    bot's deferred mode with a short debounce."""
+    target = tmp_path / "synced" / "tracker.xlsx"
+    service, repo, offer_id = _tracker_service(tmp_path, monkeypatch, target)
+    monkeypatch.setattr("cva.service.TRACKER_DEBOUNCE_SECONDS", debounce)
+    service.enable_deferred_tracker_writes()
+    return service, repo, offer_id, target
+
+
+def _count_writes(
+    monkeypatch: pytest.MonkeyPatch, delay: float = 0.0
+) -> dict[str, int]:
+    """Wrap the workbook writer: count writes, track concurrent writers, and
+    optionally make each write slow (a big tracker / slow sync folder)."""
+    import threading
+    import time
+
+    from cva.tracker import xlsx as xlsx_mod
+
+    real = xlsx_mod._write_tracker_book
+    state = {"writes": 0, "active": 0, "max_active": 0}
+    guard = threading.Lock()
+
+    def slow(offers: Any, path: Path) -> None:
+        with guard:
+            state["active"] += 1
+            state["max_active"] = max(state["max_active"], state["active"])
+        try:
+            time.sleep(delay)
+            real(offers, path)
+            with guard:
+                state["writes"] += 1
+        finally:
+            with guard:
+                state["active"] -= 1
+
+    monkeypatch.setattr(xlsx_mod, "_write_tracker_book", slow)
+    return state
+
+
+async def _until_clean(service: JobService, timeout: float = 5.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while service.tracker_dirty or (
+        service._tracker_flush_task is not None
+        and not service._tracker_flush_task.done()
+    ):
+        assert asyncio.get_running_loop().time() < deadline, "never flushed"
+        await asyncio.sleep(0.01)
+
+
+def test_deferred_mutation_does_not_block_on_the_xlsx_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bot mode: a mutation returns immediately (the xlsx write is slow) and
+    the file is written soon after, off the loop, with the new state."""
+    import time
+
+    service, _repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
+    state = _count_writes(monkeypatch, delay=0.5)
+
+    async def scenario() -> tuple[float, int]:
+        started = time.perf_counter()
+        service.discard(offer_id)
+        elapsed = time.perf_counter() - started
+        # The loop stays responsive while the slow write runs in a thread.
+        ticks = 0
+        while service.tracker_dirty:
+            await asyncio.sleep(0.01)
+            ticks += 1
+        await _until_clean(service)
+        return elapsed, ticks
+
+    elapsed, ticks = asyncio.run(scenario())
+
+    assert elapsed < 0.2  # the 0.5 s write did not run inside discard
+    assert ticks > 10  # the loop kept ticking during the write
+    assert state["writes"] == 1
+    assert service.tracker_dirty is False
+    assert _rows(target)[0]["estado"] == "descartada"
+
+
+def test_two_quick_deferred_mutations_produce_one_consistent_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, _repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
+    other = asyncio.run(service.ingest(None, OFFER_TEXT + " otra"))
+    state = _count_writes(monkeypatch)
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        service.discard(other)
+        await _until_clean(service)
+
+    asyncio.run(scenario())
+
+    assert state["writes"] == 1  # debounced: one write for the burst
+    by_id = {r["id"]: r["estado"] for r in _rows(target)}
+    assert by_id == {offer_id: "descartada", other: "descartada"}
+    assert not list((tmp_path / "synced").glob("*.tmp"))
+
+
+def test_mutation_during_a_deferred_write_is_written_next(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mutation landing while the background write runs is not lost: the
+    file ends with the newest state and the tracker clean."""
+    service, _repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
+    other = asyncio.run(service.ingest(None, OFFER_TEXT + " otra"))
+    state = _count_writes(monkeypatch, delay=0.2)
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        while state["active"] == 0:  # first write in flight
+            await asyncio.sleep(0.005)
+        service.discard(other)
+        await _until_clean(service)
+
+    asyncio.run(scenario())
+
+    by_id = {r["id"]: r["estado"] for r in _rows(target)}
+    assert by_id == {offer_id: "descartada", other: "descartada"}
+    assert service.tracker_dirty is False
+    assert state["max_active"] == 1
+
+
+def test_deferred_flush_and_heartbeat_never_write_concurrently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, _repo, offer_id, target = _deferred_service(
+        tmp_path, monkeypatch, debounce=0.0
+    )
+    state = _count_writes(monkeypatch, delay=0.1)
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        await asyncio.sleep(0.02)  # the debounced flush is writing
+        await service.retry_tracker_refresh()  # heartbeat tick meanwhile
+        await _until_clean(service)
+
+    asyncio.run(scenario())
+
+    assert state["max_active"] == 1
+    assert _rows(target)[0]["estado"] == "descartada"
+
+
+def test_older_snapshot_never_overwrites_a_newer_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
+    stale = repo.tracker_offers()
+    service.discard(offer_id)  # no loop: written inline (newest)
+    assert _rows(target)[0]["estado"] == "descartada"
+
+    assert service._write_tracker_snapshot(stale, 0, 1) is True
+    assert _rows(target)[0]["estado"] == "descartada"
+
+
+def test_pending_deferred_write_is_flushed_on_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, _repo, offer_id, target = _deferred_service(
+        tmp_path, monkeypatch, debounce=60.0
+    )
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        assert service.tracker_dirty is True
+        assert _rows(target)[0]["estado"] == "pendiente_analisis"
+        await service.flush_tracker()
+
+    asyncio.run(scenario())
+
+    assert service.tracker_dirty is False
+    assert service._tracker_timer is None
+    assert _rows(target)[0]["estado"] == "descartada"
+
+
+def test_deferred_locked_write_stays_dirty_for_the_heartbeat(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Locked file in bot mode: one quick attempt, the tracker stays dirty and
+    the heartbeat retry writes it once the lock clears (unchanged backstop)."""
+    service, _repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
+    monkeypatch.setattr("cva.tracker.xlsx.time.sleep", lambda _s: None)
+    state = _lock_replace(monkeypatch, failures=None)
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        while state["calls"] == 0 or (
+            service._tracker_flush_task is not None
+            and not service._tracker_flush_task.done()
+        ):
+            await asyncio.sleep(0.01)
+        assert service.tracker_dirty is True
+        assert state["calls"] == 1  # one attempt, no backoff on the flush
+        state["unlocked"] = 1
+        assert await service.retry_tracker_refresh() is True
+
+    asyncio.run(scenario())
+
+    assert service.tracker_dirty is False
+    assert _rows(target)[0]["estado"] == "descartada"
+
+
+def test_without_deferred_mode_mutations_still_write_inline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI/scripts never enable deferral: even inside a running loop the
+    write happens before the mutation returns, as before."""
+    target = tmp_path / "synced" / "tracker.xlsx"
+    service, _repo, offer_id = _tracker_service(tmp_path, monkeypatch, target)
+
+    async def scenario() -> None:
+        service.discard(offer_id)
+        assert _rows(target)[0]["estado"] == "descartada"
+        assert service.tracker_dirty is False
+
+    asyncio.run(scenario())
+
+
 def test_from_settings_wires_tracker_xlsx_path(tmp_path: Path) -> None:
     settings = Settings(
         CVA_TELEGRAM_TOKEN="123456:TEST",

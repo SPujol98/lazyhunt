@@ -440,6 +440,191 @@ def test_analyze_hybrid_mode_clears_stale_judgment_on_reanalysis_failure(
     assert fallback is True
 
 
+class _TimedLlm(FakeLlmClient):
+    """Extraction and judge calls that each take ``delay`` seconds of real
+    async waiting and succeed or raise as configured — proves the two LLM
+    calls of a hybrid ``analyze()`` overlap, and pins every failure combo."""
+
+    def __init__(
+        self,
+        *,
+        extract_delay: float = 0.0,
+        judge_delay: float = 0.0,
+        extract_error: Exception | None = None,
+        judge_error: Exception | None = None,
+    ) -> None:
+        super().__init__(_extraction(), judge_reply=_judgment(score=80))
+        self._extract_delay = extract_delay
+        self._judge_delay = judge_delay
+        self._extract_error = extract_error
+        self._judge_error_timed = judge_error
+        self.judge_finished = False
+
+    async def json_completion(
+        self,
+        system: str,
+        user: str,
+        schema: type[object],
+        *,
+        model: str | None = None,
+    ) -> object:
+        if schema is OfferJudgment:
+            self.judge_calls += 1
+            await asyncio.sleep(self._judge_delay)
+            self.judge_finished = True
+            if self._judge_error_timed is not None:
+                raise self._judge_error_timed
+            return self._judge_reply
+        self.calls += 1
+        await asyncio.sleep(self._extract_delay)
+        if self._extract_error is not None:
+            raise self._extract_error
+        return self._reply
+
+
+def _seed_prior_analysis(repo: OfferRepository, offer_id: int) -> None:
+    """An earlier successful hybrid analysis, stored straight in the DB."""
+    repo.save_judge_result(
+        offer_id,
+        score=77,
+        verdict="apply",
+        judgment_json=_judgment(score=77).model_dump_json(),
+    )
+    repo.save_match_result(offer_id, score=77, threshold=65, breakdown_json="{}")
+
+
+def _persisted(repo: OfferRepository, offer_id: int) -> tuple[Any, Any, Any]:
+    return (
+        repo.get_offer(offer_id),
+        repo.latest_match(offer_id),
+        repo.latest_judge_result(offer_id),
+    )
+
+
+def _timed_service(
+    tmp_path: Path, llm: _TimedLlm
+) -> tuple[JobService, OfferRepository, int]:
+    fetcher = FakeFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL))
+    service, repo = make_service(tmp_path, llm, fetcher, match_mode="hybrid")
+    offer_id = asyncio.run(service.ingest(None, OFFER_TEXT))
+    return service, repo, offer_id
+
+
+def test_analyze_hybrid_runs_extraction_and_judge_concurrently(
+    tmp_path: Path,
+) -> None:
+    """The judge never reads the extraction, so both LLM calls overlap: the
+    analysis takes about the slower call, not the sum of both."""
+    import time
+
+    llm = _TimedLlm(extract_delay=0.3, judge_delay=0.3)
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+
+    started = time.perf_counter()
+    result = asyncio.run(service.analyze(offer_id))
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.5  # sequential would be >= 0.6
+    assert result.score == 80
+    judge_row = repo.latest_judge_result(offer_id)
+    assert judge_row is not None and judge_row.score == 80
+
+
+def test_analyze_hybrid_judge_fails_while_extraction_pending_falls_back(
+    tmp_path: Path,
+) -> None:
+    """Judge fails first (extraction still in flight): same keyword fallback
+    and stale-judgment clearing as the sequential path."""
+    llm = _TimedLlm(extract_delay=0.1, judge_error=LlmResponseError("boom"))
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+    _seed_prior_analysis(repo, offer_id)
+
+    result = asyncio.run(service.analyze(offer_id))
+
+    assert result.score == 50  # keyword fallback
+    assert repo.latest_judge_result(offer_id) is None  # stale row cleared
+    match = repo.latest_match(offer_id)
+    assert match is not None and match.score == 50
+    assert repo.get_offer(offer_id).estado == "analizada"
+
+
+def test_analyze_hybrid_extraction_fails_judge_ok_persists_nothing(
+    tmp_path: Path,
+) -> None:
+    """Extraction fails, judge would succeed: the extraction error propagates
+    and NOTHING is written — the earlier analysis stays exactly as it was
+    (the sequential path never reached the judge)."""
+    llm = _TimedLlm(extract_error=LlmResponseError("extract down"))
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+    _seed_prior_analysis(repo, offer_id)
+    before = _persisted(repo, offer_id)
+
+    with pytest.raises(LlmResponseError, match="extract down"):
+        asyncio.run(service.analyze(offer_id))
+
+    assert _persisted(repo, offer_id) == before
+
+
+def test_analyze_hybrid_extraction_fails_cancels_the_inflight_judge(
+    tmp_path: Path,
+) -> None:
+    """A judge still running when extraction fails is cancelled: its result
+    is never persisted and the error surfaces without waiting for it."""
+    import time
+
+    llm = _TimedLlm(
+        extract_delay=0.05, judge_delay=1.0, extract_error=LlmResponseError("x")
+    )
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+    _seed_prior_analysis(repo, offer_id)
+    before = _persisted(repo, offer_id)
+
+    started = time.perf_counter()
+    with pytest.raises(LlmResponseError):
+        asyncio.run(service.analyze(offer_id))
+
+    assert time.perf_counter() - started < 0.5
+    assert llm.judge_finished is False
+    assert _persisted(repo, offer_id) == before
+
+
+def test_analyze_hybrid_both_fail_raises_extraction_error_keeps_judgment(
+    tmp_path: Path,
+) -> None:
+    """Both calls fail: the extraction error wins (as sequentially) and the
+    earlier judgment is NOT cleared — clearing only happens when the
+    analysis itself succeeds with a keyword fallback."""
+    llm = _TimedLlm(
+        extract_delay=0.05,
+        extract_error=LlmResponseError("extract down"),
+        judge_error=LlmResponseError("judge down"),
+    )
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+    _seed_prior_analysis(repo, offer_id)
+    before = _persisted(repo, offer_id)
+
+    with pytest.raises(LlmResponseError, match="extract down"):
+        asyncio.run(service.analyze(offer_id))
+
+    assert _persisted(repo, offer_id) == before
+
+
+def test_analyze_hybrid_unexpected_judge_error_propagates_persisting_nothing(
+    tmp_path: Path,
+) -> None:
+    """A non-LLM judge failure (a bug) is not swallowed into the fallback:
+    it propagates after a successful extraction and nothing is written."""
+    llm = _TimedLlm(extract_delay=0.05, judge_error=RuntimeError("bug"))
+    service, repo, offer_id = _timed_service(tmp_path, llm)
+    _seed_prior_analysis(repo, offer_id)
+    before = _persisted(repo, offer_id)
+
+    with pytest.raises(RuntimeError, match="bug"):
+        asyncio.run(service.analyze(offer_id))
+
+    assert _persisted(repo, offer_id) == before
+
+
 def test_latest_judgment_ignores_a_stale_row_when_mode_is_keyword(
     tmp_path: Path,
 ) -> None:
@@ -1242,10 +1427,12 @@ def test_gray_zone_borderline_card_payload(tmp_path: Path) -> None:
     assert "https://linkedin.com/jobs/view/4459804598" in text
     assert all(mark not in text for mark in ("✓", "~", "✗", "«"))
     assert keyboard.inline_keyboard[0][0].callback_data == f"cv:{offer_id}:AI:es"
-    assert [b.callback_data for b in keyboard.inline_keyboard[-1]] == [
+    # The callback rows end with sent/discard; the URL search row follows.
+    assert [b.callback_data for b in keyboard.inline_keyboard[-2]] == [
         f"sent:{offer_id}",
         f"discard:{offer_id}",
     ]
+    assert all(b.url for b in keyboard.inline_keyboard[-1])
     row = repo.get_offer(offer_id)
     assert row.estado == "analizada"
     assert row.analyze_attempts == 0

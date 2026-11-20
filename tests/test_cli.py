@@ -677,3 +677,95 @@ def test_judge_eval_explicit_labels_beat_the_profile_eval(
     cli.run(["judge-eval", "--labels", "x/labels.json"], service, settings=settings)
 
     assert service.calls == [("judge_eval", (Path("x/labels.json"),))]
+
+
+# --- Fresh clone: no token yet (newcomer review blocker) --------------------
+
+
+@pytest.fixture
+def no_token_clone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A working directory with no ``.env``, no TOML and no token in the env."""
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    monkeypatch.chdir(clone)
+    monkeypatch.delenv("CVA_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
+    return clone
+
+
+def test_help_works_without_a_token(
+    no_token_clone: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--help"])
+
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "usage: cli.py" in out
+    assert "init" in out and "check" in out
+
+
+def test_subcommand_help_works_without_a_token(
+    no_token_clone: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["analyze", "--help"])
+
+    assert exc.value.code == 0
+    assert "offer_id" in capsys.readouterr().out
+
+
+def test_usage_error_without_a_token_is_an_argparse_error(
+    no_token_clone: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["no-such-command"])
+
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "invalid choice" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_check_runs_without_a_token(
+    no_token_clone: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    service = FakeService()
+    built: list[Settings] = []
+
+    def fake_from_settings(settings: Settings, **kwargs: object) -> FakeService:
+        built.append(settings)
+        return service
+
+    monkeypatch.setattr(cli.JobService, "from_settings", fake_from_settings)
+
+    cli.main(["check"])
+
+    assert service.calls[0][0] == "run_due_beacons"
+    assert len(built) == 1
+    assert capsys.readouterr().out.strip()
+
+
+def test_token_command_without_a_token_prints_one_friendly_line(
+    no_token_clone: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def must_not_build(settings: Settings, **kwargs: object) -> FakeService:
+        raise AssertionError("the service must not be built without a token")
+
+    monkeypatch.setattr(cli.JobService, "from_settings", must_not_build)
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["analyze", "12"])
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    lines = captured.err.strip().splitlines()
+    assert len(lines) == 1
+    assert "Run `uv run cli.py init` first" in lines[0]
+    assert "CVA_TELEGRAM_TOKEN" in lines[0]
+    assert "Traceback" not in captured.err
+    assert captured.out == ""

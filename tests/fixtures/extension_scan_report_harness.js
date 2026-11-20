@@ -46,6 +46,17 @@ async function main() {
     empty_company: 3,
   });
 
+  // foorilla cards never carry the company (it is only on the offer page),
+  // so its scans must not count them as empty: the bot would raise the
+  // "more than half without a company" alert on every scan of 4+ cards.
+  const noCompany = { jobs: [{ id: '1', company: '' }, { id: '2' }, { id: '3' }, { id: '4' }] };
+  check('foorilla auto beacon reports no empty companies',
+    buildScanReport({ id: 'f1', name: 'AI · foorilla', auto: true, portal: 'foorilla' }, noCompany, at).empty_company, 0);
+  check('foorilla manual beacon (by URL) reports no empty companies',
+    buildScanReport({ id: 'f2', name: 'manual', url: 'https://foorilla.com/hiring/jobs/?job_search=ai' }, noCompany, at).empty_company, 0);
+  check('other portals still count empty companies',
+    buildScanReport({ id: 'a1', name: 'AI · Adzuna', auto: true, portal: 'adzuna' }, noCompany, at).empty_company, 4);
+
   check('ok report with zero cards', buildScanReport(beacon, { jobs: [] }, at).jobs_found, 0);
 
   // T5b: an empty page is only a healthy "0 results" when the portal says so;

@@ -470,7 +470,17 @@ def test_rejudge_title_filter_uses_the_profile_filter(tmp_path: Path) -> None:
 def test_service_without_a_preferences_file_uses_defaults(tmp_path: Path) -> None:
     service = _service(tmp_path, None)
 
-    assert service.preferences == DEFAULT_PREFS
+    # The families keep only the languages with a base CV in the profile's
+    # manifest (cv-languages-from-manifest); everything else is the default.
+    from dataclasses import replace
+
+    from cva.cvgen.base_pdfs import available_registry
+
+    expected = replace(
+        DEFAULT_PREFS,
+        families=available_registry(DEFAULT_PREFS.families, service._base_pdfs_dir),
+    )
+    assert service.preferences == expected
 
 
 def test_passes_filter_backend_default_matches_the_extension_defaults() -> None:

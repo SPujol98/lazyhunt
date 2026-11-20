@@ -15,6 +15,8 @@ EN: Final[dict[str, str]] = {
     "notifier.no_title": "(untitled)",
     "notifier.no_company": "(no company)",
     "notifier.no_position": "(no position)",
+    # "Search elsewhere" URL buttons on analysis cards; {site} is a site name.
+    "notifier.search_on": "🔎 On {site}",
     "notifier.more": "… and {n} more",
     "notifier.age_recent": "recent",
     "notifier.days.one": "1 day",
@@ -227,6 +229,17 @@ EN: Final[dict[str, str]] = {
     "notifier.gmail_yes": "Yes",
     "notifier.gmail_other": "Other status",
     "notifier.gmail_ignore": "Ignore",
+    # --- card warnings ([search] preferences, onboarding-v2 S4) ---------------------
+    "notifier.warn.work_mode": "\u26a0\ufe0f {mode}; you accept: {accepted}",
+    "notifier.warn.mode.remote": "Remote work",
+    "notifier.warn.mode.hybrid": "Hybrid work",
+    "notifier.warn.mode.onsite": "On-site work",
+    "notifier.warn.mode_name.remote": "remote",
+    "notifier.warn.mode_name.hybrid": "hybrid",
+    "notifier.warn.mode_name.onsite": "on-site",
+    "notifier.warn.salary": (
+        "\u26a0\ufe0f Salary below your minimum ({minimum} €): up to {amount} €"
+    ),
 }
 
 ES: Final[dict[str, str]] = {
@@ -236,6 +249,7 @@ ES: Final[dict[str, str]] = {
     "notifier.no_title": "(sin título)",
     "notifier.no_company": "(sin empresa)",
     "notifier.no_position": "(sin posición)",
+    "notifier.search_on": "🔎 En {site}",
     "notifier.more": "… y {n} más",
     "notifier.age_recent": "reciente",
     "notifier.days.one": "1 día",
@@ -452,4 +466,15 @@ ES: Final[dict[str, str]] = {
     "notifier.gmail_yes": "Sí",
     "notifier.gmail_other": "Otro estado",
     "notifier.gmail_ignore": "Ignorar",
+    # --- card warnings ([search] preferences, onboarding-v2 S4) ---------------------
+    "notifier.warn.work_mode": "\u26a0\ufe0f {mode}; aceptas: {accepted}",
+    "notifier.warn.mode.remote": "Modalidad remota",
+    "notifier.warn.mode.hybrid": "Modalidad híbrida",
+    "notifier.warn.mode.onsite": "Modalidad presencial",
+    "notifier.warn.mode_name.remote": "remoto",
+    "notifier.warn.mode_name.hybrid": "híbrido",
+    "notifier.warn.mode_name.onsite": "presencial",
+    "notifier.warn.salary": (
+        "\u26a0\ufe0f Salario por debajo de tu mínimo ({minimum} €): hasta {amount} €"
+    ),
 }

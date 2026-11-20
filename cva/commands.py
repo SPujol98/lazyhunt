@@ -40,12 +40,15 @@ def section_title(section: str, lang: Lang = LEGACY_LANG) -> str:
 class Command:
     """One bot command. ``name`` is its stable id and Spanish name (Telegram
     rules: ``[a-z0-9_]{1,32}``); ``en_name`` its English name when different.
-    Text: ``commands.cmd.<name>.{usage,menu,explanation,example}``."""
+    Text: ``commands.cmd.<name>.{usage,menu,explanation,example}``.
+    ``listed=False`` keeps a registered command out of the full /help and
+    menu (a filtered menu, ``only=...``, still shows it)."""
 
     name: str
     section: str
     aliases: tuple[str, ...] = ()
     en_name: str | None = None
+    listed: bool = True
 
     def name_for(self, lang: Lang) -> str:
         """The name the menu and /help show in ``lang``."""
@@ -94,8 +97,18 @@ COMMANDS: Final[tuple[Command, ...]] = (
     Command("prep", SECTION_INTERVIEW),
     Command("pausa", SECTION_OTHER, en_name="pause"),
     Command("reanudar", SECTION_OTHER, en_name="resume"),
+    # The guided setup (cva/onboarding): first run in setup mode, and a re-run
+    # of the questionnaire in the full app; ``/setup <section>`` re-runs one
+    # section (usage ``/setup [section]``, see docs/onboarding.md).
+    Command("configurar", SECTION_OTHER, en_name="setup"),
     Command("help", SECTION_OTHER, aliases=("start",)),
 )
+
+# What setup mode answers (onboarding-v2 T1): the menu while the profile is
+# not set up yet (``/start`` is the setup notice there, not an alias of help).
+SETUP_COMMANDS: Final[tuple[str, ...]] = ("configurar", "help")
+# Not offered on a legacy install (no ``profile_dir``): /setup refuses there.
+LEGACY_HIDDEN: Final[tuple[str, ...]] = ("configurar",)
 
 # Every inline button the bot shows on its cards (notifier keyboards), by
 # stable id; text: ``commands.button.<id>.{label,what}``. ``language`` and
@@ -126,9 +139,24 @@ BUTTONS: Final[tuple[str, ...]] = (
 )
 
 
-def menu_commands(lang: Lang = LEGACY_LANG) -> tuple[tuple[str, str], ...]:
-    """(name, description) pairs for Telegram's ``set_my_commands``."""
-    return tuple((c.name_for(lang), c.text("menu", lang)) for c in COMMANDS)
+def menu_commands(
+    lang: Lang = LEGACY_LANG,
+    only: tuple[str, ...] | None = None,
+    hidden: tuple[str, ...] = (),
+) -> tuple[tuple[str, str], ...]:
+    """(name, description) pairs for Telegram's ``set_my_commands``; ``only``
+    keeps the commands with those ids (setup mode: ``SETUP_COMMANDS``);
+    ``hidden`` drops those ids (a legacy install: :data:`LEGACY_HIDDEN`)."""
+    return tuple(
+        (c.name_for(lang), c.text("menu", lang))
+        for c in COMMANDS
+        if (c.listed if only is None else c.name in only) and c.name not in hidden
+    )
+
+
+def command_name(name: str, lang: Lang) -> str:
+    """The ``/name`` of command id ``name`` in ``lang`` (e.g. ``/setup``)."""
+    return f"/{_by_name(name).name_for(lang)}"
 
 
 def cv_usage(
@@ -146,7 +174,9 @@ def _by_name(name: str) -> Command:
 
 
 def commands_for(
-    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
+    hidden: tuple[str, ...] = (),
 ) -> tuple[CommandDoc, ...]:
     """``COMMANDS`` rendered in ``lang``; ``/cv`` and ``/keywords`` name the
     profile's role families (role-families T5)."""
@@ -171,6 +201,7 @@ def commands_for(
             example=field(command, "example"),
         )
         for command in COMMANDS
+        if command.listed and command.name not in hidden
     )
 
 
@@ -208,24 +239,26 @@ def buttons_for(
 
 
 def help_text(
-    families: FamilyRegistry = BUILTIN_REGISTRY, lang: Lang = LEGACY_LANG
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+    lang: Lang = LEGACY_LANG,
+    hidden: tuple[str, ...] = (),
 ) -> str:
-    """Grouped ``/help`` text in ``lang``: usage, explanation and example per
-    command; ``/cv``, ``/keywords`` and the card toggles name the profile's
-    families."""
+    """Grouped ``/help`` text in ``lang``: usage, explanation and (when it
+    differs from the usage) example per command; ``/cv``, ``/keywords`` and the card toggles name the profile's
+    families. ``hidden`` drops those command ids (a legacy install)."""
     lines = [t("commands.header", lang)]
-    commands = commands_for(families, lang)
+    commands = commands_for(families, lang, hidden)
     for section in SECTIONS:
         lines.extend(["", section_title(section, lang)])
         for command in commands:
             if command.section == section:
-                lines.extend(
-                    [
-                        command.usage,
-                        f"  {command.explanation}",
-                        f"  {t('commands.example', lang, example=command.example)}",
-                    ]
-                )
+                lines.extend([command.usage, f"  {command.explanation}"])
+                # An example identical to the usage line adds nothing (and
+                # the help must fit one Telegram message, < 4096 chars).
+                if command.example != command.usage:
+                    lines.append(
+                        f"  {t('commands.example', lang, example=command.example)}"
+                    )
     lines.extend(["", section_title("buttons", lang)])
     lines.extend(f"{label} — {what}" for label, what in buttons_for(families, lang))
     return "\n".join(lines)

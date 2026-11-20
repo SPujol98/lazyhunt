@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import sqlite3
+import threading
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -40,6 +41,7 @@ from cva.claimsdb import ClaimsDB, load_claims
 from cva.config import DEFAULT_BACKEND_THRESHOLD, Settings
 from cva.cvgen import engine as _cvgen_engine
 from cva.cvgen.base_pdfs import (
+    available_registry,
     base_cambios,
     deliver_base_pdf,
     manifest_entry,
@@ -84,7 +86,7 @@ from cva.match.followup import (
     generate_followup,
     resolve_recipient,
 )
-from cva.match.gates import gate_reason, run_gates
+from cva.match.gates import GatePrefs, gate_reason, run_gates
 from cva.match.interview_prep import (
     STAGES,
     CompanyFact,
@@ -117,6 +119,7 @@ from cva.match.salary_research import (
 )
 from cva.match.scorer import SynonymMap, classify_keyword, load_synonyms
 from cva.match.stack_wall import stack_wall_display, stack_wall_reason
+from cva.match.warnings import offer_warnings
 from cva.mirror import mirror_root, on_discarded, on_generated, on_sent
 from cva.notifier import (
     SentMessage,
@@ -259,6 +262,10 @@ _REJUDGE_MIN_TEXT_LEN: Final[int] = 500
 # Total write attempts of one heartbeat catch-up of the tracker xlsx
 # (0.5s + 1s between them, run in a worker thread).
 TRACKER_RETRY_ATTEMPTS: Final[int] = 3
+# Deferred tracker writes (bot mode): a mutation marks the xlsx dirty and the
+# rewrite runs in a worker thread this long after the LAST mutation, so a
+# burst of changes costs one write and no handler blocks on the file.
+TRACKER_DEBOUNCE_SECONDS: Final[float] = 3.0
 _REJUDGE_BRIDGE_PLACEHOLDER_PREFIX: Final[str] = "bridge: "
 # States the owner already decided on: never re-judged by default.
 # "descartada" is the one exception the owner can opt back into
@@ -806,8 +813,6 @@ class JobService:
             # would sign every letter with an empty name). The legacy layout
             # keeps its old behaviour (default id, no check).
             require_identity_claim(self._identity, self._db)
-        # Stack wall, gates, search targets, title filters (defaults = old constants).
-        self._prefs = load_preferences(self._paths.preferences)
         # Judge facts, named anchors, rubric persona (defaults = the owner's text).
         self._judge_persona = load_judge_persona(self._paths.judge_dir)
         # legacy: masters no longer drive delivery
@@ -817,6 +822,10 @@ class JobService:
         self._base_pdfs_dir = (
             base_pdfs_dir if base_pdfs_dir is not None else self._paths.base_pdfs_dir
         )
+        # Stack wall, gates, search targets, title filters (defaults = old
+        # constants): the ONE live instance, re-read by reload_preferences()
+        # and read by the bridge on every request (onboarding-v2 T2).
+        self._prefs_state = self._read_preferences()
         # Resolved at call time through the module so tests can redirect it.
         self._output_dir = (
             output_dir if output_dir is not None else _cvgen_engine.OUTPUT_DIR
@@ -856,6 +865,17 @@ class JobService:
         self._prep_claims: set[tuple[int, str]] = set()
         self._last_letters: dict[int, CoverLetterResult] = {}
         self._tracker_gen = 0
+        # Deferred mode (enable_deferred_tracker_writes): debounce timer and
+        # the single background flush task, both on the bot's loop.
+        self._tracker_deferred = False
+        self._tracker_timer: asyncio.TimerHandle | None = None
+        self._tracker_flush_task: asyncio.Task[None] | None = None
+        self._tracker_flush_again = False
+        # Serializes every write of the file (loop thread or worker thread),
+        # and remembers the newest generation written so an older snapshot
+        # never replaces a newer file.
+        self._tracker_write_lock = threading.Lock()
+        self._tracker_written_gen = -1
         # Posting guard verdicts per offer id (flagged ones only, in memory):
         # the cards read them through card_extras().
         self._guard_reports: OrderedDict[int, GuardReport] = OrderedDict()
@@ -950,8 +970,18 @@ class JobService:
     def card_extras(self, offer_id: int) -> str:
         """Extra card lines: salary, deadline/age and Easy Apply (blank-free)."""
         offer = self._repo.get_offer(offer_id)
+        search = self._prefs.search
         lines = [
             warning_line(self._guard_reports.get(offer_id), self._lang),
+            # [search] mismatches (S4): recomputed from the live preferences.
+            *offer_warnings(
+                offer.source_data,
+                offer.ubicacion,
+                work_modes=search.work_modes,
+                min_salary=search.min_salary,
+                currency=search.currency,
+                lang=self._lang,
+            ),
             self.salary_line(offer_id),
             date_card_lines(
                 offer.fecha_publicacion,
@@ -1753,14 +1783,36 @@ class JobService:
 
     def _refresh_tracker(self) -> None:
         """Rewrite the synced full-tracker xlsx AFTER a committed state change
-        (best-effort: warn-only, never fails the action; unset → no-op)."""
+        (best-effort: warn-only, never fails the action; unset → no-op).
+
+        Deferred mode (the bot, see :meth:`enable_deferred_tracker_writes`):
+        only mark the tracker dirty and (re)arm a short debounce; the write
+        runs later in a worker thread. Otherwise (CLI, scripts) write inline.
+        """
         if self._tracker_xlsx is None:
             return
         self._tracker_gen += 1
-        # One attempt, no sleep: mutators run on the event loop (bot handlers,
-        # bridge helper loop) and must never block; a locked file just marks
-        # the tracker dirty for the heartbeat to retry off-loop.
-        if refresh_tracker_xlsx(self._repo, self._tracker_xlsx):
+        if self._tracker_deferred:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                self._tracker_dirty = True
+                if self._tracker_timer is not None:
+                    self._tracker_timer.cancel()
+                self._tracker_timer = loop.call_later(
+                    TRACKER_DEBOUNCE_SECONDS, self._start_tracker_flush
+                )
+                return
+        # One attempt, no sleep: a locked file just marks the tracker dirty
+        # for the heartbeat to retry off-loop.
+        generation = self._tracker_gen
+        with self._tracker_write_lock:
+            ok = refresh_tracker_xlsx(self._repo, self._tracker_xlsx)
+            if ok:
+                self._tracker_written_gen = generation
+        if ok:
             self._mark_tracker_clean()
         else:
             self._tracker_dirty = True
@@ -1775,15 +1827,79 @@ class JobService:
         """True while the synced tracker xlsx is known to be out of date."""
         return self._tracker_dirty
 
-    async def retry_tracker_refresh(self) -> bool:
-        """Heartbeat catch-up: re-run a failed refresh; True when it succeeded.
+    def enable_deferred_tracker_writes(self) -> None:
+        """Bot mode: mutations stop writing the xlsx on the event loop.
 
-        No-op (no filesystem activity) when the tracker is disabled or clean.
-        Rows are read here on the loop thread; the write, with its locked-file
-        retries and backoff sleeps, runs in a worker thread so the loop never
-        blocks. If a mutation refreshed while the snapshot was being written,
-        the snapshot may have replaced a newer file, so stay dirty and let the
-        next tick rewrite it.
+        Each mutation marks the tracker dirty and re-arms a
+        ``TRACKER_DEBOUNCE_SECONDS`` timer; when it fires, one background
+        task writes the latest rows in a worker thread. The heartbeat's
+        :meth:`retry_tracker_refresh` stays the backstop (a locked file) and
+        :meth:`flush_tracker` writes whatever is pending at shutdown.
+        """
+        self._tracker_deferred = True
+
+    def _start_tracker_flush(self) -> None:
+        """Debounce timer fired: start the flush, or ask the running one to
+        go again (it re-reads the rows, so the newest state wins)."""
+        self._tracker_timer = None
+        task = self._tracker_flush_task
+        if task is not None and not task.done():
+            self._tracker_flush_again = True
+            return
+        self._tracker_flush_task = asyncio.get_running_loop().create_task(
+            self._tracker_flush_loop(), name="cva-tracker-flush"
+        )
+
+    async def _tracker_flush_loop(self) -> None:
+        while True:
+            self._tracker_flush_again = False
+            await self._write_tracker_now(attempts=1)
+            if not self._tracker_flush_again:
+                return
+
+    async def flush_tracker(self) -> None:
+        """Write a pending deferred refresh now (shutdown hook; never raises).
+
+        Cancels the debounce timer, waits for an in-flight background write,
+        then writes the current rows if the tracker is still dirty, with the
+        heartbeat's locked-file retries.
+        """
+        if self._tracker_timer is not None:
+            self._tracker_timer.cancel()
+            self._tracker_timer = None
+        task = self._tracker_flush_task
+        if task is not None and not task.done():
+            with suppress(Exception):
+                await task
+        await self._write_tracker_now(attempts=TRACKER_RETRY_ATTEMPTS)
+
+    def _write_tracker_snapshot(
+        self, offers: list[OfferRow], generation: int, attempts: int
+    ) -> bool:
+        """Write one snapshot (thread-safe; one writer of the file at a time).
+
+        A snapshot older than the file already written is skipped (True: the
+        file is at least as new), so out-of-order writers never regress it.
+        """
+        path = self._tracker_xlsx
+        if path is None:
+            return False
+        with self._tracker_write_lock:
+            if generation < self._tracker_written_gen:
+                return True
+            ok = write_tracker_xlsx(offers, path, attempts=attempts)
+            if ok:
+                self._tracker_written_gen = generation
+            return ok
+
+    async def _write_tracker_now(self, *, attempts: int) -> bool:
+        """Rewrite the dirty tracker off the loop; True when it is now clean.
+
+        Rows are read here on the loop thread (SQLite stays single-threaded);
+        the write, with its locked-file retries and backoff sleeps, runs in a
+        worker thread. If a mutation landed while the snapshot was being
+        written, stay dirty: that mutation's own refresh (or the next
+        heartbeat tick) rewrites it.
         """
         if self._tracker_xlsx is None or not self._tracker_dirty:
             return False
@@ -1796,18 +1912,24 @@ class JobService:
             )
             return False
         ok = await asyncio.to_thread(
-            write_tracker_xlsx,
-            offers,
-            self._tracker_xlsx,
-            attempts=TRACKER_RETRY_ATTEMPTS,
+            self._write_tracker_snapshot, offers, generation, attempts
         )
         if not ok:
             return False
         if self._tracker_gen != generation:
-            self._tracker_dirty = True  # raced a mutation: rewrite next tick
+            self._tracker_dirty = True  # raced a mutation: rewrite again
             return False
         self._mark_tracker_clean()
         return True
+
+    async def retry_tracker_refresh(self) -> bool:
+        """Heartbeat catch-up: re-run a failed refresh; True when it succeeded.
+
+        No-op (no filesystem activity) when the tracker is disabled or clean.
+        Same off-loop write as the deferred flush (:meth:`_write_tracker_now`),
+        with ``TRACKER_RETRY_ATTEMPTS`` tries on a locked file.
+        """
+        return await self._write_tracker_now(attempts=TRACKER_RETRY_ATTEMPTS)
 
     async def ingest(self, url: str | None, paste: str | None) -> int:
         """Ingest by link (wall-classified) or pasted text; return the offer id."""
@@ -1989,6 +2111,7 @@ class JobService:
                     cv_needed=self.cv_needed(offer_id),
                     families=self._prefs.families,
                     ui_lang=self._lang,
+                    offer=self.offer(offer_id),
                 ),
             )
             return BridgeJobOutcome(zone="gray", score=result.score)
@@ -2065,6 +2188,7 @@ class JobService:
                 cv_needed=self.cv_needed(offer_id),
                 families=self._prefs.families,
                 ui_lang=self._lang,
+                offer=self.offer(offer_id),
             ),
         )
 
@@ -2192,14 +2316,60 @@ class JobService:
         """
         offer = self._repo.get_offer(offer_id)
         self._discard_if_closed(offer)
-        extraction = await extract(
-            offer.source_data,
-            self._llm,
-            cache=self._cache,
-            model=self._extraction_model,
-        )
         profile = self._normalize_profile(offer.perfil)
         threshold, _ = self._gate_for(profile)
+        # The judge reads only the offer text (never the extraction), so in
+        # hybrid mode both LLM calls run concurrently. Outcomes are still
+        # applied in the sequential order: an extraction failure propagates
+        # first (cancelling the judge, writing nothing), and the judge's
+        # result or failure is handled exactly where it used to be awaited.
+        judge_task: asyncio.Task[OfferJudgment] | None = None
+        if self._match_mode == "hybrid":
+            judge_task = asyncio.create_task(
+                judge_offer(
+                    offer.source_data,
+                    self._db,
+                    self._llm,
+                    model=self._judge_model,
+                    threshold=threshold,
+                    extra_anchors=self._judge_anchors(),
+                    anchor_thresholds=self._anchor_thresholds(),
+                    families=self._prefs.families,
+                    persona=self._judge_persona,
+                    lang=self._lang,
+                ),
+                name=f"cva-judge-{offer_id}",
+            )
+        try:
+            extraction = await extract(
+                offer.source_data,
+                self._llm,
+                cache=self._cache,
+                model=self._extraction_model,
+            )
+            return await self._finish_analysis(
+                offer, offer_id, profile, threshold, extraction, judge_task
+            )
+        finally:
+            # Extraction/scoring failed (or the caller was cancelled) before
+            # the judge outcome was consumed: stop the judge and reap it, so
+            # no orphan LLM call outlives the analysis and no exception is
+            # left unretrieved. A no-op once the judge was already awaited.
+            if judge_task is not None:
+                judge_task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await judge_task
+
+    async def _finish_analysis(
+        self,
+        offer: OfferRow,
+        offer_id: int,
+        profile: str,
+        threshold: int,
+        extraction: OfferExtraction,
+        judge_task: "asyncio.Task[OfferJudgment] | None",
+    ) -> MatchResult:
+        """Score + walls + (hybrid) judge outcome + persistence (analyze tail)."""
         result = score(extraction, self._db, self._syn, threshold=threshold)
         # Backend wall: only evaluated for backend-profile offers (other role
         # families have no stack wall yet; role-families follow-up).
@@ -2208,7 +2378,7 @@ class JobService:
             if profile == "backend"
             else None
         )
-        gates = run_gates(offer.source_data, offer.ubicacion, self._prefs.gates)
+        gates = run_gates(offer.source_data, offer.ubicacion, self._gate_prefs())
         result = result.model_copy(
             update={"gates": gates, **({"stack_wall": wall} if wall else {})}
         )
@@ -2222,20 +2392,9 @@ class JobService:
                 if g.verdict != "PASS"
             ),
         ]
-        if self._match_mode == "hybrid":
+        if judge_task is not None:
             try:
-                judgment = await judge_offer(
-                    offer.source_data,
-                    self._db,
-                    self._llm,
-                    model=self._judge_model,
-                    threshold=threshold,
-                    extra_anchors=self._judge_anchors(),
-                    anchor_thresholds=self._anchor_thresholds(),
-                    families=self._prefs.families,
-                    persona=self._judge_persona,
-                    lang=self._lang,
-                )
+                judgment = await judge_task
             except LlmResponseError as exc:
                 _logger.warning(
                     "offer %s: judge failed, falling back to the keyword score: %s: %s",
@@ -3174,10 +3333,54 @@ class JobService:
         """The judge's candidate-specific text (the owner's when no profile)."""
         return self._judge_persona
 
+    def _read_preferences(self) -> tuple[ProfilePrefs, ProfilePrefs]:
+        """``preferences.toml`` as loaded, and the delivery view the engine uses.
+
+        The bot offers and delivers only CV languages with a base CV: in the
+        delivery view each family's declared languages are cut to its manifest
+        entries (a family with none keeps its own; see available_registry).
+        Raises :class:`~cva.profile_identity.ProfileError` on an invalid file.
+        """
+        loaded = load_preferences(self._paths.preferences)
+        effective = replace(
+            loaded,
+            families=available_registry(loaded.families, self._base_pdfs_dir),
+        )
+        return loaded, effective
+
+    @property
+    def _prefs(self) -> ProfilePrefs:
+        return self._prefs_state[1]
+
+    def _gate_prefs(self) -> GatePrefs:
+        """``[gates]`` plus ``[location] city``/``country`` (generic home, S6)."""
+        prefs = self._prefs
+        return replace(
+            prefs.gates, city=prefs.location.city, country=prefs.location.country
+        )
+
+    def reload_preferences(self) -> ProfilePrefs:
+        """Re-read and validate ``preferences.toml``; return the new delivery view.
+
+        On a validation error the previous instance stays in place and the
+        :class:`~cva.profile_identity.ProfileError` propagates. The swap is one
+        reference assignment, so a bridge thread reading mid-reload sees either
+        the old pair or the new one, never a mix.
+        """
+        self._prefs_state = self._read_preferences()
+        return self._prefs
+
     @property
     def preferences(self) -> ProfilePrefs:
-        """The profile's loaded ``preferences.toml`` (engine defaults when absent)."""
+        """The profile's ``preferences.toml`` (engine defaults when absent), with
+        each family's languages cut to its base CVs (the delivery view)."""
         return self._prefs
+
+    @property
+    def loaded_preferences(self) -> ProfilePrefs:
+        """``preferences.toml`` exactly as loaded (no base-CV cut): what the
+        bridge serves the extension (``/config``, ``/searches/suggested``)."""
+        return self._prefs_state[0]
 
     @property
     def threshold(self) -> int:

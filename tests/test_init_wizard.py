@@ -457,3 +457,70 @@ def test_rerun_keeps_the_previous_bot_language_as_default(tmp_path: Path) -> Non
 
     assert (tmp_path / "config.local.toml").read_text(encoding="utf-8") == before
     assert "Nothing to change" in second.transcript
+
+
+# --- onboarding-v2 T1: the empty profile, set up later in Telegram -------------
+
+
+def test_empty_profile_is_the_recommended_default(tmp_path: Path) -> None:
+    # Enter at the profile-kind prompt picks the empty profile.
+    scripted = ScriptedIO(["", "", OWNER_ID, "", "", "y", "n"], [TOKEN])
+
+    assert wizard(tmp_path, scripted) == 0
+
+    profile = tmp_path / "profiles" / "me"
+    assert profile.is_dir()
+    assert list(profile.iterdir()) == []  # no demo copy, no placeholders
+    local = tomllib.loads((tmp_path / "config.local.toml").read_text("utf-8"))
+    assert local["profile_dir"] == "profiles/me"  # always explicit
+    assert "(recommended)" in scripted.transcript
+    assert "Start from [3]" in scripted.transcript
+    assert "/setup" in scripted.transcript  # next steps point at Telegram
+
+
+def test_skeleton_option_still_creates_the_skeleton(tmp_path: Path) -> None:
+    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "1", "y", "n"], [TOKEN]))
+    assert (tmp_path / "profiles" / "me" / "claims.json").is_file()
+
+
+def test_empty_profile_leads_the_bot_into_setup_mode(tmp_path: Path) -> None:
+    from cva.setup_mode import missing_profile_files
+
+    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "3", "y", "n"], [TOKEN]))
+    assert "claims.json" in missing_profile_files(tmp_path / "profiles" / "me")
+
+
+# --- toml_set_key: one top-level key, every other byte kept (onboarding-v2) -------
+
+
+def test_toml_set_key_replaces_only_that_key_and_keeps_every_other_byte() -> None:
+    from cva.setup.wizard import toml_set_key
+
+    base = (
+        "# top\r\nowner_telegram_id = 1  # me\r\n"
+        'enabled_portals = [\r\n  "indeed",  # [old]\r\n]\r\n'
+        "\r\n[extra]\r\nenabled_portals = 2\r\n"
+    )
+    text = toml_set_key(base, "enabled_portals", ["linkedin", "infojobs"])
+    assert text == base.replace(
+        'enabled_portals = [\r\n  "indeed",  # [old]\r\n]\r\n',
+        'enabled_portals = ["linkedin", "infojobs"]\r\n',
+    )
+
+
+def test_toml_set_key_adds_a_missing_key_before_the_first_table() -> None:
+    from cva.setup.wizard import toml_set_key
+
+    base = "a = 1\n# note\n[t]\nb = 2"
+    assert toml_set_key(base, "enabled_portals", []) == (
+        "a = 1\n# note\nenabled_portals = []\n[t]\nb = 2"
+    )
+    assert toml_set_key("a = 1", "k", ["x"]) == 'a = 1\nk = ["x"]\n'
+    assert toml_set_key("", "k", ["x"]) == 'k = ["x"]\n'
+
+
+def test_toml_set_key_refuses_a_result_that_is_not_toml() -> None:
+    from cva.setup.wizard import toml_set_key
+
+    with pytest.raises(ValueError):
+        toml_set_key("a = = 1\n", "k", ["x"])

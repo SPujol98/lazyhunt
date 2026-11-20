@@ -13,6 +13,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,15 @@ from cva.calibration_ui import (
 from cva.calibration_ui import (
     reason_message as calibration_reason_message,
 )
-from cva.commands import COMMANDS, cv_usage, help_text, menu_commands
+from cva.commands import (
+    COMMANDS,
+    LEGACY_HIDDEN,
+    SETUP_COMMANDS,
+    command_name,
+    cv_usage,
+    help_text,
+    menu_commands,
+)
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.gmail.client import GoogleGmailClient
@@ -123,10 +132,13 @@ from cva.notifier import (
     unknown_role_message,
     with_no_cv_line,
 )
+from cva.onboarding import flow as onboarding
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
 from cva.service import JobService, OfferClosedError, ServiceError, display_result
+from cva.setup.wizard import LOCAL_TOML
+from cva.setup_mode import describe_load_error, missing_profile_files, needs_setup
 from cva.star import ST, star_fields
 from cva.star import candidates_keyboard as star_candidates_keyboard
 from cva.star import candidates_message as star_candidates_message
@@ -156,6 +168,19 @@ _OWNER_KEY = "owner_id"
 # profile the service loads; unset -> the default profile resolution).
 _LETTER_BASE_KEY = "letter_base"
 _LANG_KEY = "ui_language"  # Settings.ui_language, set by build_app
+# Setup mode (onboarding-v2 T1): the unconfigured profile directory, and the
+# flag set when it became complete (main() then starts the full app).
+_PROFILE_DIR_KEY = "setup_profile_dir"
+_SETUP_DONE_KEY = "setup_done"
+# The Settings the setup app validates the full load with, the JobService that
+# load built (main() reuses it), and the owner updates received from the switch
+# on (main() replays them in the full app, so none is lost).
+_SETUP_SETTINGS_KEY = "setup_settings"
+_SETUP_SERVICE_KEY = "setup_service"
+_SETUP_REPLAY_KEY = "setup_replay"
+# config.local.toml the guided setup saves ui_language to (cwd-relative, as
+# Settings reads it); absent in test doubles, which then never write it.
+_CONFIG_PATH_KEY = "config_local_toml"
 
 
 def is_owner(user_id: int | None, owner_id: int) -> bool:
@@ -170,8 +195,20 @@ async def gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         raise ApplicationHandlerStop
 
 
+def _hidden_commands(context: ContextTypes.DEFAULT_TYPE | None) -> tuple[str, ...]:
+    """Commands /help leaves out: ``/setup`` on a legacy install (an app
+    built without ``profile_dir``), where it only refuses."""
+    if context is None or _PROFILE_DIR_KEY not in context.bot_data:
+        return ()
+    return LEGACY_HIDDEN if context.bot_data[_PROFILE_DIR_KEY] is None else ()
+
+
 async def start_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(help_text(_families(context), lang=_lang(context)))
+    await update.message.reply_text(
+        help_text(
+            _families(context), lang=_lang(context), hidden=_hidden_commands(context)
+        )
+    )
 
 
 def _service(context: ContextTypes.DEFAULT_TYPE) -> JobService:
@@ -270,6 +307,7 @@ async def _analyze_and_reply(
             cv_needed=cv_needed,
             families=_families(context),
             ui_lang=ui,
+            offer=offer,
         ),
     )
 
@@ -302,6 +340,10 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def paste_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await onboarding.on_text(
+        update.message, context.user_data, _onboarding_env(context)
+    ):
+        return  # a /setup step expecting text wins over paste, note and STAR
     if not context.user_data.get(_PASTE_KEY):
         note_offer = _take_pending_note(context)
         if note_offer is not None:
@@ -1237,12 +1279,308 @@ def _reopen_unless_recorded(service: JobService, message_id: str, row) -> bool:
     return landed
 
 
+@dataclass(frozen=True)
+class _Press:
+    """One inline-button press, as every callback handler needs it."""
+
+    service: JobService
+    query: Any
+    context: ContextTypes.DEFAULT_TYPE
+    families: FamilyRegistry
+    ui: Lang
+    kind: str
+
+
+# A callback handler gets the press and the payload fields after the prefix;
+# it returns False when it does not accept them (the "unknown action" reply).
+_CallbackHandler = Callable[[_Press, list[str]], Awaitable[bool]]
+
+
+async def _cb_analyze(press: _Press, parts: list[str]) -> bool:
+    if len(parts) != 1:
+        return False
+    service, query, context = press.service, press.query, press.context
+    url = f"https://linkedin.com/jobs/view/{parts[0]}"
+    offer_id = await _ingest_url(service, query.message, context, url)
+    if offer_id is not None:
+        await _analyze_and_reply(service, query.message, context, offer_id)
+    return True
+
+
+async def _cb_cv(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    service, query, families, ui = press.service, press.query, press.families, press.ui
+    role = normalize_role(parts[1], families=families) if len(parts) > 1 else None
+    lang = parts[2] if len(parts) > 2 else None
+    if (no_cv := service.no_cv_label(offer_id)) is not None:  # stale button
+        await query.message.reply_text(no_cv_reply(no_cv, lang=ui))
+        return True
+    if len(parts) > 1 and families.get(parts[1]) is None:
+        # An old button of a family the profile no longer declares.
+        await query.message.reply_text(
+            unknown_role_message(parts[1], families.default.label, lang=ui)
+        )
+        if lang not in families.default.languages:
+            lang = families.default.languages[0]
+    card = await _resend_card_below(service, query.message, offer_id)
+    pdf_path = await service.generate_cv(offer_id, role, lang)  # type: ignore[arg-type]
+    await _send_pdf(card, pdf_path)
+    # The re-sent card is rewritten now: stop tracking it (as every other
+    # button does) so a later "También en" edit can't restore the old text.
+    service.forget_card(card.chat_id, card.message_id)
+    await card.edit_text(
+        cv_ready_message(
+            pdf_path,
+            url=service.offer(offer_id).url_oferta,
+            apply_findings=_apply_findings(service, offer_id),
+            salary_line=service.card_extras(offer_id),
+            lang=ui,
+        ),
+        reply_markup=sent_keyboard(
+            offer_id,
+            cv_base=service.offer(offer_id).cv_base,
+            cover_letter_asked=_cover_letter_asked(service, offer_id),
+            families=families,
+            lang=ui,
+        ),
+    )
+    return True
+
+
+async def _cb_toggle(press: _Press, parts: list[str]) -> bool:
+    """``lang`` and ``variant``: cycle the card's CV language or role."""
+    if len(parts) != 3:
+        return False
+    service, families = press.service, press.families
+    offer_id = int(parts[0])
+    role, lang = normalize_role(parts[1], families=families), parts[2]
+    if press.kind == "lang":
+        lang = next_lang(role, lang, families=families)
+    else:
+        role = next_role(role, families=families)
+    try:  # the "Search elsewhere" row survives the toggle
+        offer = service.offer(offer_id)
+    except RepositoryError:
+        offer = None
+    await press.query.edit_message_reply_markup(
+        reply_markup=cv_keyboard(
+            offer_id,
+            role=role,
+            lang=lang,
+            cover_letter_asked=_cover_letter_asked(service, offer_id),
+            families=families,
+            ui_lang=press.ui,
+            offer=offer,
+        )
+    )
+    return True
+
+
+async def _cb_discard(press: _Press, parts: list[str]) -> bool:
+    if len(parts) != 1:
+        return False
+    offer_id = _parse_id(parts[0])
+    if offer_id is not None:
+        press.service.discard(offer_id)
+        await press.query.edit_message_text(discard_message(offer_id, lang=press.ui))
+    return True
+
+
+async def _cb_disc(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    try:
+        press.service.discard(offer_id)
+    except ServiceError as exc:
+        await press.query.message.reply_text(_err(exc, press.ui))
+        return True
+    await press.query.edit_message_text(
+        discard_no_send_message(lang=press.ui), reply_markup=None
+    )
+    return True
+
+
+async def _cb_sent(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    service, ui = press.service, press.ui
+    try:
+        service.mark_sent(offer_id)
+    except ServiceError as exc:
+        await press.query.message.reply_text(_err(exc, ui))
+        return True
+    await press.query.edit_message_text(
+        sent_message(offer_id, service.offer(offer_id).match or 0, lang=ui),
+        reply_markup=sent_outcome_keyboard(offer_id, lang=ui),
+    )
+    return True
+
+
+async def _cb_outcome_menu(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    await _reply_outcome_menu(press.service, press.query.message, offer_id)
+    return True
+
+
+async def _cb_outcome(press: _Press, parts: list[str]) -> bool:
+    if (
+        len(parts) != 2
+        or parts[1] not in OUTCOME_ESTADOS
+        or (offer_id := _parse_id(parts[0])) is None
+    ):
+        return False
+    await _apply_outcome(press.service, press.query, press.context, offer_id, parts[1])
+    return True
+
+
+async def _cb_gmail(press: _Press, parts: list[str]) -> bool:
+    if len(parts) != 2 or parts[0] not in ("y", "o", "i"):
+        return False
+    await _gmail_callback(press.service, press.query, press.context, parts[0], parts[1])
+    return True
+
+
+async def _cb_calibration(press: _Press, parts: list[str]) -> bool:
+    if not parts:
+        return False
+    await _calibration_callback(press.service, press.query, parts)
+    return True
+
+
+async def _cb_followup(press: _Press, parts: list[str]) -> bool:
+    if (
+        len(parts) != 2
+        or parts[1] not in ("ok", "skip", "none")
+        or (offer_id := _parse_id(parts[0])) is None
+    ):
+        return False
+    await _followup_action(press.service, press.query, offer_id, parts[1])
+    return True
+
+
+async def _cb_salary(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    await _research_salary_and_reply(press.service, press.query.message, offer_id)
+    return True
+
+
+async def _cb_cover_letter(press: _Press, parts: list[str]) -> bool:
+    if not parts or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    service = press.service
+    card = await _resend_card_below(service, press.query.message, offer_id)
+    await _write_cover_letters_and_reply(
+        service,
+        card,
+        offer_id,
+        press.context.bot_data.setdefault(_LETTER_EXTRAS_KEY, {}),
+    )
+    return True
+
+
+async def _cb_dismiss_letter(press: _Press, parts: list[str]) -> bool:
+    if len(parts) != 1 or _parse_id(parts[0]) is None:
+        return False
+    await _dismiss_letter(press.query, press.context, press.ui)
+    return True
+
+
+async def _cb_choose_letter(press: _Press, parts: list[str]) -> bool:
+    if (
+        len(parts) != 3
+        or parts[2] not in ("a", "b")
+        or not parts[1].isdigit()
+        or (offer_id := _parse_id(parts[0])) is None
+    ):
+        return False
+    service, query, ui = press.service, press.query, press.ui
+    try:
+        service.choose_cover_letter(offer_id, parts[2], generation=int(parts[1]))
+    except ServiceError as exc:
+        await query.message.reply_text(_err(exc, ui))
+        return True
+    await query.message.reply_text(t("bot.letter_saved", ui))
+    await _send_letter_pdf(
+        query.message, lambda: service.cover_letter_pdf(offer_id), ui
+    )
+    return True
+
+
+async def _cb_prep(press: _Press, parts: list[str]) -> bool:
+    if (
+        len(parts) not in (1, 2)
+        or (offer_id := _parse_id(parts[0])) is None
+        or (len(parts) != 1 and parts[1] not in STAGES)
+    ):
+        return False
+    if len(parts) == 1:
+        await _prep_stage_choice(press.service, press.query.message, offer_id)
+    else:
+        await _prepare_and_reply(press.service, press.query.message, offer_id, parts[1])
+    return True
+
+
+async def _cb_star(press: _Press, parts: list[str]) -> bool:
+    await _star_callback(press.service, press.query, press.context, parts)
+    return True
+
+
+async def _cb_beacon(press: _Press, parts: list[str]) -> bool:
+    if len(parts) != 1:
+        return False
+    if (
+        reply := beacon_callback_reply(
+            press.service, press.kind, parts[0], lang=press.ui
+        )
+    ) is not None:
+        await press.query.edit_message_text(reply)
+    return True
+
+
+async def _cb_onboarding(press: _Press, parts: list[str]) -> bool:
+    await onboarding.on_callback(
+        press.query, press.context.user_data, _onboarding_env(press.context), parts
+    )
+    return True
+
+
+# Every inline-button prefix (the first ``:`` field of the callback data, see
+# cva/notifier.py) and its handler. Payloads are a contract: cards stay in the
+# chat for weeks, so a prefix is never renamed or reused.
+CALLBACK_HANDLERS: dict[str, _CallbackHandler] = {
+    "an": _cb_analyze,
+    "cv": _cb_cv,
+    "lang": _cb_toggle,
+    "variant": _cb_toggle,
+    "discard": _cb_discard,
+    "disc": _cb_disc,
+    "sent": _cb_sent,
+    OUT: _cb_outcome_menu,
+    OE: _cb_outcome,
+    GM: _cb_gmail,
+    CAL: _cb_calibration,
+    FU: _cb_followup,
+    SAL: _cb_salary,
+    CL: _cb_cover_letter,
+    CLD: _cb_dismiss_letter,
+    CLC: _cb_choose_letter,
+    PREP: _cb_prep,
+    ST: _cb_star,
+    BEACON_RESUME: _cb_beacon,
+    BEACON_DISABLE: _cb_beacon,
+    onboarding.PREFIX: _cb_onboarding,
+}
+
+
 async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Stateless callback router (notifier payload scheme)."""
+    """Stateless callback router (notifier payload scheme): the prefix picks
+    the handler in :data:`CALLBACK_HANDLERS`."""
     query = update.callback_query
     await query.answer()
     service = _service(context)
-    families = _families(context)
     ui = _lang(context)
     kind, parts = (query.data or "").split(":", 1)[0], (query.data or "").split(":")[1:]
     if query.message is not None and kind not in ("cv", CL):
@@ -1251,153 +1589,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # cover-letter press re-sends the card instead and re-points the
         # stored row.)
         service.forget_card(query.message.chat_id, query.message.message_id)
-    if kind == "an" and len(parts) == 1:
-        url = f"https://linkedin.com/jobs/view/{parts[0]}"
-        offer_id = await _ingest_url(service, query.message, context, url)
-        if offer_id is not None:
-            await _analyze_and_reply(service, query.message, context, offer_id)
-    elif kind == "cv" and parts and (offer_id := _parse_id(parts[0])) is not None:
-        role = normalize_role(parts[1], families=families) if len(parts) > 1 else None
-        lang = parts[2] if len(parts) > 2 else None
-        if (no_cv := service.no_cv_label(offer_id)) is not None:  # stale button
-            await query.message.reply_text(no_cv_reply(no_cv, lang=ui))
-            return
-        if len(parts) > 1 and families.get(parts[1]) is None:
-            # An old button of a family the profile no longer declares.
-            await query.message.reply_text(
-                unknown_role_message(parts[1], families.default.label, lang=ui)
-            )
-            if lang not in families.default.languages:
-                lang = families.default.languages[0]
-        card = await _resend_card_below(service, query.message, offer_id)
-        pdf_path = await service.generate_cv(offer_id, role, lang)  # type: ignore[arg-type]
-        await _send_pdf(card, pdf_path)
-        # The re-sent card is rewritten now: stop tracking it (as every other
-        # button does) so a later "También en" edit can't restore the old text.
-        service.forget_card(card.chat_id, card.message_id)
-        await card.edit_text(
-            cv_ready_message(
-                pdf_path,
-                url=service.offer(offer_id).url_oferta,
-                apply_findings=_apply_findings(service, offer_id),
-                salary_line=service.card_extras(offer_id),
-                lang=ui,
-            ),
-            reply_markup=sent_keyboard(
-                offer_id,
-                cv_base=service.offer(offer_id).cv_base,
-                cover_letter_asked=_cover_letter_asked(service, offer_id),
-                families=families,
-                lang=ui,
-            ),
-        )
-    elif kind in ("lang", "variant") and len(parts) == 3:
-        offer_id = int(parts[0])
-        role, lang = normalize_role(parts[1], families=families), parts[2]
-        if kind == "lang":
-            lang = next_lang(role, lang, families=families)
-        else:
-            role = next_role(role, families=families)
-        await query.edit_message_reply_markup(
-            reply_markup=cv_keyboard(
-                offer_id,
-                role=role,
-                lang=lang,
-                cover_letter_asked=_cover_letter_asked(service, offer_id),
-                families=families,
-                ui_lang=ui,
-            )
-        )
-    elif kind == "discard" and len(parts) == 1:
-        offer_id = _parse_id(parts[0])
-        if offer_id is not None:
-            service.discard(offer_id)
-            await query.edit_message_text(discard_message(offer_id, lang=ui))
-    elif kind == "disc" and parts and (offer_id := _parse_id(parts[0])) is not None:
-        try:
-            service.discard(offer_id)
-        except ServiceError as exc:
-            await query.message.reply_text(_err(exc, ui))
-            return
-        await query.edit_message_text(
-            discard_no_send_message(lang=ui), reply_markup=None
-        )
-    elif kind == "sent" and parts and (offer_id := _parse_id(parts[0])) is not None:
-        try:
-            service.mark_sent(offer_id)
-        except ServiceError as exc:
-            await query.message.reply_text(_err(exc, ui))
-            return
-        await query.edit_message_text(
-            sent_message(offer_id, service.offer(offer_id).match or 0, lang=ui),
-            reply_markup=sent_outcome_keyboard(offer_id, lang=ui),
-        )
-    elif kind == OUT and parts and (offer_id := _parse_id(parts[0])) is not None:
-        await _reply_outcome_menu(service, query.message, offer_id)
-    elif (
-        kind == OE
-        and len(parts) == 2
-        and parts[1] in OUTCOME_ESTADOS
-        and (offer_id := _parse_id(parts[0])) is not None
-    ):
-        await _apply_outcome(service, query, context, offer_id, parts[1])
-    elif kind == GM and len(parts) == 2 and parts[0] in ("y", "o", "i"):
-        await _gmail_callback(service, query, context, parts[0], parts[1])
-    elif kind == CAL and parts:
-        await _calibration_callback(service, query, parts)
-    elif (
-        kind == FU
-        and len(parts) == 2
-        and parts[1] in ("ok", "skip", "none")
-        and (offer_id := _parse_id(parts[0])) is not None
-    ):
-        await _followup_action(service, query, offer_id, parts[1])
-    elif kind == SAL and parts and (offer_id := _parse_id(parts[0])) is not None:
-        await _research_salary_and_reply(service, query.message, offer_id)
-    elif kind == CL and parts and (offer_id := _parse_id(parts[0])) is not None:
-        card = await _resend_card_below(service, query.message, offer_id)
-        await _write_cover_letters_and_reply(
-            service,
-            card,
-            offer_id,
-            context.bot_data.setdefault(_LETTER_EXTRAS_KEY, {}),
-        )
-    elif kind == CLD and len(parts) == 1 and _parse_id(parts[0]) is not None:
-        await _dismiss_letter(query, context, ui)
-    elif (
-        kind == CLC
-        and len(parts) == 3
-        and parts[2] in ("a", "b")
-        and parts[1].isdigit()
-        and (offer_id := _parse_id(parts[0])) is not None
-    ):
-        try:
-            service.choose_cover_letter(offer_id, parts[2], generation=int(parts[1]))
-        except ServiceError as exc:
-            await query.message.reply_text(_err(exc, ui))
-            return
-        await query.message.reply_text(t("bot.letter_saved", ui))
-        await _send_letter_pdf(
-            query.message, lambda: service.cover_letter_pdf(offer_id), ui
-        )
-    elif (
-        kind == PREP
-        and len(parts) in (1, 2)
-        and (offer_id := _parse_id(parts[0])) is not None
-        and (len(parts) == 1 or parts[1] in STAGES)
-    ):
-        if len(parts) == 1:
-            await _prep_stage_choice(service, query.message, offer_id)
-        else:
-            await _prepare_and_reply(service, query.message, offer_id, parts[1])
-    elif kind == ST:
-        await _star_callback(service, query, context, parts)
-    elif kind in (BEACON_RESUME, BEACON_DISABLE) and len(parts) == 1:
-        if (
-            reply := beacon_callback_reply(service, kind, parts[0], lang=ui)
-        ) is not None:
-            await query.edit_message_text(reply)
-    else:
+    handler = CALLBACK_HANDLERS.get(kind)
+    press = _Press(service, query, context, _families(context), ui, kind)
+    if handler is None or not await handler(press, parts):
         await query.message.reply_text(t("bot.unknown_action", ui))
 
 
@@ -1414,9 +1608,239 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         _LOG.exception("could not notify the owner about the failure")
 
 
-def register_menu(app: Application, lang: Lang) -> None:
+def _set_ui_language(context: ContextTypes.DEFAULT_TYPE, lang: Lang) -> None:
+    """Switch the running bot to ``lang`` (the guided setup's language step);
+    in setup mode the full app ``main`` starts next follows it too."""
+    context.bot_data[_LANG_KEY] = lang
+    settings = context.bot_data.get(_SETUP_SETTINGS_KEY)
+    if isinstance(settings, Settings):
+        context.bot_data[_SETUP_SETTINGS_KEY] = settings.model_copy(
+            update={"ui_language": lang}
+        )
+
+
+def _set_enabled_portals(
+    context: ContextTypes.DEFAULT_TYPE, portals: list[str]
+) -> None:
+    """Serve the portals the guided setup just wrote to config.local.toml
+    without a restart: the running bridge's ``/config`` and, in setup mode,
+    the settings the full app ``main`` starts next is built from."""
+    handle = context.bot_data.get(bridge.BOT_DATA_KEY)
+    if handle is not None:
+        handle.set_enabled_portals(portals)
+    settings = context.bot_data.get(_SETUP_SETTINGS_KEY)
+    if isinstance(settings, Settings):
+        context.bot_data[_SETUP_SETTINGS_KEY] = settings.model_copy(
+            update={"enabled_portals": list(portals)}
+        )
+
+
+def _onboarding_env(context: ContextTypes.DEFAULT_TYPE) -> onboarding.Env:
+    """What the guided setup needs from this app (setup mode or full)."""
+    return onboarding.Env(
+        lang=_lang(context),
+        profile_dir=context.bot_data.get(_PROFILE_DIR_KEY),
+        service=context.bot_data.get(_SERVICE_KEY),
+        config_path=context.bot_data.get(_CONFIG_PATH_KEY),
+        set_lang=lambda lang: _set_ui_language(context, lang),
+        set_portals=lambda portals: _set_enabled_portals(context, portals),
+    )
+
+
+async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A file sent to the bot: a base CV PDF while ``/setup`` asks for one
+    (step 9); any other document is ignored, as before."""
+    await onboarding.on_document(
+        update.message, context.user_data, _onboarding_env(context)
+    )
+
+
+async def setup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/setup`` (``/configurar``): start the guided profile setup
+    (``cva/onboarding``); a pending paste, outcome note or STAR question is
+    dropped so it cannot capture the answers."""
+    context.user_data[_PASTE_KEY] = False
+    _take_pending_note(context)
+    _clear_star(context)
+    await onboarding.start(update.message, context.user_data, _onboarding_env(context))
+
+
+# --- setup mode (onboarding-v2 T1) ---------------------------------------------
+# While the configured profile directory lacks a required file
+# (cva/setup_mode.py) the bot runs this reduced app: no JobService is built, so
+# nothing reads a profile, and least of all the legacy (owner) layout.
+
+
+def _setup_missing(context: ContextTypes.DEFAULT_TYPE) -> tuple[str, ...]:
+    profile_dir: Path = context.bot_data[_PROFILE_DIR_KEY]
+    return missing_profile_files(profile_dir)
+
+
+async def _switch_if_complete(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, *, replay: bool
+) -> bool:
+    """Leave setup mode once the profile is complete AND loads: say so once
+    and stop polling so ``main`` starts the full app (no manual restart).
+
+    ``replay`` keeps ``update`` for ``main`` to replay in the full app (the
+    owner update that merely saw the profile complete); the ``/setup``
+    Confirm that completed it was already handled and is not replayed. A
+    complete but malformed profile keeps setup mode, tells the owner which
+    file failed (so a supervised service does not crash-loop on it) and
+    returns True too: the update was answered. False: still incomplete.
+    """
+    if _setup_missing(context):
+        return False
+    lang = _lang(context)
+    query = update.callback_query
+    message = query.message if query is not None else update.message
+    settings: Settings = context.bot_data[_SETUP_SETTINGS_KEY]
+    try:
+        service = JobService.from_settings(settings)
+    except Exception as exc:  # noqa: BLE001 — any load failure keeps setup mode
+        _LOG.warning("profile complete but not loadable: %s", exc)
+        if query is not None and replay:
+            await query.answer()
+        if message is not None:
+            error = describe_load_error(context.bot_data[_PROFILE_DIR_KEY], exc)
+            await message.reply_text(t("bot.setup.broken", lang, error=error))
+        return True
+    context.bot_data[_SETUP_DONE_KEY] = True
+    context.bot_data[_SETUP_SERVICE_KEY] = service
+    context.bot_data[_SETUP_REPLAY_KEY] = [update] if replay else []
+    if message is not None:
+        await message.reply_text(t("bot.setup.ready", lang))
+    context.application.stop_running()
+    return True
+
+
+async def setup_reload_check(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Group 0 of the setup app: switch to the full app once the profile is
+    complete (:func:`_switch_if_complete`; normally the ``/setup`` Confirm
+    already did, this catches a profile completed by hand).
+
+    From the switch on, every owner update (the rest of the switching
+    ``getUpdates`` batch, which PTB still dispatches here before polling
+    stops) is kept for ``main`` to replay in the full app instead of being
+    answered by the setup app.
+    """
+    if context.bot_data.get(_SETUP_DONE_KEY):
+        context.bot_data[_SETUP_REPLAY_KEY].append(update)
+        raise ApplicationHandlerStop
+    if await _switch_if_complete(update, context, replay=True):
+        raise ApplicationHandlerStop
+
+
+async def setup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/start`` in setup mode: the profile is not set up yet, use /setup
+    (a complete but broken profile never gets here: the group-0 check names
+    the file that failed)."""
+    lang = _lang(context)
+    await update.message.reply_text(
+        t("bot.setup.not_set_up", lang, setup=command_name("configurar", lang))
+    )
+
+
+async def setup_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/help`` in setup mode: only the commands that work right now."""
+    lang = _lang(context)
+    await update.message.reply_text(
+        t("bot.setup.help", lang, setup=command_name("configurar", lang))
+    )
+
+
+async def setup_onboarding_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """An ``ob:`` button in setup mode (the full app routes it through
+    :data:`CALLBACK_HANDLERS`)."""
+    query = update.callback_query
+    await query.answer()
+    await onboarding.on_callback(
+        query,
+        context.user_data,
+        _onboarding_env(context),
+        (query.data or "").split(":")[1:],
+    )
+    # A successful Confirm completes the profile: switch right away, not on
+    # the owner's next message (the group-0 check ran before this handler).
+    if not context.bot_data.get(_SETUP_DONE_KEY):
+        await _switch_if_complete(update, context, replay=False)
+
+
+async def setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Plain text in setup mode: a /setup answer, else the not-ready reply."""
+    if not await onboarding.on_text(
+        update.message, context.user_data, _onboarding_env(context)
+    ):
+        await setup_not_ready(update, context)
+
+
+async def setup_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A file in setup mode: a base CV PDF for ``/setup``, else the not-ready reply."""
+    if not await onboarding.on_document(
+        update.message, context.user_data, _onboarding_env(context)
+    ):
+        await setup_not_ready(update, context)
+
+
+async def setup_not_ready(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Any other command, text or button in setup mode."""
+    text = t("bot.setup.not_ready", _lang(context))
+    query = update.callback_query
+    if query is not None:
+        await query.answer()
+        await query.message.reply_text(text)
+    elif update.message is not None:
+        await update.message.reply_text(text)
+
+
+def build_setup_app(settings: Settings) -> Application:
+    """The setup-mode app: owner gate → completion check → /help, /start,
+    /setup and its answers (``ob:`` buttons, typed text) → a "not set up yet"
+    reply for everything else."""
+    if settings.profile_dir is None:  # the legacy layout is never setup mode
+        raise ValueError("setup mode needs an explicit profile_dir")
+    app = (
+        Application.builder().token(settings.telegram_token.get_secret_value()).build()
+    )
+    app.bot_data[_OWNER_KEY] = settings.owner_telegram_id
+    app.bot_data[_LANG_KEY] = settings.ui_language
+    app.bot_data[_PROFILE_DIR_KEY] = settings.profile_dir
+    app.bot_data[_SETUP_SETTINGS_KEY] = settings
+    app.bot_data[_CONFIG_PATH_KEY] = Path(LOCAL_TOML)
+    app.add_handler(TypeHandler(Update, gate), group=-1)
+    app.add_handler(TypeHandler(Update, setup_reload_check), group=0)
+    setup_names = next(c for c in COMMANDS if c.name == "configurar")
+    app.add_handler(CommandHandler("start", setup_start), group=1)
+    app.add_handler(CommandHandler("help", setup_help), group=1)
+    app.add_handler(CommandHandler(list(setup_names.names), setup_command), group=1)
+    app.add_handler(
+        CallbackQueryHandler(
+            setup_onboarding_callback, pattern=f"^{onboarding.PREFIX}:"
+        ),
+        group=1,
+    )
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, setup_text), group=1
+    )
+    app.add_handler(MessageHandler(filters.Document.ALL, setup_document), group=1)
+    app.add_handler(MessageHandler(filters.ALL, setup_not_ready), group=1)
+    app.add_handler(CallbackQueryHandler(setup_not_ready), group=1)
+    return app
+
+
+def register_menu(
+    app: Application,
+    lang: Lang,
+    only: tuple[str, ...] | None = None,
+    hidden: tuple[str, ...] = (),
+) -> None:
     """Publish the ``lang`` command menu at startup (chains any existing
-    ``post_init``).
+    ``post_init``); ``only`` narrows it (setup mode), ``hidden`` drops those
+    commands (a legacy install).
 
     Call AFTER ``bridge.register``, which assigns ``app.post_init`` itself.
     A Telegram failure is logged, never fatal.
@@ -1426,12 +1850,34 @@ def register_menu(app: Application, lang: Lang) -> None:
     async def _post_init(application: Application) -> None:
         try:
             await application.bot.set_my_commands(
-                [BotCommand(name, text) for name, text in menu_commands(lang)]
+                [
+                    BotCommand(name, text)
+                    for name, text in menu_commands(lang, only, hidden)
+                ]
             )
         except Exception:  # noqa: BLE001 — the menu is cosmetic
             _LOG.warning("could not set the Telegram command menu", exc_info=True)
         if previous is not None:
             await previous(application)
+
+    app.post_init = _post_init
+
+
+def register_replay(app: Application, updates: list[Update]) -> None:
+    """Queue ``updates`` (kept by the setup app at the switch) for the full
+    app once it is initialised, in order and before any newly polled update
+    (chains any existing ``post_init``). Each is rebuilt on the full app's
+    bot: the setup app's bot is shut down by then."""
+    if not updates:
+        return
+    previous = app.post_init
+
+    async def _post_init(application: Application) -> None:
+        if previous is not None:
+            await previous(application)
+        for update in updates:
+            replayed = Update.de_json(update.to_dict(), application.bot)
+            application.update_queue.put_nowait(replayed)
 
     app.post_init = _post_init
 
@@ -1460,6 +1906,7 @@ _COMMAND_HANDLERS: dict[
     "beacons": beacons_command,
     "beacon": beacon_command,
     "cartabase": cartabase_command,
+    "configurar": setup_command,
 }
 
 
@@ -1471,6 +1918,8 @@ def build_app(settings: Settings, service: JobService) -> Application:
     app.bot_data[_SERVICE_KEY] = service
     app.bot_data[_OWNER_KEY] = settings.owner_telegram_id
     app.bot_data[_LANG_KEY] = settings.ui_language
+    app.bot_data[_PROFILE_DIR_KEY] = settings.profile_dir
+    app.bot_data[_CONFIG_PATH_KEY] = Path(LOCAL_TOML)
     app.bot_data[_LETTER_BASE_KEY] = resolve_profile_paths(
         settings.profile_dir
     ).letter_base
@@ -1483,6 +1932,7 @@ def build_app(settings: Settings, service: JobService) -> Application:
             )
         )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, paste_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
     app.add_handler(CallbackQueryHandler(callback_router))
     return app
 
@@ -1523,7 +1973,26 @@ def main() -> None:
     _LOG.info(describe_llm_setup(settings))
     if settings.owner_telegram_id == 0:
         _LOG.warning("owner_telegram_id is 0 (unset): every update will be ignored")
-    service = JobService.from_settings(settings)
+    service: JobService | None = None
+    replay: list[Update] = []
+    while needs_setup(settings):
+        _LOG.warning(
+            "profile not set up (missing: %s): starting in setup mode",
+            ", ".join(missing_profile_files(settings.profile_dir)),
+        )
+        setup_app = build_setup_app(settings)
+        bridge.register_setup(setup_app, settings)
+        register_menu(setup_app, settings.ui_language, only=SETUP_COMMANDS)
+        # close_loop=False: the full app below runs on the same event loop.
+        setup_app.run_polling(close_loop=False)
+        if not setup_app.bot_data.get(_SETUP_DONE_KEY):
+            return  # stopped (Ctrl-C) while still in setup mode
+        service = setup_app.bot_data.get(_SETUP_SERVICE_KEY)
+        replay = setup_app.bot_data.get(_SETUP_REPLAY_KEY, [])
+        # The guided setup may have switched the UI language.
+        settings = setup_app.bot_data.get(_SETUP_SETTINGS_KEY, settings)
+    if service is None:
+        service = JobService.from_settings(settings)
     app = build_app(settings, service)
     scheduler.register(
         app,
@@ -1532,9 +2001,13 @@ def main() -> None:
         gmail=build_gmail_sync(settings, service),
     )
     bridge.register(app, settings, service)
+    # After the bridge: it overwrites app.post_init.
     register_menu(
-        app, settings.ui_language
-    )  # after the bridge: it overwrites app.post_init
+        app,
+        settings.ui_language,
+        hidden=LEGACY_HIDDEN if settings.profile_dir is None else (),
+    )
+    register_replay(app, replay)  # the updates of the switch, after the menu
     app.run_polling()  # long polling — no public endpoint, TLS, or webhook
 
 

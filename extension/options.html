@@ -30,6 +30,7 @@
       <a href="#beacons" data-i18n="navBeacons">Manual beacons</a>
       <a href="#filters" data-i18n="navFilters">Title filters</a>
       <a href="#connection" data-i18n="navConnection">Schedule and bot</a>
+      <a href="#profile" data-i18n="profileNav">Profile</a>
       <a href="#maintenance" data-i18n="navMaintenance">Maintenance</a>
     </nav>
 
@@ -146,6 +147,20 @@
         </div>
         <p id="bridgeMissingHint" class="hint hint-warn" data-i18n="bridgeMissingHint" hidden>Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost.</p>
         <p id="botInfo" class="hint" hidden></p>
+      </section>
+
+      <section id="profile" class="card panel" aria-labelledby="profileHeading">
+        <div class="panel-head">
+          <div>
+            <h2 id="profileHeading" data-i18n="profileHeading">Profile</h2>
+            <p class="hint" data-i18n="profileIntro">What you answered in /setup in the bot chat: target positions, level, languages, skills, experience, location, salary and offer languages. Each part is saved on its own and the bot uses it at once.</p>
+          </div>
+          <div class="panel-actions">
+            <button id="profileLoadBtn" type="button" class="btn btn-sm" data-i18n="profileLoad">Load from the bot</button>
+          </div>
+        </div>
+        <p id="profileEmpty" class="empty-row muted" data-i18n="profileEmpty">Load your profile from the bot to view and edit it. The bot must be running with the bridge set up above.</p>
+        <div id="profileEditor" class="profile-editor" hidden></div>
       </section>
 
       <section id="maintenance" class="card panel" aria-labelledby="maintenanceHeading">

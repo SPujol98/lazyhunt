@@ -405,7 +405,11 @@ class _Server:
             lock=threading.Lock(),
         )
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), self.handler)
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        threading.Thread(
+            target=self.httpd.serve_forever,
+            kwargs={"poll_interval": bridge.SERVE_POLL_INTERVAL},
+            daemon=True,
+        ).start()
 
     def post(
         self, body: Any, secret: str | None = "s", path: str = "/scan-report"

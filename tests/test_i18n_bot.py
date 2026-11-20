@@ -279,7 +279,11 @@ def test_beacon_health_alert_is_english(tmp_path: Path) -> None:
         lang="en",
     )
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=httpd.serve_forever,
+        kwargs={"poll_interval": bridge.SERVE_POLL_INTERVAL},
+        daemon=True,
+    ).start()
     try:
         httpx.post(
             f"http://127.0.0.1:{httpd.server_address[1]}/scan-report",

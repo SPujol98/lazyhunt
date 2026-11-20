@@ -28,6 +28,8 @@
   &nbsp;·&nbsp;
   <a href="#customization"><b>Customization</b></a>
   &nbsp;·&nbsp;
+  <a href="#troubleshooting"><b>Troubleshooting</b></a>
+  &nbsp;·&nbsp;
   <a href="#privacy-and-security"><b>Privacy</b></a>
   &nbsp;·&nbsp;
   <a href="docs/getting-started.md"><b>Full setup guide</b></a>
@@ -66,13 +68,13 @@ There is no server, no account and no shared backend. Everything the bot knows a
 
 ## Quick start
 
-From a fresh clone to your first scored offer takes about 20 minutes, most of it spent writing your profile. Every step below is also in the longer [getting-started guide](docs/getting-started.md).
+From a fresh clone to your first scored offer takes about 20 minutes. You do not write any profile file by hand: a short terminal wizard sets up the bot, and the bot itself then asks about you in Telegram (about 10 minutes). Every step below is also in the longer [getting-started guide](docs/getting-started.md).
 
 ### What you need
 
 | You need | Why | How to check |
 | --- | --- | --- |
-| **Python 3.12** and **[uv](https://docs.astral.sh/uv/)** | Runs the bot and installs its dependencies | `uv --version` |
+| **[uv](https://docs.astral.sh/uv/)** (it brings **Python 3.12** itself) | Runs the bot and installs its dependencies | `uv --version` |
 | **Chrome or Brave** (other Chromium-based browsers should work, untested) | Hosts the extension; keep it open while scans run | |
 | **A Telegram account** | The bot's only interface; you create your own bot with [@BotFather](https://t.me/BotFather) | |
 | **One AI provider** | Scores offers and writes letters | see below |
@@ -80,7 +82,22 @@ From a fresh clone to your first scored offer takes about 20 minutes, most of it
 | &nbsp;&nbsp;↳ or an Anthropic API key | Pay-per-use API | [docs/providers.md](docs/providers.md) |
 | &nbsp;&nbsp;↳ or any OpenAI-compatible endpoint | A hosted or local model | [docs/providers.md](docs/providers.md) |
 | *Optional:* a Google Cloud project | Read-only Gmail status proposals | [docs/gmail.md](docs/gmail.md) |
-| *Optional:* Microsoft's Calibri font files | CVs render with the bundled, metric-compatible Carlito otherwise | see [limitations](#project-status-and-limitations) |
+
+**Operating systems.** Linux, macOS and Windows. CI runs on Linux, which is also where lazyhunt is developed, so macOS and Windows get less testing. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
+
+**Installing uv.** If `uv --version` fails, install it with the official one-liner ([other methods](https://docs.astral.sh/uv/getting-started/installation/)), then open a new terminal:
+
+```bash
+# Linux and macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+You do not need to install Python yourself: lazyhunt pins Python 3.12 (`>=3.12,<3.13` in `pyproject.toml`), and `uv sync` downloads that version if your system does not have it.
 
 ### 1. Install
 
@@ -98,14 +115,14 @@ uv sync
 uv run cli.py init
 ```
 
-The wizard asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
+The wizard only sets up the bot itself; everything about you comes later, in Telegram. It asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
 
 1. **Prerequisites.** Checks Python, `uv` and that `claude` is installed and logged in (only the yes/no is read). If something is missing it tells you how to fix it and carries on.
 2. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`.
 3. **AI provider.** `claude_code` by default. For `anthropic` or `openai_compatible`, you add the API key to `.env` yourself.
 4. **Telegram.** Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the steps, then paste the token it gives you (the input is hidden). Get your numeric user id from [@userinfobot](https://t.me/userinfobot): the bot will answer **only** that id.
 5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot.
-6. **Profile directory.** Creates `profiles/me` (gitignored), either as a skeleton with placeholders or as a copy of the fictional demo profile so you can try things first.
+6. **Profile directory.** Creates `profiles/me` (gitignored). Choose **empty** (the default and the recommended choice): the bot then starts in *setup mode* and builds the profile with you through `/setup`. The other choices are a skeleton with placeholders to fill in by hand, or a copy of the fictional demo profile to try things first.
 7. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
 
 Where things end up:
@@ -113,40 +130,53 @@ Where things end up:
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET` |
-| `config.local.toml` | Settings: `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir` |
-| `profiles/me/` | Your profile |
+| `config.local.toml` | Settings: `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir`; later `enabled_portals`, the portals you choose in `/setup` |
+| `profiles/me/` | Your profile (empty until `/setup`) |
 
 > [!TIP]
-> Want to look around before writing anything about yourself? Pick the demo profile in the wizard (or set `profile_dir = "profiles/demo"`). It belongs to a fictional person and shows the format of every file.
+> Want to look around before answering anything about yourself? Pick the demo profile in the wizard (or set `profile_dir = "profiles/demo"`). It belongs to a fictional person and shows the format of every file.
 
-### 3. Fill in your profile
-
-Open `profiles/me/README.md` and work through its checklist. The essentials:
-
-- **`claims.json`**: your verified facts. Only these can ever appear in a CV or a letter.
-- **`profile.toml`** and **`preferences.toml`**: who you are and what you are looking for.
-- **Your base CVs**, which lazyhunt adapts per offer.
-
-### 4. Start the bot
+### 3. Start the bot
 
 ```bash
 uv run bot.py
 ```
 
-Open your bot in Telegram and send `/help`. If it answers with the list of commands, the bot side is done.
+Open your bot in Telegram and send `/help`. With an empty profile it answers in **setup mode**: only `/help`, `/start` and `/setup` work until your profile is complete.
+
+The bot runs as long as that terminal stays open. To keep it running in the background, or to start it when you log in (systemd on Linux, launchd on macOS, Task Scheduler on Windows), see [docs/running.md](docs/running.md).
+
+### 4. Answer `/setup` in Telegram
+
+Send `/setup` (`/configurar` in Spanish). The bot asks one question per message, with buttons wherever the answer is a choice; it takes about 10 minutes:
+
+- the bot language, your contact details and the positions you want (the built-in AI and Backend families, or your own job titles);
+- your level, spoken languages, main skills, experience and education;
+- work modes (remote, hybrid, on-site), the city and country you want to work in, and an optional minimum salary;
+- the languages an offer may be written in, and the portals to enable (each one shows its terms warning first);
+- your base CVs as PDF files, one per position and language (you can skip them and add them later).
+
+Every step has **Back** and **Cancel**, and nothing is saved until you press **Confirm** on the summary. Confirm is all or nothing: if anything fails, every file is put back as it was and you can simply press Confirm again. It writes `preferences.toml`, `profile.toml`, a minimal `claims.json` with only what you stated, the judge files and your base CVs, activates the portals you chose, and switches the bot to normal mode on its own. The full list of questions and files: [docs/onboarding.md](docs/onboarding.md).
+
+**Change your profile later** with `/setup <section>` (for example `/setup salary`), which re-asks only that part prefilled with your current answers, or in the extension's **Options › Profile** tab. For advanced, hand-written profiles (projects, cover-letter base, voice sample, role families), see [profiles/README.md](profiles/README.md).
 
 ### 5. Load the extension
 
 1. Open `chrome://extensions` (Brave: `brave://extensions`), turn on **Developer mode**, click **Load unpacked** and select the `extension/` folder of this repository. The extension is not in a store; you load it straight from the code you can read.
 2. Open the extension's **Options › Schedule and bot**. Set the bridge URL to `http://127.0.0.1:8765/bridge` and paste the bridge secret (it is `CVA_BRIDGE_SECRET` in `.env`; the wizard can also show it once at the end).
-3. In **Options › Portals**, enable only the portals whose terms you accept. Each one shows its terms warning and asks the browser for permission to that single site.
-4. In **Options › Searches**, add a search (keywords and location). Each search runs on every portal you tick, and **Suggest from my profile** can propose some for you.
+3. In **Options › Portals**, switch on the same portals you chose in `/setup`. `/setup` activated them on the bot, but a portal is scanned only when it is on in both places. Each switch shows the portal's terms warning and asks the browser for permission to that single site.
+4. In **Options › Searches**, press **Suggest from my profile**. It proposes searches built from your answers: the roles of each position you chose, in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work. Tick the ones you want, or add your own (keywords and location). Each search runs on every portal you tick.
 
-Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Manfred, Adzuna and foorilla.
+Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Manfred, Adzuna and foorilla (*experimental*: its search filter has not been verified on the live site, its cards carry no company name, and it is a worldwide feed, so expect to rely on the location gate and title filters). Status and caveats per portal: [docs/portals.md](docs/portals.md#portal-status).
 
 <p align="center">
-  <img src="assets/readme/screenshots/extension-options.png" alt="The extension's Options page: every portal switch off by default except foorilla, and a search named AI Engineer remote with its keywords, filter profile and portals." width="100%"><br>
+  <img src="assets/readme/screenshots/extension-options.png" alt="The extension's Options page: every portal switch off by default except Adzuna, and a search named AI Engineer Barcelona with its keywords, location, filter profile and portals." width="100%"><br>
   <sub>Options: enable portals, then add searches. (Demo data.)</sub>
+</p>
+
+<p align="center">
+  <img src="assets/readme/screenshots/extension-profile.png" alt="The extension's Options page, Profile section: target positions, level, spoken languages and main skills of a demo profile, each part with its own Save button." width="70%"><br>
+  <sub>Options › Profile: change what you answered in <code>/setup</code> at any time. (Demo data.)</sub>
 </p>
 
 ### 6. Get your first offer
@@ -157,7 +187,7 @@ You do not have to wait for the schedule:
 - paste any offer link into Telegram with `/analyze <url>`.
 
 <p align="center">
-  <img src="assets/readme/screenshots/extension-popup.png" alt="The extension's toolbar popup: status Active, last round 12 minutes ago, three searches being watched with the jobs found on each, and the Check now, Pause and Options buttons." width="300"><br>
+  <img src="assets/readme/screenshots/extension-popup.png" alt="The extension's toolbar popup: status Active, last round 12 minutes ago, three Adzuna searches being watched (AI Engineer Barcelona, Python backend Madrid, LLM engineer remote) with the jobs found on each, and the Check now, Pause and Options buttons." width="300"><br>
   <sub>The toolbar popup: what is being watched and a <b>Check now</b> button. (Demo data.)</sub>
 </p>
 
@@ -170,12 +200,13 @@ A card arrives with the score, the verdict, what you match and what you do not, 
 
 ### 7. Generate a CV and a cover letter
 
-On an offer card:
+On an offer card (button names are shown in English here; with `ui_language = "es"` the bot shows the Spanish name in brackets):
 
-- **📄 Generar CV** builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
-- **✉️ Carta de presentación** keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
-- **✅ Usar esta** saves the letter on the offer and also sends it as a one-page PDF (same font as your CVs, next to the offer's CV), for portals that want the letter as a file; `/basecover` (`/cartabase`) sends the generic letter as a PDF too.
-- **✅ Marcar enviada** (or `/sent 42`) records that you applied.
+- **📄 Generate CV** (*Generar CV*) builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
+- **✉️ Cover letter** (*Carta de presentación*) keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
+- **✅ Use this one** (*Usar esta*) saves the letter on the offer and also sends it as a one-page PDF (same font as your CVs, next to the offer's CV), for portals that want the letter as a file; `/basecover` (`/cartabase`) sends the generic letter as a PDF too.
+- **✅ Mark as sent** (*Marcar enviada*, or `/sent 42`) records that you applied.
+- **🔎 On LinkedIn / On Google / On InfoJobs** (*En …*), the card's last row, open a search for the same offer (title + company) on another site, so you can apply there instead; the offer's own portal is left out (an InfoJobs offer gets Indeed instead).
 
 ### 8. Day to day
 
@@ -198,6 +229,7 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | `/panel` | Offline HTML dashboard with metrics, charts and a filterable table |
 | `/prep <id>` · `/star` | Interview preparation and your STAR story bank |
 | `/pause` · `/resume` | Pause or resume every automatic task |
+| `/setup [section]` | Guided profile setup, or only one part of it (`/setup salary`) |
 
 <details>
 <summary><b>Full command reference</b></summary>
@@ -224,9 +256,10 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | | `/prep <id>` | Pick a stage (HR, technical, final) and get an HTML sheet with topics, gaps, STAR stories, salary and questions. |
 | Other | `/pause` | Stops everything automatic; `/analyze` keeps working. |
 | | `/resume` | Turns back on what was paused. |
+| | `/setup [section]` | Guided setup of your profile, or only one section of it, prefilled with your current answers: [docs/onboarding.md](docs/onboarding.md). |
 | | `/help` (or `/start`) | Commands and buttons. |
 
-Five commands have a Spanish name that still works and is shown when `ui_language = "es"`: `/rescue` is `/rescatar`, `/calibration` is `/calibracion`, `/pause` is `/pausa`, `/resume` is `/reanudar` and `/basecover` is `/cartabase`. Card buttons follow the same language (for example **Generate CV** or **Generar CV**). `/help` explains every one of them.
+Six commands have a Spanish name that still works and is shown when `ui_language = "es"`: `/rescue` is `/rescatar`, `/calibration` is `/calibracion`, `/pause` is `/pausa`, `/resume` is `/reanudar`, `/basecover` is `/cartabase` and `/setup` is `/configurar`. Card buttons follow the same language (for example **Generate CV** or **Generar CV**). `/help` explains every one of them.
 
 The same service is scriptable from the command line:
 
@@ -267,6 +300,25 @@ The full picture, component by component: [docs/architecture.md](docs/architectu
 
 </details>
 
+<details>
+<summary><b>Glossary</b></summary>
+
+<br>
+
+| Term | Meaning |
+| --- | --- |
+| **Beacon** | One watched search on one portal. A search you add in the extension becomes one beacon per portal you tick; `/beacons` lists them with their status. |
+| **Claims** | Your verified facts, in `<profile>/claims.json`. The only source a CV or a letter may use. |
+| **Gates** | Deterministic checks the bot runs before the AI judge: location, language and eligibility. |
+| **Walls** | Requirements you cannot back with a claim. A *hard* wall (or a failed gate) forces a discard; a *soft* wall is shown on the card with a warning. |
+| **Judge** | The AI step that reads an offer against your claims and gives the 0–100 score, the verdict and the rationale. |
+| **Anchors** | A few example offers with the score you would give them, in `<profile>/judge/anchors.md`; they teach the judge your taste. |
+| **Calibration** | Real outcomes you recorded (interviews, rejections) that you approved as examples for the judge; `/calibration` lists them. |
+| **Setup mode** | How the bot starts while the profile is incomplete (after `cli.py init` with an empty profile): only `/help`, `/start` and `/setup` work. Confirming `/setup` switches it to normal mode without a restart. |
+| **Role family** | A kind of job you search for (built in: AI and backend), with its own base CVs, title filter and threshold: [docs/role-families.md](docs/role-families.md). |
+
+</details>
+
 ## Configuration
 
 Settings are layered: code defaults, then `config.toml`, then `config.local.toml` (personal, gitignored), then `CVA_*` environment variables. Secrets are read from the environment only. [`config.example.toml`](config.example.toml) documents the safe public defaults; to configure by hand instead of using the wizard, copy it to `config.local.toml` and `.env.example` to `.env`.
@@ -290,6 +342,7 @@ Everything that describes you or your search is yours to change, and none of it 
 | --- | --- | --- |
 | Searches: keywords, location, portals | Extension › Options › Searches | One search runs on every portal you enabled |
 | Title filters (include / exclude) | Extension › Options › Title filters | A cheap pre-filter before the AI sees an offer; can be turned off per search |
+| Your `/setup` answers: positions, level, languages, skills, experience, location, salary, offer languages | Extension › Options › Profile, or `/setup <section>` in the bot | Saved through the bot with the same checks as `/setup`; hand-written claims are shown but never changed: [docs/onboarding.md](docs/onboarding.md#change-it-later) |
 | How the AI judges offers for you | `<profile>/judge/facts.md`, `anchors.md`, `rubric_persona.md` | Plain text: facts about you, a few example offers with the score you would give, and how to weigh requirements. `cli.py init` creates them with instructions |
 | Your experience (the only source for CVs and letters) | `<profile>/claims.json`, `<profile>/masters/`, your base CVs | A claim that is not here never appears in a CV or a letter |
 | Cover-letter voice and emphasis | `<profile>/voice.md`, `<profile>/preferences.toml` `[cover_letter]` | |
@@ -306,6 +359,89 @@ Everything that describes you or your search is yours to change, and none of it 
 - **Start with one or two portals** and a couple of searches, check the cards for a few days, then widen.
 - **Read every CV and letter before sending it.** lazyhunt drafts; you decide.
 
+## Troubleshooting
+
+<details>
+<summary><b>The bot does not answer in Telegram</b></summary>
+
+<br>
+
+- Check that it is running: the terminal where you started it, or your service (see [docs/running.md](docs/running.md)).
+- `CVA_TELEGRAM_TOKEN` in `.env` must be the token BotFather gave you; after `/revoke`, paste the new one and restart.
+- `owner_telegram_id` in `config.local.toml` must be **your** numeric id from [@userinfobot](https://t.me/userinfobot). The bot ignores everyone else, and while it is `0` it ignores every message (the log says `owner_telegram_id is 0 (unset)`).
+- `uv run cli.py check`, run in the lazyhunt folder, loads your settings and profile without Telegram and runs any due beacons stored in the bot; if a setting is wrong, the error names it.
+
+</details>
+
+<details>
+<summary><b>The bot only answers <code>/setup</code>, or <code>/setup</code> says Confirm failed</b></summary>
+
+<br>
+
+- **Setup mode.** While the profile is incomplete the bot answers only `/help`, `/start` and `/setup`; `/start` tells you to run `/setup`. Finish `/setup` and press **Confirm**: the bot switches to normal mode right away. If it says a file is broken, it names the file and the error: fix that file (or run `/setup` again) and send any message.
+- **"Could not save your answers".** Confirm is all or nothing, so when it fails the reply says nothing was changed: every file is back as it was and your uploaded PDFs are kept. The reply names the file and the cause (a hand-edited `preferences.toml` or `config.local.toml` that no longer loads is the usual one). Fix it and press **Confirm** again; there is no need to answer or upload anything twice.
+- **"Some files could not be put back".** Rare (a full disk or a permission change mid-write). Check the profile folder: each rewritten TOML file keeps its previous version as `<name>.bak`.
+
+</details>
+
+<details>
+<summary><b>The extension does not connect ("Bot not connected")</b></summary>
+
+<br>
+
+- The bot must be running, and the bridge URL in **Options › Schedule and bot** must be exactly `http://127.0.0.1:8765/bridge`.
+- The secret must be the same as `CVA_BRIDGE_SECRET` in `.env`. A wrong secret is answered with HTTP 401 ("The bot rejected the secret." when you press **Suggest from my profile**). Without a secret in `.env` the bot opens no port at all.
+- If another program already uses port 8765, the bot log says `bridge bind failed on 127.0.0.1:8765`. Set another `bridge_port` in `config.local.toml`, restart the bot, and use the same port in the bridge URL.
+
+</details>
+
+<details>
+<summary><b>Offers are not scored: Claude Code is not logged in</b></summary>
+
+<br>
+
+Run `claude auth status`. If it says you are logged out, run `claude auth login` (or start `claude` and type `/login`). If it works in your terminal but not in a background service, the service cannot find `claude`: see the `PATH` notes in [docs/running.md](docs/running.md), or set `claude_code_path` in `config.local.toml` to its full path. Other providers: [docs/providers.md](docs/providers.md).
+
+</details>
+
+<details>
+<summary><b>A scan finds nothing, or a health alert arrives</b></summary>
+
+<br>
+
+- Open the search in your browser by hand: you may have been logged out, shown a captcha, or the search really has no new offers.
+- Title filters and the location gate can drop everything; try a broader search, or turn the title filter off for that search in the extension's Options.
+- A **⚠️ beacon** alert means a beacon that used to return offers now returns none, or its offers arrive without a company. The portal probably changed its pages or blocked you for a while; open it by hand, and see [docs/portals.md](docs/portals.md) for each portal's known limits.
+
+</details>
+
+<details>
+<summary><b>Where the logs are</b></summary>
+
+<br>
+
+- **Bot:** the terminal you started it in, or your service's log: `journalctl --user -u lazyhunt` (Linux), `data/bot.log` (macOS and Windows, with the setups in [docs/running.md](docs/running.md)).
+- **Extension:** `chrome://extensions` › lazyhunt › **service worker** opens its console.
+
+</details>
+
+## Updating
+
+```bash
+cd lazyhunt
+git pull
+uv sync
+```
+
+Then restart the bot ([docs/running.md](docs/running.md) has the command for each setup): database migrations run on their own when it starts. Finally, open `chrome://extensions` and press the reload button on the lazyhunt card, so the browser picks up the new extension code. Your `.env`, `config.local.toml`, `data/` and `profiles/me/` are gitignored, so an update never touches them.
+
+## Uninstalling
+
+1. Stop the bot, and remove its service if you set one up ([docs/running.md](docs/running.md) has the command for each system).
+2. Remove the extension: `chrome://extensions` › lazyhunt › **Remove**.
+3. Keep what you want from the lazyhunt folder (your profile in `profiles/me/`, the database `data/app.db`), then delete the folder.
+4. Revoke what you granted: the Telegram token with BotFather (`/revoke`, or `/deletebot` to delete the bot), the Gmail app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) if you enabled Gmail, and any API key you created for lazyhunt. Claude Code is your own install; lazyhunt stored nothing of it.
+
 ## Privacy and security
 
 - **Local first.** Offers, scores and history live in a local SQLite database. The bridge listens on `127.0.0.1` only and rejects requests without the shared secret.
@@ -319,12 +455,12 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v0.5.0`, see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.1`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.
 - AI scores are not deterministic; the gates and the calibration set keep them consistent, not exact.
-- The setup wizard (`cli.py init`) covers the first configuration; finer settings are edited by hand (see [Configuration](#configuration)).
+- `cli.py init` and `/setup` cover the first configuration and the everyday profile; finer settings (projects, cover-letter base, voice sample, title filters, thresholds) are edited by hand (see [Customization](#customization)). `/setup` does not read your CV yet: claims about projects are added by hand for now.
 - The extension is loaded unpacked from this repository; it is not published in a browser store.
 - The CV engine renders with Carlito (SIL OFL 1.1, metric-compatible with Calibri), shipped in `cvgen/fonts/carlito/`. If you own Microsoft's Calibri, put `calibri.ttf`, `calibrib.ttf`, `calibrii.ttf` and `calibriz.ttf` in `cvgen/fonts/` and set `cv_font = "calibri"`; Calibri is never redistributed.
 

@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import Final, NamedTuple
 
@@ -123,6 +124,31 @@ def deliverable_variants(
     if registry is not None:
         names = [name for name in names if family_allows(registry, name)]
     return frozenset(names)
+
+
+def available_registry(
+    registry: FamilyRegistry, base_dir: Path | None = None
+) -> FamilyRegistry:
+    """``registry`` with each family's languages cut to those with a base CV.
+
+    A family keeps, in declared order, only the languages whose
+    ``<ROLE>_<LANG>`` key is in the manifest, so the bot never offers or
+    infers a language it cannot deliver (e.g. Catalan once ``AI_CA`` is
+    gone). A family with no manifest entry at all, or an unreadable
+    manifest, keeps its declared languages: delivery then reports the
+    missing base CV as before.
+    """
+    try:
+        keys = deliverable_variants(base_dir)
+    except CvgenError:
+        return registry
+    families = []
+    for family in registry.families:
+        languages = tuple(
+            lang for lang in family.languages if variant_key(family.role, lang) in keys
+        )
+        families.append(replace(family, languages=languages) if languages else family)
+    return FamilyRegistry(families, registry.default.id)
 
 
 def verified_base_pdf(variant: str, base_dir: Path | None = None) -> Path:

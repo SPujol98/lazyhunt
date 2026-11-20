@@ -405,14 +405,240 @@
   "previewHeading": {
     "message": "What the next round will open"
   },
+  "profileAddLanguage": {
+    "message": "Add language"
+  },
+  "profileAddSkill": {
+    "message": "Add skill"
+  },
   "profileAi": {
     "message": "AI"
   },
   "profileBackend": {
     "message": "Backend"
   },
+  "profileBackground": {
+    "message": "Languages, skills and experience"
+  },
+  "profileCefrNative": {
+    "message": "Native"
+  },
+  "profileCity": {
+    "message": "City"
+  },
+  "profileClaimsHeading": {
+    "message": "Claims from your answers"
+  },
+  "profileClaimsIntro": {
+    "message": "Generated from the section above (ids starting with setup-): edit them there."
+  },
+  "profileClaimsNone": {
+    "message": "None yet."
+  },
+  "profileCompany": {
+    "message": "Company (optional)"
+  },
+  "profileCountry": {
+    "message": "Country"
+  },
+  "profileCurrency": {
+    "message": "Currency"
+  },
+  "profileEducation": {
+    "message": "Highest education (optional)"
+  },
+  "profileEmpty": {
+    "message": "Load your profile from the bot to view and edit it. The bot must be running with the bridge set up above."
+  },
+  "profileErrChoice": {
+    "message": "Pick one of the offered values."
+  },
+  "profileErrCompany": {
+    "message": "A company needs a role."
+  },
+  "profileErrCurrency": {
+    "message": "A 3-letter currency code, e.g. EUR."
+  },
+  "profileErrLanguages": {
+    "message": "Up to 5 other languages of at most 40 characters."
+  },
+  "profileErrPickOne": {
+    "message": "Pick at least one."
+  },
+  "profileErrRequired": {
+    "message": "Required."
+  },
+  "profileErrSalary": {
+    "message": "A whole yearly amount, e.g. 30000 or 30k."
+  },
+  "profileErrSkills": {
+    "message": "From 1 to 20 skills of at most 50 characters, without commas."
+  },
+  "profileErrText": {
+    "message": "From 1 to 100 characters, on one line."
+  },
+  "profileErrTitles": {
+    "message": "Up to 10 titles of at most 100 characters, one per line."
+  },
+  "profileErrType": {
+    "message": "Wrong value."
+  },
+  "profileErrUnknown": {
+    "message": "The bot does not know this field."
+  },
+  "profileExperience": {
+    "message": "Experience"
+  },
+  "profileFixFields": {
+    "message": "Fix the marked fields."
+  },
+  "profileHeading": {
+    "message": "Profile"
+  },
+  "profileIntro": {
+    "message": "What you answered in /setup in the bot chat: target positions, level, languages, skills, experience, location, salary and offer languages. Each part is saved on its own and the bot uses it at once."
+  },
   "profileLabel": {
     "message": "Filter profile"
+  },
+  "profileLangCa": {
+    "message": "Catalan"
+  },
+  "profileLangDe": {
+    "message": "German"
+  },
+  "profileLangEn": {
+    "message": "English"
+  },
+  "profileLangEs": {
+    "message": "Spanish"
+  },
+  "profileLangFr": {
+    "message": "French"
+  },
+  "profileLangIt": {
+    "message": "Italian"
+  },
+  "profileLangPt": {
+    "message": "Portuguese"
+  },
+  "profileLanguageOther": {
+    "message": "Other…"
+  },
+  "profileLanguageTyped": {
+    "message": "Language"
+  },
+  "profileLevel": {
+    "message": "Level"
+  },
+  "profileLevelJunior": {
+    "message": "Junior"
+  },
+  "profileLevelMid": {
+    "message": "Mid"
+  },
+  "profileLevelSenior": {
+    "message": "Senior"
+  },
+  "profileLoad": {
+    "message": "Load from the bot"
+  },
+  "profileLocation": {
+    "message": "Work mode and location"
+  },
+  "profileModeHybrid": {
+    "message": "Hybrid"
+  },
+  "profileModeOnsite": {
+    "message": "On-site"
+  },
+  "profileModeRemote": {
+    "message": "Remote"
+  },
+  "profileNav": {
+    "message": "Profile"
+  },
+  "profileNotReady": {
+    "message": "The bot has no editable profile yet: finish /setup in the bot chat first."
+  },
+  "profileNotStated": {
+    "message": "Not stated"
+  },
+  "profileOfferLangs": {
+    "message": "Accepted offer languages"
+  },
+  "profileOtherClaims": {
+    "message": "Hand-written claims (read-only)"
+  },
+  "profileOtherClaimsHint": {
+    "message": "The extension never changes these: edit claims.json in your profile folder by hand."
+  },
+  "profileOwnTitles": {
+    "message": "Other job titles (one per line): a new family"
+  },
+  "profilePositions": {
+    "message": "Target positions"
+  },
+  "profileRole": {
+    "message": "Last role (optional)"
+  },
+  "profileRollbackFailed": {
+    "message": "Not saved ($p1$) and undoing it failed: check your profile folder.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "profileSalary": {
+    "message": "Minimum salary"
+  },
+  "profileSalaryAmount": {
+    "message": "Gross per year (empty: no minimum)"
+  },
+  "profileSaveFailed": {
+    "message": "Not saved ($p1$). Nothing was changed.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "profileSaveSection": {
+    "message": "Save"
+  },
+  "profileSaved": {
+    "message": "Saved. The bot uses it from now on."
+  },
+  "profileSavedNotReloaded": {
+    "message": "Saved, but the bot could not reload it: check the bot chat."
+  },
+  "profileSkills": {
+    "message": "Main skills"
+  },
+  "profileSpokenLanguages": {
+    "message": "Languages you speak"
+  },
+  "profileYears": {
+    "message": "Years"
+  },
+  "profileYears0": {
+    "message": "No experience yet"
+  },
+  "profileYears10plus": {
+    "message": "More than 10 years"
+  },
+  "profileYears1to2": {
+    "message": "1-2 years"
+  },
+  "profileYears3to5": {
+    "message": "3-5 years"
+  },
+  "profileYears6to10": {
+    "message": "6-10 years"
+  },
+  "profileYearsLt1": {
+    "message": "Less than 1 year"
   },
   "remove": {
     "message": "Remove"

@@ -25,6 +25,7 @@ from cva.config import Settings
 from cva.notifier import DiscardedOffer, canonical_job_url
 from tests.demo import DEMO_CLAIMS
 from tests.fake_portal import FAKE_URL, register_fake_portal
+from tests.service_stub import service_stub
 
 SECRET = "s3cret-bridge"
 OWNER_ID = 123456
@@ -119,9 +120,7 @@ def started(workdir: Any, clean_settings: Callable[..., Settings]):
     """Registered bridge with post_init run on a live loop (D2 rehearsal)."""
     bot = _RecordingBot()
     app = SimpleNamespace(post_init=None, bot=bot, bot_data={})
-    handle = bridge.register(
-        app, clean_settings(), SimpleNamespace(threshold=THRESHOLD)
-    )
+    handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
     assert handle is not None
     loop = asyncio.new_event_loop()
     thread = threading.Thread(
@@ -205,7 +204,7 @@ def test_suggested_searches_profile_without_title_filters_sends_none(
     handle = bridge.register(
         app,
         clean_settings(profile_dir=profile),
-        SimpleNamespace(threshold=THRESHOLD),
+        service_stub(THRESHOLD, profile),
     )
     assert handle is not None
     try:
@@ -214,6 +213,27 @@ def test_suggested_searches_profile_without_title_filters_sends_none(
     finally:
         handle.stop()
     assert set(body) == {"searches"}
+
+
+def test_stop_returns_promptly_after_serving(
+    workdir: Any, clean_settings: Callable[..., Settings]
+) -> None:
+    """Shutdown does not wait out a long ``serve_forever`` poll: five
+    start/serve/stop cycles finish well under the stdlib 0.5 s poll default
+    (expected ~1.25 s with it), so bot restarts and tests stay fast."""
+    import time
+
+    elapsed = 0.0
+    for _ in range(5):
+        app = SimpleNamespace(post_init=None, bot=_RecordingBot(), bot_data={})
+        handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
+        assert handle is not None
+        url = f"http://127.0.0.1:{handle.port}/searches/suggested"
+        assert httpx.get(url, headers=_secret_header()).status_code == 200
+        started = time.perf_counter()
+        handle.stop()
+        elapsed += time.perf_counter() - started
+    assert elapsed < 0.5
 
 
 def test_suggested_searches_serve_the_profile_preferences(
@@ -235,7 +255,7 @@ def test_suggested_searches_serve_the_profile_preferences(
     handle = bridge.register(
         app,
         clean_settings(profile_dir=profile),
-        SimpleNamespace(threshold=THRESHOLD),
+        service_stub(THRESHOLD, profile),
     )
     assert handle is not None
     try:
@@ -621,9 +641,7 @@ def test_handler_exception_is_500_and_server_survives(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     app = SimpleNamespace(post_init=None, bot=_ExplodingBot(), bot_data={})
-    handle = bridge.register(
-        app, clean_settings(), SimpleNamespace(threshold=THRESHOLD)
-    )
+    handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
     assert handle is not None
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
@@ -651,9 +669,7 @@ def test_secret_unset_disables_endpoint(
     monkeypatch.delenv("CVA_BRIDGE_SECRET")
     app = SimpleNamespace(post_init=None, bot=_RecordingBot())
     with caplog.at_level(logging.WARNING, logger="cva.bridge"):
-        handle = bridge.register(
-            app, clean_settings(), SimpleNamespace(threshold=THRESHOLD)
-        )
+        handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
     assert handle is None
     assert app.post_init is None  # wiring untouched
     assert "CVA_BRIDGE_SECRET" in caplog.text
@@ -668,9 +684,7 @@ def test_owner_unset_disables_endpoint(
     monkeypatch.setenv("CVA_OWNER_TELEGRAM_ID", "0")
     app = SimpleNamespace(post_init=None, bot=_RecordingBot())
     with caplog.at_level(logging.WARNING, logger="cva.bridge"):
-        handle = bridge.register(
-            app, clean_settings(), SimpleNamespace(threshold=THRESHOLD)
-        )
+        handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
     assert handle is None
 
 
@@ -690,7 +704,7 @@ def test_bind_failure_disables_with_warning(
             handle = bridge.register(
                 SimpleNamespace(post_init=None, bot=_RecordingBot()),
                 clean_settings(),
-                SimpleNamespace(threshold=THRESHOLD),
+                service_stub(THRESHOLD),
             )
         assert handle is None  # bot continues, no port bound
         assert "bind failed" in caplog.text
@@ -710,9 +724,7 @@ def test_bridge_port_honored(
     monkeypatch.setenv("CVA_BRIDGE_PORT", str(chosen))
 
     app = SimpleNamespace(post_init=None, bot=_RecordingBot(), bot_data={})
-    handle = bridge.register(
-        app, clean_settings(), SimpleNamespace(threshold=THRESHOLD)
-    )
+    handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
     assert handle is not None
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
@@ -1153,6 +1165,36 @@ def test_shutdown_defers_in_flight_and_queued_rows(paced_factory: Any) -> None:
         row = ns.repo.get_offer(offer_id)
         assert row.next_analyze_at is not None  # deferred → sweep re-drives
         assert row.analyze_attempts == 0  # shutdown is NOT a failure
+
+
+def test_post_shutdown_hook_takes_the_application_and_chains_the_previous(
+    workdir: Any, clean_settings: Callable[..., Settings]
+) -> None:
+    """PTB calls ``post_shutdown(application)``: the bridge hook accepts it,
+    runs its own deferral first, then the hook registered before it (the
+    scheduler's tracker flush) — it no longer replaces that hook."""
+    order: list[str] = []
+
+    async def previous(application: Any) -> None:
+        order.append("previous")
+
+    app = SimpleNamespace(
+        post_init=None, post_shutdown=previous, bot=_RecordingBot(), bot_data={}
+    )
+    handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
+    assert handle is not None
+    real_shutdown = handle.shutdown
+
+    async def recording_shutdown() -> None:
+        order.append("bridge")
+        await real_shutdown()
+
+    handle.shutdown = recording_shutdown  # type: ignore[method-assign]
+    try:
+        asyncio.run(app.post_shutdown(app))
+    finally:
+        handle.stop()
+    assert order == ["bridge", "previous"]
 
 
 def test_enqueue_landing_after_shutdown_is_deferred_not_lost(
@@ -1753,9 +1795,7 @@ def _register(
     workdir: Any, clean_settings: Callable[..., Settings], **over: Any
 ) -> Any:
     app = SimpleNamespace(post_init=None, bot=_RecordingBot(), bot_data={})
-    handle = bridge.register(
-        app, clean_settings(**over), SimpleNamespace(threshold=THRESHOLD)
-    )
+    handle = bridge.register(app, clean_settings(**over), service_stub(THRESHOLD))
     assert handle is not None
     return handle
 
@@ -1807,3 +1847,25 @@ def test_suggested_searches_only_use_enabled_portals(
         handle.stop()
     assert body["searches"]
     assert all(s["portals"] == ["infojobs"] for s in body["searches"])
+
+
+def test_post_shutdown_hook_accepts_the_application_argument(
+    workdir: Any, clean_settings: Callable[..., Settings]
+) -> None:
+    """PTB calls ``post_shutdown(application)``: the registered hook must take
+    the app argument (it used to raise TypeError on every shutdown)."""
+    app = SimpleNamespace(
+        post_init=None, post_shutdown=None, bot=_RecordingBot(), bot_data={}
+    )
+    handle = bridge.register(app, clean_settings(), service_stub(THRESHOLD))
+    assert handle is not None
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        asyncio.run_coroutine_threadsafe(app.post_init(app), loop).result(timeout=5)
+        asyncio.run_coroutine_threadsafe(app.post_shutdown(app), loop).result(timeout=5)
+        assert handle._worker is None and handle._closing is True
+    finally:
+        handle.stop()
+        loop.call_soon_threadsafe(loop.stop)

@@ -129,6 +129,12 @@ EN: Final[dict[str, str]] = {
     "commands.cmd.reanudar.menu": "Resume the automatic work after /pause",
     "commands.cmd.reanudar.explanation": "Turns back on what was paused.",
     "commands.cmd.reanudar.example": "/resume",
+    "commands.cmd.configurar.usage": "/setup [section]",
+    "commands.cmd.configurar.menu": "Set up your profile (guided)",
+    "commands.cmd.configurar.explanation": (
+        "Guided profile setup, or only one section (contact, salary, cvs...)."
+    ),
+    "commands.cmd.configurar.example": "/setup salary",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Show this help",
     "commands.cmd.help.explanation": "Commands and buttons (also /start).",
@@ -335,6 +341,12 @@ ES: Final[dict[str, str]] = {
     "commands.cmd.reanudar.menu": "Reanuda lo automático tras /pausa",
     "commands.cmd.reanudar.explanation": "Vuelve a activar lo pausado.",
     "commands.cmd.reanudar.example": "/reanudar",
+    "commands.cmd.configurar.usage": "/configurar [sección]",
+    "commands.cmd.configurar.menu": "Configura tu perfil (guiado)",
+    "commands.cmd.configurar.explanation": (
+        "Configuración guiada del perfil, o solo una sección (salario, cvs...)."
+    ),
+    "commands.cmd.configurar.example": "/configurar salario",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Muestra esta ayuda",
     "commands.cmd.help.explanation": "Comandos y botones (también /start).",

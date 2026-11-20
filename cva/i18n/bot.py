@@ -34,6 +34,25 @@ EN: Final[dict[str, str]] = {
     "bot.star_deleted": "🗑 «{title}» deleted.",
     "bot.star_unchanged": "No changes to {field}.",
     "bot.unknown_action": "Unknown action.",
+    # --- setup mode (onboarding-v2 T1): the profile is not set up yet --------
+    "bot.setup.not_set_up": (
+        "👋 Your profile is not set up yet. Send {setup} to set it up: a few "
+        "questions with buttons, and nothing is saved until you confirm. Until "
+        "then only {setup} and /help work."
+    ),
+    "bot.setup.help": (
+        "Setup mode: your profile is not set up yet.\n"
+        "{setup} — set up your profile\n"
+        "/help — this message"
+    ),
+    "bot.setup.not_ready": "Your profile is not set up yet: send /setup first.",
+    "bot.setup.ready": "✅ Your profile is complete. Switching to normal mode…",
+    "bot.setup.broken": (
+        "⚠️ Your profile has every file, but one could not be loaded:\n"
+        "{error}\n"
+        "The bot stays in setup mode: fix that file and send any message to "
+        "try again."
+    ),
     "bot.skip_nothing": "There is nothing to skip.",
     "bot.skip_note": "OK, no note.",
     "bot.not_sent_yet": "Not sent yet: mark it with /sent {id} first.",
@@ -235,6 +254,25 @@ ES: Final[dict[str, str]] = {
     "bot.star_deleted": "🗑 «{title}» borrada.",
     "bot.star_unchanged": "Sin cambios en {field}.",
     "bot.unknown_action": "Acción no reconocida.",
+    # --- setup mode (onboarding-v2 T1): the profile is not set up yet --------
+    "bot.setup.not_set_up": (
+        "👋 Tu perfil aún no está configurado. Envía {setup} para configurarlo: "
+        "unas preguntas con botones, y no se guarda nada hasta que confirmes. "
+        "Hasta entonces solo funcionan {setup} y /help."
+    ),
+    "bot.setup.help": (
+        "Modo configuración: tu perfil aún no está configurado.\n"
+        "{setup} — configura tu perfil\n"
+        "/help — este mensaje"
+    ),
+    "bot.setup.not_ready": "Tu perfil aún no está configurado: envía /configurar primero.",
+    "bot.setup.ready": "✅ Tu perfil está completo. Paso al modo normal…",
+    "bot.setup.broken": (
+        "⚠️ Tu perfil tiene todos los archivos, pero uno no se pudo cargar:\n"
+        "{error}\n"
+        "El bot sigue en modo configuración: corrige ese archivo y envía "
+        "cualquier mensaje para reintentar."
+    ),
     "bot.skip_nothing": "No hay nada que saltar.",
     "bot.skip_note": "Vale, sin nota.",
     "bot.not_sent_yet": "Todavía no está enviada: márcala con /sent {id} primero.",

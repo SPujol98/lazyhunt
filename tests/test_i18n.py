@@ -219,7 +219,7 @@ def test_english_toggles_name_three_families() -> None:
 @pytest.mark.parametrize("lang", LANGS)
 def test_help_names_every_command_of_its_language(lang: Lang) -> None:
     text = help_text(lang=lang)
-    for command in COMMANDS:
+    for command in (c for c in COMMANDS if c.listed):
         assert f"/{command.name_for(lang)}" in text, command.name
         for alias in command.aliases:
             assert f"/{alias}" in text, alias

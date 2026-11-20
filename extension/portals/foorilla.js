@@ -76,6 +76,9 @@ function buildSearchUrl({ keywords = '', extra = {} } = {}) {
 
 export default {
   id: 'foorilla',
+  // The cards have no company (offer page only): scan health must not
+  // read that as a broken parser.
+  cardsCarryCompany: false,
   label: 'foorilla',
   linkHost: 'foorilla.com',
   settleMs: 3000,

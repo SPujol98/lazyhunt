@@ -19,6 +19,8 @@
 //   detailArgs       optional array of arguments passed to extractDetail when
 //                    injected (the shared extractor takes a description selector)
 //   buildSearchUrl   (portal-adapters T2) search URL from {keywords, location, extra}
+//   cardsCarryCompany optional, default true; false when the result cards never
+//                    show the company (scan health then ignores empty companies)
 //
 // Owner-only portals (never in the public release) are listed in
 // owner_portals.js and appended after the public ones.

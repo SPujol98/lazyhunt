@@ -157,6 +157,46 @@ class FakeMessage:
         self.documents.append(filename or "")
 
 
+class FakeTgFile:
+    """``telegram.File``: ``download_to_drive`` writes the document's bytes."""
+
+    def __init__(self, data: bytes, error: Exception | None = None) -> None:
+        self._data = data
+        self._error = error
+        self.downloads: list[Path] = []
+
+    async def download_to_drive(self, custom_path: Path | str | None = None) -> Path:
+        if self._error is not None:
+            raise self._error
+        assert custom_path is not None
+        path = Path(custom_path)
+        path.write_bytes(self._data)
+        self.downloads.append(path)
+        return path
+
+
+class FakeDocument:
+    """``telegram.Document`` sent by the user (``message.document``)."""
+
+    def __init__(
+        self,
+        data: bytes,
+        file_name: str | None = "cv.pdf",
+        mime_type: str | None = "application/pdf",
+        file_size: int | None = -1,  # -1: the real size of ``data``
+        error: Exception | None = None,
+    ) -> None:
+        self.file_name = file_name
+        self.mime_type = mime_type
+        self.file_size = len(data) if file_size == -1 else file_size
+        self.file = FakeTgFile(data, error)
+        self.get_file_calls = 0
+
+    async def get_file(self) -> FakeTgFile:
+        self.get_file_calls += 1
+        return self.file
+
+
 class FakeQuery:
     def __init__(self, data: str) -> None:
         self.data = data
@@ -951,7 +991,9 @@ def test_configure_logging_silences_httpx_request_lines() -> None:
 
 # --- apply-instruction warnings on cards ----------------------------------------
 
-_EMAIL_APPLY_TEXT = PASTE_TEXT + " Si te encaja, remite tu CV a talent@acme-data.example."
+_EMAIL_APPLY_TEXT = (
+    PASTE_TEXT + " Si te encaja, remite tu CV a talent@acme-data.example."
+)
 
 
 def test_cv_callback_warns_about_extra_application_steps(tmp_path: Path) -> None:
@@ -1065,3 +1107,36 @@ def test_analyze_still_works_while_paused(tmp_path: Path) -> None:
     )
     assert llm.calls == 1
     assert "puntuación" in message.replies[0]
+
+
+# --- onboarding-v2: /setup is also wired in the full app ------------------------
+
+
+def test_full_app_registers_setup_to_start_the_guided_setup(
+    tmp_path: Path, clean_settings: Callable[..., Settings]
+) -> None:
+    from telegram.ext import CommandHandler
+
+    from cva.i18n import t
+
+    service, _llm = make_service(
+        tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))
+    )
+    app = bot.build_app(
+        clean_settings(ui_language="en", profile_dir=str(tmp_path / "me")), service
+    )
+    callbacks = {
+        name: h.callback
+        for group in app.handlers.values()
+        for h in group
+        if isinstance(h, CommandHandler)
+        for name in h.commands
+    }
+    assert callbacks["setup"] is callbacks["configurar"] is bot.setup_command
+    message = FakeMessage("/setup")
+    context = FakeContext(service)
+    context.bot_data.update(app.bot_data)
+    asyncio.run(callbacks["setup"](FakeUpdate(message=message), context))
+    assert t("onboarding.q.lang", "en") in message.replies[0]
+    # /start keeps being /help in the full app.
+    assert callbacks["start"] is bot.start_help

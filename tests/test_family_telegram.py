@@ -37,6 +37,7 @@ from cva.notifier import (
 )
 from cva.profile_prefs import ProfileError, load_preferences
 from tests.demo import DEMO_CLAIMS
+from tests.service_stub import service_stub
 from tests.test_bot import FakeContext, FakeMessage, FakeQuery, FakeUpdate
 from tests.test_bridge import (
     OWNER_ID,
@@ -62,9 +63,7 @@ REGISTRY = FamilyRegistry((BUILTIN_AI, FRONTEND), "ai")
 
 
 def _buttons(markup: Any) -> list[tuple[str, str]]:
-    return [
-        (b.text, b.callback_data) for row in markup.inline_keyboard for b in row
-    ]
+    return [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
 
 
 def _data(markup: Any) -> list[str]:
@@ -107,7 +106,9 @@ def test_rehacer_row_of_a_custom_family() -> None:
     ("role", "expected"),
     [("DS", "cv:7:AI:es"), ("XYZ", "cv:7:AI:es"), ("ai", "cv:7:AI:es")],
 )
-def test_legacy_and_unknown_roles_degrade_to_the_default(role: str, expected: str) -> None:
+def test_legacy_and_unknown_roles_degrade_to_the_default(
+    role: str, expected: str
+) -> None:
     assert expected in _data(cv_keyboard(7, role=role, families=REGISTRY))
     assert next_role(role, families=REGISTRY) in {"AI", "FRONTEND"}
 
@@ -122,9 +123,13 @@ def test_unknown_rehacer_role_degrades_to_the_default_family() -> None:
 
 def test_status_tag_names_non_default_families() -> None:
     row = {"id": 1, "estado": "nueva", "match": 70, "posicion": "Dev"}
-    line = offer_status_line(SimpleNamespace(**row, perfil="frontend"), families=REGISTRY)
+    line = offer_status_line(
+        SimpleNamespace(**row, perfil="frontend"), families=REGISTRY
+    )
     assert line.endswith("Dev [frontend]")
-    assert "[" not in offer_status_line(SimpleNamespace(**row, perfil="ai"), families=REGISTRY)
+    assert "[" not in offer_status_line(
+        SimpleNamespace(**row, perfil="ai"), families=REGISTRY
+    )
 
 
 # Built-in cards and buttons stay byte-identical (S4).
@@ -132,22 +137,38 @@ def test_status_tag_names_non_default_families() -> None:
     ("role", "lang", "expected"),
     [
         ("AI", "ca", ["cv:3:AI:ca", "lang:3:AI:ca", "variant:3:AI:ca"]),
-        ("BACKEND", "ca", ["cv:3:BACKEND:es", "lang:3:BACKEND:es", "variant:3:BACKEND:es"]),
+        (
+            "BACKEND",
+            "ca",
+            ["cv:3:BACKEND:es", "lang:3:BACKEND:es", "variant:3:BACKEND:es"],
+        ),
         ("DS", "en", ["cv:3:AI:en", "lang:3:AI:en", "variant:3:AI:en"]),
     ],
 )
-def test_builtin_card_keyboards_unchanged(role: str, lang: str, expected: list[str]) -> None:
+def test_builtin_card_keyboards_unchanged(
+    role: str, lang: str, expected: list[str]
+) -> None:
     buttons = _buttons(cv_keyboard(3, role=role, lang=lang))
     assert [d for _, d in buttons[:3]] == expected
-    assert buttons[2][0] == ("Variante: Backend" if role == "BACKEND" else "Variante: AI")
-    assert _buttons(cv_keyboard(3, role=role, lang=lang, families=BUILTIN_REGISTRY)) == buttons
+    assert buttons[2][0] == (
+        "Variante: Backend" if role == "BACKEND" else "Variante: AI"
+    )
+    assert (
+        _buttons(cv_keyboard(3, role=role, lang=lang, families=BUILTIN_REGISTRY))
+        == buttons
+    )
 
 
 def test_builtin_cycles_unchanged() -> None:
     assert [next_role(r) for r in ("AI", "BACKEND", "DS", "XYZ")] == [
         "BACKEND", "AI", "BACKEND", "AI",
     ]  # fmt: skip
-    assert [next_lang("AI", x) for x in ("es", "en", "ca", "zz")] == ["en", "ca", "es", "es"]
+    assert [next_lang("AI", x) for x in ("es", "en", "ca", "zz")] == [
+        "en",
+        "ca",
+        "es",
+        "es",
+    ]
     assert [next_lang("BACKEND", x) for x in ("es", "en", "ca")] == ["en", "es", "es"]
 
 
@@ -185,7 +206,9 @@ def test_help_lists_the_profile_families() -> None:
     assert "/cv <id> [AI|FRONTEND] [es|en|ca]" in text
     assert "Ej.: /cv 42 FRONTEND es" in text
     assert "Ej.: /keywords frontend" in text
-    assert "Variante: AI/Frontend — alterna el perfil del CV entre AI y Frontend." in text
+    assert (
+        "Variante: AI/Frontend — alterna el perfil del CV entre AI y Frontend." in text
+    )
     assert "Idioma: ES/EN/CA — cambia el idioma del CV (Frontend solo EN/ES)." in text
 
 
@@ -367,7 +390,7 @@ def test_bridge_http_stores_the_declared_family(
     (profile / "preferences.toml").write_text(FRONTEND_PREFS, encoding="utf-8")
     app = SimpleNamespace(post_init=None, bot=_RecordingBot(), bot_data={})
     handle = bridge.register(
-        app, clean_settings(profile_dir=profile), SimpleNamespace(threshold=THRESHOLD)
+        app, clean_settings(profile_dir=profile), service_stub(THRESHOLD, profile)
     )
     assert handle is not None
     loop = asyncio.new_event_loop()
@@ -375,8 +398,15 @@ def test_bridge_http_stores_the_declared_family(
     thread.start()
     try:
         asyncio.run_coroutine_threadsafe(app.post_init(app), loop).result(timeout=5)
-        second = {**_job("Nurse"), "url": "https://www.linkedin.com/jobs/view/4200000002/"}
-        payload = {"beacon": "b", "profile": "frontend", "jobs": [_job("Web Developer"), second]}
+        second = {
+            **_job("Nurse"),
+            "url": "https://www.linkedin.com/jobs/view/4200000002/",
+        }
+        payload = {
+            "beacon": "b",
+            "profile": "frontend",
+            "jobs": [_job("Web Developer"), second],
+        }
         resp = _post(handle.port, json=payload, headers=_secret_header())
     finally:
         asyncio.run_coroutine_threadsafe(handle.shutdown(), loop).result(timeout=5)

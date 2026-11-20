@@ -1015,7 +1015,12 @@ def _assert_no_cv_card(notify: Any) -> None:
 
     text, keyboard = notify.calls[0]
     assert text.count(no_cv_line("Tecnoempleo")) == 1
-    kinds = [b.callback_data.split(":")[0] for r in keyboard.inline_keyboard for b in r]
+    kinds = [
+        b.callback_data.split(":")[0]
+        for r in keyboard.inline_keyboard
+        for b in r
+        if b.callback_data  # the "Search elsewhere" row holds URL buttons
+    ]
     assert not {"cv", "lang", "variant"} & set(kinds)
     assert all("Generar CV" not in b.text for r in keyboard.inline_keyboard for b in r)
 

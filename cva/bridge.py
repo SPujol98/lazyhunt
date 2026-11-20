@@ -38,7 +38,7 @@ import json
 import logging
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,14 +68,18 @@ from cva.notifier import (
     round_summary_message,
     with_also_on,
 )
+from cva.onboarding import profile_edit
+from cva.onboarding.commit import ConfirmFailed
+from cva.profile_identity import ProfileError
 from cva.profile_paths import resolve_profile_paths
-from cva.profile_prefs import ProfilePrefs, TitleFilterPrefs, load_preferences
+from cva.profile_prefs import DEFAULT_PREFS, ProfilePrefs, TitleFilterPrefs
 from cva.service import (
     DEFAULT_DB_PATH,
     BridgeJobOutcome,
     BridgeZone,
     display_reason,
 )
+from cva.setup_mode import describe_load_error
 from cva.suggest import suggested_searches_payload
 from cva.title_filter import TitleFilter
 from cva.tracker import OfferInput, OfferRepository, RepositoryError, duplicate_note
@@ -86,6 +90,11 @@ if TYPE_CHECKING:
 
 _LOG = logging.getLogger(__name__)
 
+# How often ``serve_forever`` checks for a shutdown request. The stdlib default
+# (0.5 s) makes every ``stop()`` wait up to half a second; a short poll keeps
+# shutdown prompt for the cost of a cheap idle ``select`` wake-up.
+SERVE_POLL_INTERVAL: Final = 0.05
+
 BRIDGE_PATH: Final[str] = "/bridge"
 # Per-scan health report from the extension (offer-gates-and-health T5): a
 # separate endpoint because /bridge only fires for scans that found NEW jobs,
@@ -95,11 +104,25 @@ SCAN_REPORT_PATH: Final[str] = "/scan-report"
 SUGGESTED_SEARCHES_PATH: Final[str] = "/searches/suggested"
 # Pause + enabled portals for the extension to sync from (GET only).
 CONFIG_PATH: Final[str] = "/config"
+# The profile the extension's Options page views and edits (onboarding-v2
+# T10): GET answers its values, POST writes one section (cva.onboarding.profile_edit).
+PROFILE_PATH: Final[str] = "/profile"
 SECRET_HEADER: Final[str] = "X-CVA-Bridge-Secret"
 MAX_BODY_BYTES: Final[int] = 256 * 1024
 MAX_DRAIN_BYTES: Final[int] = 16 * 1024 * 1024
 _DRAIN_CHUNK_BYTES: Final[int] = 64 * 1024
 BOT_DATA_KEY: Final[str] = "bridge"
+NO_PROFILE_DIR_ERROR: Final[str] = (
+    "profile editing needs profile_dir in config.local.toml"
+)
+# ``Origin`` values a /profile request may carry: the extension's own pages.
+# A web page cannot send the secret header without a CORS preflight, which the
+# bridge never accepts; refusing any other origin is a second fence.
+_EXTENSION_ORIGINS: Final[tuple[str, ...]] = (
+    "chrome-extension://",
+    "moz-extension://",
+    "safari-web-extension://",
+)
 
 
 # Round-summary reason of a walled offer that came without one.
@@ -690,22 +713,46 @@ def _make_handler(
     round_summary: bool = True,
     editor: Any = None,
     claims_path: Path | None = None,
-    preferences: ProfilePrefs | None = None,
+    preferences: Callable[[], ProfilePrefs] | None = None,
     is_paused: Callable[[], bool] = lambda: False,
-    enabled_portals: frozenset[str] | None = None,
+    enabled_portals: frozenset[str] | Callable[[], frozenset[str] | None] | None = None,
     lang: Lang = LEGACY_LANG,
+    profile_dir: Path | None = None,
+    reload_preferences: Callable[[], object] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
-    """Handler class closed over the bridge collaborators (no globals)."""
+    """Handler class closed over the bridge collaborators (no globals).
+
+    ``preferences`` returns the service's live ``ProfilePrefs``; it is called on
+    every request so a reloaded ``preferences.toml`` is served at once
+    (onboarding-v2 T2). ``None`` serves the engine defaults.
+
+    ``GET``/``POST /profile`` (onboarding-v2 T10) view and edit the profile in
+    ``profile_dir`` (:mod:`cva.onboarding.profile_edit`); a POST then calls
+    ``reload_preferences``. Without ``profile_dir`` (the legacy layout) both
+    answer 503.
+
+    ``enabled_portals`` may be a callable read on every request (the
+    :class:`_Bridge` passes one, so a ``/setup`` that writes
+    ``enabled_portals`` is served at once).
+    """
     claims = AlertClaims(repo)  # health alerts in flight (guarded by ``lock``)
-    # The profile's role families route beacon offers (role-families T5).
-    families = preferences.families if preferences is not None else BUILTIN_REGISTRY
+
+    def _portals() -> frozenset[str] | None:
+        return enabled_portals() if callable(enabled_portals) else enabled_portals
+
+    def _prefs() -> ProfilePrefs:
+        return preferences() if preferences is not None else DEFAULT_PREFS
+
+    def _families() -> FamilyRegistry:
+        """The profile's role families route beacon offers (role-families T5)."""
+        return _prefs().families if preferences is not None else BUILTIN_REGISTRY
 
     def _suggested_body() -> dict[str, Any]:
         """Suggested searches; plus the profile's title filters when it has its own."""
-        prefs = preferences if preferences is not None else ProfilePrefs()
+        prefs = _prefs()
         body: dict[str, Any] = {
             "searches": suggested_searches_payload(
-                claims_path, prefs.search_targets, enabled_portals
+                claims_path, prefs.search_targets, _portals()
             )
         }
         if prefs.title_filters != TitleFilterPrefs():
@@ -718,15 +765,14 @@ def _make_handler(
     def _config_body() -> dict[str, Any]:
         """What the extension syncs every round: the pause, the resolved enabled
         portals and, when the profile declares its own, the role families."""
+        portals = _portals()
         body: dict[str, Any] = {
             "paused": is_paused(),
-            "enabledPortals": [
-                p for p in SOURCES if enabled_portals is None or p in enabled_portals
-            ],
+            "enabledPortals": [p for p in SOURCES if portals is None or p in portals],
         }
         served = families_payload(
-            families,
-            preferences.title_filters if preferences is not None else None,
+            _families(),
+            _prefs().title_filters if preferences is not None else None,
         )
         if served is not None:
             body["families"] = served
@@ -750,8 +796,64 @@ def _make_handler(
                 provided.encode("utf-8"), secret.encode("utf-8")
             )
 
+        def _profile_refused(self) -> bool:
+            """Answers (and returns ``True``) when a /profile request comes from
+            a web page's origin or the profile is not editable here."""
+            origin = self.headers.get("Origin")
+            if origin is not None and not origin.startswith(_EXTENSION_ORIGINS):
+                self._send_json(403, {"error": "forbidden origin"})
+                return True
+            if profile_dir is None:
+                self._send_json(503, {"error": NO_PROFILE_DIR_ERROR})
+                return True
+            return False
+
+        def _handle_profile_post(self, body: bytes) -> None:
+            if self.headers.get_content_type() != "application/json":
+                self._send_json(415, {"error": "content type must be application/json"})
+                return
+            try:
+                payload = json.loads(body)
+            except ValueError as exc:  # also a body that is not UTF-8
+                self._send_json(400, {"error": f"invalid json: {exc}"})
+                return
+            except RecursionError:  # nested deeper than the decoder can go
+                self._send_json(400, {"error": "invalid json: nested too deeply"})
+                return
+            assert profile_dir is not None  # _profile_refused answered before
+            try:
+                result = profile_edit.save(
+                    profile_dir, payload, lang, reload_preferences
+                )
+            except profile_edit.InvalidProfile as exc:
+                self._send_json(400, {"error": "invalid fields", "fields": exc.fields})
+                return
+            except (ConfirmFailed, ProfileError) as exc:
+                cause = exc.cause if isinstance(exc, ConfirmFailed) else exc
+                undo = exc.undo if isinstance(exc, ConfirmFailed) else None
+                body_out: dict[str, Any] = {
+                    "error": "write failed",
+                    "detail": describe_load_error(profile_dir, cause),
+                    "rolledBack": undo is None,
+                }
+                if undo is not None:
+                    body_out["rollbackError"] = describe_load_error(profile_dir, undo)
+                self._send_json(500, body_out)
+                return
+            self._send_json(200, result)
+
         def do_GET(self) -> None:
-            if self.path in (SUGGESTED_SEARCHES_PATH, CONFIG_PATH):
+            if self.path == PROFILE_PATH:
+                try:
+                    if not self._authorized():
+                        self._send_json(401, {"error": "unauthorized"})
+                    elif not self._profile_refused():
+                        assert profile_dir is not None
+                        self._send_json(200, profile_edit.profile_view(profile_dir))
+                except Exception:  # noqa: BLE001 — the 500 IS the surface
+                    _LOG.exception("bridge handler error")
+                    self._send_json(500, {"error": "internal error"})
+            elif self.path in (SUGGESTED_SEARCHES_PATH, CONFIG_PATH):
                 try:
                     if not self._authorized():
                         self._send_json(401, {"error": "unauthorized"})
@@ -806,8 +908,9 @@ def _make_handler(
 
         def _handle_post(self) -> None:
             # Order (design Interfaces): 404 path → 405 method → 401 auth →
-            # 413 size → 400 JSON/schema → process.
-            if self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH):
+            # 413 size → 400 JSON/schema → process. /profile: 401 → 413 →
+            # 403 origin / 503 no profile dir → 415 → 400 → write.
+            if self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH, PROFILE_PATH):
                 self._send_json(404, {"error": "not found"})
                 return
             provided = self.headers.get(SECRET_HEADER)
@@ -830,6 +933,10 @@ def _make_handler(
                     self._send_json(413, {"error": "payload too large"})
                 return  # failed drain: socket is dead, just close
             body = self.rfile.read(length)
+            if self.path == PROFILE_PATH:
+                if not self._profile_refused():  # body read first (see _drain)
+                    self._handle_profile_post(body)
+                return
             if self.path == SCAN_REPORT_PATH:
                 self._handle_scan_report(body)
                 return
@@ -845,9 +952,11 @@ def _make_handler(
                 )
                 return
             dropped: list[str] = []
+            # One registry per payload, even if a reload lands mid-request.
+            families = _families()
             try:
                 beacon, jobs = _validated(
-                    json.loads(body), dropped, enabled_portals, families=families
+                    json.loads(body), dropped, _portals(), families=families
                 )
             except _BadRequest as exc:
                 self._send_json(400, {"error": str(exc)})
@@ -909,12 +1018,16 @@ class _Bridge:
         notify_min_score: int | None = None,
         round_summary: bool = True,
         claims_path: Path | None = None,
-        preferences: ProfilePrefs | None = None,
+        preferences: Callable[[], ProfilePrefs] | None = None,
         paused_default: bool = False,
         enabled_portals: frozenset[str] | None = None,
         ui_language: Lang = LEGACY_LANG,
+        profile_dir: Path | None = None,
+        reload_preferences: Callable[[], object] | None = None,
     ) -> None:
         self._lang: Lang = ui_language
+        self._profile_dir = profile_dir
+        self._reload_preferences = reload_preferences
         self._paused_default = paused_default
         self._enabled_portals = enabled_portals
         self._claims_path = claims_path
@@ -945,6 +1058,11 @@ class _Bridge:
         # Set by shutdown(): puts that land afterwards defer instead of queueing.
         self._closing = False
 
+    def set_enabled_portals(self, portals: Iterable[str] | None) -> None:
+        """Serve ``portals`` from now on (``None``: every registered portal);
+        what ``/setup`` calls after writing ``enabled_portals``."""
+        self._enabled_portals = None if portals is None else frozenset(portals)
+
     @property
     def port(self) -> int:
         if self._httpd is None:
@@ -966,12 +1084,17 @@ class _Bridge:
             claims_path=self._claims_path,
             preferences=self._preferences,
             is_paused=self._is_paused,
-            enabled_portals=self._enabled_portals,
+            enabled_portals=lambda: self._enabled_portals,
             lang=self._lang,
+            profile_dir=self._profile_dir,
+            reload_preferences=self._reload_preferences,
         )
         self._httpd = ThreadingHTTPServer(("127.0.0.1", self._port), handler)
         thread = threading.Thread(
-            target=self._httpd.serve_forever, name="cva-bridge", daemon=True
+            target=self._httpd.serve_forever,
+            kwargs={"poll_interval": SERVE_POLL_INTERVAL},
+            name="cva-bridge",
+            daemon=True,
         )
         thread.start()
 
@@ -1266,9 +1389,11 @@ class _Bridge:
             return False
         return row.next_analyze_at is not None
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, app: Any = None) -> None:
         """PTB post_shutdown hook (notification-pacing D9): cancel the worker
         and defer unfinished rows to retry-pending → the sweep re-drives them.
+
+        PTB calls it with the application (unused); tests call it bare.
 
         Deferral (attempts untouched, ``next_analyze_at = now``) covers the
         in-flight item (captured BEFORE the cancel so the coroutine's finally
@@ -1333,7 +1458,8 @@ def register(app: Any, settings: Settings, service: "JobService") -> _Bridge | N
         notify_min_score=settings.notify_min_score,
         round_summary=settings.round_summary,
         claims_path=profile_paths.claims,
-        preferences=load_preferences(profile_paths.preferences),
+        # The service owns the one live instance; read it on every request.
+        preferences=lambda: service.loaded_preferences,
         paused_default=settings.paused,
         enabled_portals=(
             None
@@ -1341,6 +1467,9 @@ def register(app: Any, settings: Settings, service: "JobService") -> _Bridge | N
             else frozenset(settings.enabled_portals)
         ),
         ui_language=settings.ui_language,
+        profile_dir=settings.profile_dir,
+        # A Profile-tab save re-reads preferences.toml in the running bot.
+        reload_preferences=lambda: service.reload_preferences(),
     )
     try:
         bridge.start()
@@ -1352,10 +1481,143 @@ def register(app: Any, settings: Settings, service: "JobService") -> _Bridge | N
         )
         return None
     # D9 wiring: worker starts in post_init (loop captured there); the bridge
-    # stashes itself for the heartbeat sweep and owns the post_shutdown hook
-    # (PTB honors both attribute assignments in __run).
+    # stashes itself for the heartbeat sweep and takes over the post_shutdown
+    # hook (PTB honors both attribute assignments in __run). PTB awaits
+    # ``post_shutdown(application)``; the bridge defers its rows first, then
+    # runs the hook registered before it (the scheduler's tracker flush).
+    previous_shutdown = getattr(app, "post_shutdown", None)
+
+    async def _post_shutdown(application: Any) -> None:
+        await bridge.shutdown()
+        if previous_shutdown is not None:
+            await previous_shutdown(application)
+
     app.post_init = bridge.post_init
-    app.post_shutdown = bridge.shutdown
+    app.post_shutdown = _post_shutdown
     app.bot_data[BOT_DATA_KEY] = bridge
     atexit.register(bridge.stop)
     return bridge
+
+
+# --- setup mode (onboarding-v2 T1) ---------------------------------------------
+
+SETUP_ERROR: Final[str] = (
+    "profile not set up: send /setup to the bot in Telegram, then scan again"
+)
+
+
+def _make_setup_handler(secret: str) -> type[BaseHTTPRequestHandler]:
+    """The bridge while the profile is not set up: same paths, auth and drain
+    order as ``_make_handler``, but nothing is read, stored or analyzed —
+    ``/config`` reports paused with no portals, ``/searches/suggested`` is empty
+    and ``GET /profile`` and every POST answer 503 with :data:`SETUP_ERROR`."""
+
+    class _SetupHandler(BaseHTTPRequestHandler):
+        def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            _LOG.debug("bridge http (setup): " + format, *args)
+
+        def _authorized(self) -> bool:
+            provided = self.headers.get(SECRET_HEADER)
+            return provided is not None and hmac.compare_digest(
+                provided.encode("utf-8"), secret.encode("utf-8")
+            )
+
+        def do_GET(self) -> None:
+            if self.path in (BRIDGE_PATH, SCAN_REPORT_PATH):
+                self._send_json(405, {"error": "method not allowed"})
+            elif self.path not in (SUGGESTED_SEARCHES_PATH, CONFIG_PATH, PROFILE_PATH):
+                self._send_json(404, {"error": "not found"})
+            elif not self._authorized():
+                self._send_json(401, {"error": "unauthorized"})
+            elif self.path == PROFILE_PATH:
+                self._send_json(503, {"error": SETUP_ERROR})
+            elif self.path == CONFIG_PATH:
+                self._send_json(200, {"paused": True, "enabledPortals": []})
+            else:
+                self._send_json(200, {"searches": []})
+
+        def do_POST(self) -> None:
+            if self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH, PROFILE_PATH):
+                self._send_json(404, {"error": "not found"})
+                return
+            if not self._authorized():
+                self._send_json(401, {"error": "unauthorized"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            # Drain the body before answering (Windows RST, see _drain).
+            if length > MAX_BODY_BYTES:
+                if not _drain(self.rfile, length):
+                    return
+            elif length > 0:
+                self.rfile.read(length)
+            self._send_json(503, {"error": SETUP_ERROR})
+
+    return _SetupHandler
+
+
+class _SetupBridge:
+    """The bound setup-mode server; frees its port on PTB shutdown so the full
+    bridge can bind it when the bot leaves setup mode."""
+
+    def __init__(self, *, secret: str, port: int) -> None:
+        self._secret = secret
+        self._port = port
+        self._httpd: ThreadingHTTPServer | None = None
+
+    @property
+    def port(self) -> int:
+        if self._httpd is None:
+            raise RuntimeError("bridge server is not running")
+        return int(self._httpd.server_address[1])
+
+    def start(self) -> None:
+        self._httpd = ThreadingHTTPServer(
+            ("127.0.0.1", self._port), _make_setup_handler(self._secret)
+        )
+        thread = threading.Thread(
+            target=self._httpd.serve_forever, name="cva-bridge-setup", daemon=True
+        )
+        thread.start()
+
+    async def shutdown(self, app: Any) -> None:
+        """PTB ``post_shutdown`` hook."""
+        self.stop()
+
+    def stop(self) -> None:
+        if self._httpd is not None:
+            self._httpd.shutdown()
+            self._httpd.server_close()
+            self._httpd = None
+
+
+def register_setup(app: Any, settings: Settings) -> _SetupBridge | None:
+    """The setup-mode bridge (same enable rules as :func:`register`): the
+    extension keeps syncing without errors while the profile is set up."""
+    secret = settings.bridge_secret.get_secret_value()
+    if not secret or settings.owner_telegram_id == 0:
+        _LOG.warning("bridge secret or owner id unset: bridge endpoint disabled")
+        return None
+    handle = _SetupBridge(secret=secret, port=settings.bridge_port)
+    try:
+        handle.start()
+    except OSError as exc:
+        _LOG.warning(
+            "bridge bind failed on 127.0.0.1:%d (%s); endpoint disabled",
+            settings.bridge_port,
+            exc,
+        )
+        return None
+    app.post_shutdown = handle.shutdown
+    atexit.register(handle.stop)
+    return handle

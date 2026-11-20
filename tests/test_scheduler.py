@@ -97,10 +97,42 @@ class FakeJobQueue:
         self.calls.append({"callback": callback, **kwargs})
 
 
+class _StubTrackerService:
+    """Records the tracker wiring the bot's scheduler performs."""
+
+    def __init__(self) -> None:
+        self.deferred = False
+        self.flushed = 0
+
+    def enable_deferred_tracker_writes(self) -> None:
+        self.deferred = True
+
+    async def flush_tracker(self) -> None:
+        self.flushed += 1
+
+
+def test_register_defers_tracker_writes_and_flushes_them_on_shutdown() -> None:
+    """Bot mode: mutations stop writing the xlsx on the loop, and PTB's
+    post_shutdown writes whatever is still pending, after any earlier hook."""
+    order: list[str] = []
+    service = _StubTrackerService()
+
+    async def previous(_app: object) -> None:
+        order.append("previous")
+
+    app = SimpleNamespace(bot_data={}, job_queue=FakeJobQueue(), post_shutdown=previous)
+    register(app, service, owner_chat_id=5)  # type: ignore[arg-type]
+
+    assert service.deferred is True
+    asyncio.run(app.post_shutdown(app))
+    assert order == ["previous"]
+    assert service.flushed == 1
+
+
 def test_register_schedules_exactly_one_heartbeat_starting_now() -> None:
     job_queue = FakeJobQueue()
     app = SimpleNamespace(bot_data={}, job_queue=job_queue)
-    service = object()  # register only stores it; type checked at runtime use
+    service = _StubTrackerService()  # register stores it + enables deferral
     register(app, service, owner_chat_id=5)  # type: ignore[arg-type]
     assert len(job_queue.calls) == 1
     call = job_queue.calls[0]

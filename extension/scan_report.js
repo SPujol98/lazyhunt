@@ -2,7 +2,8 @@
 // chrome.* calls, so they can be loaded by the Node test harness. background.js
 // POSTs the result to the bot's /scan-report endpoint after every beacon scan.
 
-import { markersToSource, ALL_NO_RESULTS_MARKERS } from './portals/registry.js';
+import { markersToSource, ALL_NO_RESULTS_MARKERS, portalFor, portalById } from './portals/registry.js';
+import { beaconPortalId } from './searches.js';
 
 const RATE_LIMITED = /\b429\b|too many requests|rate[\s-]?limit/i;
 
@@ -31,6 +32,13 @@ export function classifyScanError(message) {
 // marker) or { error } for a failed one. A completed scan with zero cards and
 // no confirmed marker is `empty_unconfirmed`: the bot records it but never
 // counts it as a healthy zero nor as breakage.
+// A portal whose cards never show the company (foorilla) reports 0 empty
+// companies, so the bot's "parser broken" health alert is not raised for it.
+function cardsCarryCompany(beacon) {
+  const portal = portalById(beaconPortalId(beacon, portalFor));
+  return !portal || portal.cardsCarryCompany !== false;
+}
+
 export function buildScanReport(beacon, outcome, at) {
   const failed = Boolean(outcome && outcome.error);
   const jobs = failed ? [] : (outcome && outcome.jobs) || [];
@@ -43,7 +51,9 @@ export function buildScanReport(beacon, outcome, at) {
     at: new Date(at).toISOString(),
     status,
     jobs_found: jobs.length,
-    empty_company: jobs.filter((j) => !String(j.company || '').trim()).length,
+    empty_company: cardsCarryCompany(beacon)
+      ? jobs.filter((j) => !String(j.company || '').trim()).length
+      : 0,
   };
 }
 

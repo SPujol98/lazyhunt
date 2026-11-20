@@ -21,12 +21,15 @@ import pytest
 from cva import bridge
 from cva.config import Settings
 from tests.demo import DEMO_CLAIMS
+from tests.service_stub import service_stub
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SECRET = "s3cret-bridge"
 
-needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node not available")
+needs_node = pytest.mark.skipif(
+    shutil.which("node") is None, reason="node not available"
+)
 needs_extension = pytest.mark.skipif(
     not (REPO_ROOT / "extension").is_dir(), reason="extension/ not present"
 )
@@ -68,7 +71,7 @@ def _suggested(
     (profile / "preferences.toml").write_text(preferences, encoding="utf-8")
     app = SimpleNamespace(post_init=None, bot=None, bot_data={})
     handle = bridge.register(
-        app, clean_settings(profile_dir=profile), SimpleNamespace(threshold=65)
+        app, clean_settings(profile_dir=profile), service_stub(65, profile)
     )
     assert handle is not None
     try:
@@ -96,7 +99,11 @@ def test_bridge_serves_the_declared_families_in_order(
     assert frontend["includeGroups"] == [["React", "Vue"]]
     assert frontend["excludeTerms"][0] == "Senior"
     assert frontend["excludeTerms"][-1] == "BJAK"  # the company blocklist
-    assert set(families[0]["titleFilter"]) == {"enabled", "includeGroups", "excludeTerms"}
+    assert set(families[0]["titleFilter"]) == {
+        "enabled",
+        "includeGroups",
+        "excludeTerms",
+    }
 
 
 def test_bridge_without_declared_families_sends_no_list(

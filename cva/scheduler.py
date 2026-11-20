@@ -277,6 +277,18 @@ def register(
     """
     app.bot_data[SERVICE_KEY] = service
     app.bot_data[OWNER_KEY] = owner_chat_id
+    # Bot mode: tracker xlsx rewrites leave the event loop (debounced, in a
+    # worker thread); the heartbeat below stays their backstop and PTB's
+    # post_shutdown writes whatever is still pending.
+    service.enable_deferred_tracker_writes()
+    previous_shutdown = getattr(app, "post_shutdown", None)
+
+    async def _flush_tracker_on_shutdown(application: Any) -> None:
+        if previous_shutdown is not None:
+            await previous_shutdown(application)
+        await service.flush_tracker()
+
+    app.post_shutdown = _flush_tracker_on_shutdown
     if gmail is not None:
         app.bot_data[GMAIL_KEY] = gmail
     app.job_queue.run_repeating(

@@ -134,7 +134,7 @@ the adapter's `detailArgs`.
 | JobFluent | `www.jobfluent.com` | in-tab reader only, never fetched by the bot | cards + empty copy from a recon sample; detail unverified; unknown cities fall back to Barcelona |
 | Manfred | `www.getmanfred.com` | tab, inline-only | cards verified on a saved rendered page (3 cards); search ignores keywords; empty copy unverified |
 | Adzuna | `www.adzuna.es` | in-tab reader only, never fetched by the bot (Cloudflare) | cards + search URL verified on a real page (10 cards); empty copy and detail unverified; aggregator, not suggested by default |
-| foorilla | `foorilla.com` | tab, inline-only, never fetched by the bot (offer panel is filled by htmx) | cards + detail panel verified on a real saved fragment/page; search param and empty copy unverified; global feed, not suggested by default |
+| foorilla (**experimental**) | `foorilla.com` | tab, inline-only, never fetched by the bot (offer panel is filled by htmx) | cards + detail panel verified on a real saved fragment/page; search param and empty copy unverified; global feed, not suggested by default |
 
 ## Indeed (verified against a real saved page)
 
@@ -213,7 +213,12 @@ the research) and `suggest_by_default=False`: add it by hand in Options.
   Barcelona" heading) and any detail page; the generic detail extractor is used.
 - Fixture: `tests/fixtures/portals/adzuna.html`, 4 sanitized cards.
 
-## foorilla (global feed)
+## foorilla (experimental, global feed)
+
+**Experimental.** The search filter (`job_search`) has not been verified on
+the live site, the cards carry no company name (it is only on the offer
+page), and the feed is worldwide, so most offers are narrowed by the bot's
+location gate and the title filter rather than by the search itself.
 
 Worldwide hiring feed (`https://foorilla.com/hiring/jobs/`, an htmx fragment
 that renders as a page). Robots.txt allows all (checked by hand), but the offer
@@ -233,6 +238,8 @@ is global.
   link = `https://foorilla.com/hiring/jobs/<slug>-<id>/` (also the bot's
   canonical). The card has no company (detail page only); location is the
   right-hand text, with the `[R]` remote marker rendered as "(remote)".
+  Because no card has a company, the adapter sets `cardsCarryCompany: false`
+  and scan health never raises the "offers without a company" alert for it.
 - Age: "55m ago", "1h ago", "2d ago", "3w ago"; cards older than 7 days are
   dropped, an unreadable age is kept. Level tags (`[EN]` = entry level, `[SE]`,
   `[MI]`, `[EX]`) have no field in the card schema and are ignored.

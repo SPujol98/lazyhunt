@@ -19,6 +19,7 @@ import {
   configUrl, dedupeSearchIds, expandSearches, mergeSuggestedSearches, normalizeSearches,
   parseBotConfig, parseSuggestions, resolveEnabledPortals, suggestionsUrl,
 } from './searches.js';
+import { mountProfileEditor, parseProfile, profileUrl } from './profile_editor.js';
 
 const CONFIG_FORMAT = 'linkedin-beacons-config';
 const CONFIG_VERSION = 1;
@@ -612,6 +613,73 @@ function renderBotInfo() {
   node.hidden = false;
 }
 
+// --- profile (onboarding-v2 T10) ---------------------------------------------------
+
+// Sends one request to the bot's /profile; {status, payload} (status 0:
+// the bot is unreachable).
+async function profileRequest(init) {
+  const url = profileUrl(state.draft.bridgeUrl);
+  const secret = state.draft.bridgeSecret.trim();
+  let response;
+  try {
+    response = await fetchWithTimeout(url, {
+      ...init, headers: { ...(init.headers || {}), [SECRET_HEADER]: secret },
+    });
+  } catch (_) {
+    return { status: 0, payload: null };
+  }
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_) {
+    payload = null;
+  }
+  return { status: response.status, payload };
+}
+
+function drawProfile(profile) {
+  const root = $('profileEditor');
+  mountProfileEditor(root, profile, {
+    el,
+    tr,
+    toast,
+    post: (body) => profileRequest({
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+    onSaved: drawProfile,
+  });
+  root.hidden = false;
+  $('profileEmpty').hidden = true;
+}
+
+async function loadProfile() {
+  if (!profileUrl(state.draft.bridgeUrl) || !state.draft.bridgeSecret.trim()) {
+    toast(tr('suggestNeedsBridge', null, 'Set a valid bridge URL and the secret first.'), 'error');
+    return;
+  }
+  const button = $('profileLoadBtn');
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  try {
+    const { status, payload } = await profileRequest({ method: 'GET' });
+    const profile = status === 200 ? parseProfile(payload) : null;
+    if (profile) {
+      drawProfile(profile);
+    } else if (status === 0) {
+      toast(tr('suggestUnreachable', null, 'The bot is not reachable. Is it running?'), 'error');
+    } else if (status === 401) {
+      toast(tr('suggestSecretRejected', null, 'The bot rejected the secret.'), 'error');
+    } else if (status === 503) {
+      toast(tr('profileNotReady', null, 'The bot has no editable profile yet: finish /setup in the bot chat first.'), 'error');
+    } else {
+      toast(tr('suggestHttpError', status, 'The bot answered with HTTP $1.'), 'error');
+    }
+  } finally {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+  }
+}
+
 // --- suggestions -----------------------------------------------------------------
 
 async function suggestSearches() {
@@ -1053,6 +1121,7 @@ function wire() {
   $('saveBtn').addEventListener('click', save);
   $('addSearchBtn').addEventListener('click', addSearch);
   $('suggestBtn').addEventListener('click', suggestSearches);
+  $('profileLoadBtn').addEventListener('click', loadProfile);
   $('addSuggestedBtn').addEventListener('click', addSuggested);
   $('addBeaconBtn').addEventListener('click', addBeacon);
   $('filterEnabled').addEventListener('change', (e) => {

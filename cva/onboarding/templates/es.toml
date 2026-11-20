@@ -1,0 +1,88 @@
+# Plantillas del juez para el perfil que genera /setup (onboarding-v2 T7), español.
+# Los marcadores ($nombre) se rellenan SOLO con respuestas del usuario
+# (cva/onboarding/profile_gen.py). Los textos de la rúbrica son reglas para el
+# juez, nunca hechos sobre el candidato.
+
+marker = "<!-- generado por /setup — edítalo para mejorar los resultados -->"
+
+[facts]
+intro = "Datos del candidato indicados en /setup. No se sabe nada más del candidato aparte de estas líneas y de la lista de claims: no supongas experiencia, habilidades, estudios ni idiomas que no estén ahí."
+targets = "Puestos objetivo: $targets"
+level = "Nivel: $level"
+work_modes = "Modalidad: $work_modes"
+location = "Lugar de trabajo: $location"
+salary = "Sueldo mínimo: $amount $currency brutos al año"
+languages = "Idiomas que habla: $languages"
+skills = "Habilidades principales: $skills"
+
+# Texto del claim setup-experience (T8): la respuesta de años y, después, el
+# último puesto (y la empresa) tal como se escribieron.
+[experience]
+"0" = "Aún sin experiencia profesional"
+lt1 = "Menos de 1 año de experiencia profesional"
+"1-2" = "1-2 años de experiencia profesional"
+"3-5" = "3-5 años de experiencia profesional"
+"6-10" = "6-10 años de experiencia profesional"
+10plus = "Más de 10 años de experiencia profesional"
+role = "Último puesto: $role"
+role_at = "Último puesto: $role en $company"
+
+[words]
+junior = "junior"
+mid = "intermedio (mid)"
+senior = "senior"
+remote = "remoto"
+hybrid = "híbrido"
+onsite = "presencial"
+
+[rubric]
+preamble = """Rúbrica del juez generada por /setup a partir de tus respuestas. Edita
+cualquier sección para mejorar los resultados; deja un solo encabezado por
+apartado (los subtítulos usan ###)."""
+manual_analyses = "para un candidato cuyo perfil se acaba de configurar, usando solo los datos y claims de abajo"
+degree_rule = "Un requisito de titulación con CUALQUIER fórmula de equivalencia ('o experiencia equivalente', 'o similar') NO es un muro. Un requisito de titulación SIN esa fórmula es un muro duro solo si la lista de claims no muestra una titulación que encaje."
+hard_walls = """Un muro duro es SOLO uno de estos casos, nunca otro requisito por estricto que suene:
+1. Un requisito de titulación SIN fórmula de equivalencia (ver arriba).
+2. $experience_wall
+3. $seniority_wall
+4. Un stack obligatorio SIN NINGUNA evidencia en los claims que sea el NÚCLEO DIARIO del puesto (a lo que se dedica la mayor parte de la semana)."""
+soft_walls = "TODO LO DEMÁS es un muro BLANDO (baja un poco la nota, NUNCA obliga a descartar por sí solo): una herramienta solo mencionada o listada como un plus, un framework que es una opción entre varias, un sector nuevo y cualquier cosa expresada como 'valorable' o 'un plus'."
+
+[level.junior]
+experience_rule = "Los años de experiencia pedidos hasta ~3 años incluidos son SOLO una penalización MENOR: nunca un muro ni por sí solos motivo de descarte, porque un perfil junior suele optar a ofertas que piden hasta 3 años. Muchos más de 3 años (4 o más) SÍ es un muro duro."
+experience_wall = "Experiencia exigida de 4 años o más (hasta ~3 años incluidos es solo una penalización menor)."
+seniority_wall = "Seniority o liderazgo técnico de un equipo (Senior/Lead/Principal, dirigir o mentorizar a otras personas)."
+
+[level.mid]
+experience_rule = "Los años de experiencia pedidos hasta ~5 años incluidos son SOLO una penalización MENOR, nunca un muro por sí solos. Muchos más de 5 años (7 o más) SÍ es un muro duro. Un puesto solo para juniors (prácticas, 0-1 años) es un muro blando."
+experience_wall = "Experiencia exigida de 7 años o más (hasta ~5 años incluidos es solo una penalización menor)."
+seniority_wall = "Puestos Lead, Principal o de gestión de personas (el título Senior por sí solo es un muro blando)."
+
+[level.senior]
+experience_rule = "Los años de experiencia pedidos NUNCA son un muro para este candidato. Un puesto solo para juniors (prácticas, 0-1 años) es un muro blando: está por debajo del nivel indicado."
+experience_wall = "Nada sobre años de experiencia (nunca es un muro en este nivel); usa este caso solo para un puesto cuyo trabajo principal sea gestionar personas."
+seniority_wall = "Gestión de personas como trabajo principal (Head of, Engineering Manager, Director)."
+
+[level.none]
+experience_rule = "Los años de experiencia pedidos hasta ~3 años incluidos son SOLO una penalización MENOR. Muchos más de 3 años (5 o más) SÍ es un muro duro."
+experience_wall = "Experiencia exigida de 5 años o más."
+seniority_wall = "Puestos Lead, Principal o de gestión de personas."
+
+[family.ai]
+lacking_core = "Para puestos de IA: usar herramientas de IA para programar en el día a día es SOLO un PEQUEÑO PLUS; nunca compensa un núcleo diario que los claims no muestran (por ejemplo frameworks de frontend, ingeniería de plataformas cloud, informes de BI o entrenar modelos propios como trabajo principal)."
+positive = "Para puestos de IA: el núcleo diario del puesto es IA aplicada (LLM, RAG, recuperación, ingeniería de ML) y su stack aparece en los claims."
+
+[family.backend]
+lacking_core = "Para puestos de Backend: un stack que los claims no muestran (otro lenguaje o framework) es un muro solo si es el núcleo diario del puesto; un puesto full-stack cuyo núcleo diario es el frontend se queda con nota baja."
+positive = "Para puestos de Backend: el núcleo diario del puesto es desarrollo de servidor (APIs, bases de datos, servicios) con un stack que aparece en los claims."
+
+[family.custom]
+lacking_core = "Para puestos de $titles: un núcleo diario que los claims no muestran se queda con nota baja, diga lo que diga el título; elogiar herramientas o buenas prácticas nunca lo sustituye."
+positive = "Para puestos de $titles: el título y el núcleo diario encajan con los puestos objetivo y los requisitos aparecen en los claims."
+
+[family.none]
+lacking_core = "Un núcleo diario que los claims no muestran se queda con nota baja, diga lo que diga el título."
+positive = "El núcleo diario del puesto aparece en los claims."
+
+[signals]
+common = "Señales positivas: redacción abierta al nivel indicado, una modalidad y una ubicación que encajan con las preferencias indicadas, pocos candidatos o una oferta reciente."

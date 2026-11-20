@@ -21,6 +21,11 @@ build/
 # config.local.toml.example for the tracked template.
 config.local.toml
 
+# /setup answers (contact data; onboarding-v2)
+profiles/demo/onboarding_answers.json
+# /setup base CV uploads waiting for Confirm (any profile, demo included)
+.onboarding_uploads/
+
 # Runtime state (data/ is ignored except the tracked salary reference table)
 data/*
 !data/salary_reference.toml

@@ -10,7 +10,9 @@ Layout: one catalog module per area, each exporting ``EN`` and ``ES``
 - :mod:`cva.i18n.commands`: ``/help``, the command menu, card-button docs,
   ``commands.*``;
 - :mod:`cva.i18n.notifier`, :mod:`cva.i18n.bot`, :mod:`cva.i18n.panel`,
-  :mod:`cva.i18n.prompts`: the later areas, ``notifier.*``, ``bot.*``, ...
+  :mod:`cva.i18n.prompts`: the later areas, ``notifier.*``, ``bot.*``, ...;
+- :mod:`cva.i18n.onboarding`: the guided ``/setup`` questionnaire,
+  ``onboarding.*``.
 
 To add strings, a unit edits ONLY its own module: add the key to both
 ``EN`` and ``ES`` with the same ``{placeholders}``. Values are
@@ -27,14 +29,14 @@ every caller does (bot-i18n T2-T6).
 from string import Formatter
 from typing import Final, Literal, get_args
 
-from cva.i18n import bot, commands, core, notifier, panel, prompts
+from cva.i18n import bot, commands, core, notifier, onboarding, panel, prompts
 
 Lang = Literal["en", "es"]
 LANGS: Final[tuple[Lang, ...]] = get_args(Lang)
 DEFAULT_LANG: Final[Lang] = "en"
 LEGACY_LANG: Final[Lang] = "es"
 
-_MODULES = (core, commands, notifier, bot, panel, prompts)
+_MODULES = (core, commands, notifier, bot, panel, prompts, onboarding)
 
 
 def _merge(lang: Lang) -> dict[str, str]:

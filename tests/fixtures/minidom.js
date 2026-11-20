@@ -4,7 +4,8 @@
 // Parses well-formed synthetic HTML and implements only what the portal
 // extractors use: querySelector(All) / closest over compound selectors
 // (tag, .class, #id, [attr], [attr=v], [attr^=v], [attr*=v], each optionally ` i`), getAttribute,
-// parentElement and innerText. `innerText` is simplified: the trimmed,
+// parentElement, textContent and innerText. `textContent` concatenates every
+// text node of the subtree, as in a browser. `innerText` is simplified: the trimmed,
 // non-empty text nodes of the subtree joined by "\n" (one line per text
 // node), which is how the saved snippets model the cards' visible lines.
 
@@ -34,6 +35,18 @@ class El {
     };
     walk(this);
     return lines.join('\n');
+  }
+
+  get textContent() {
+    const parts = [];
+    const walk = (node) => {
+      for (const child of node.children) {
+        if (typeof child === 'string') parts.push(child);
+        else walk(child);
+      }
+    };
+    walk(this);
+    return parts.join('');
   }
 
   scrollTo() {}

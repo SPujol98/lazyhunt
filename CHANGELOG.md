@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-11-20
+
+Pre-release for testers: the guided first run. Please report anything confusing or broken in an issue.
+
+### Added
+
+- Guided first run in Telegram: `uv run cli.py init` now only asks for the Telegram token, the AI provider and your Telegram id; the bot starts in *setup mode* and `/setup` walks you through your profile with buttons, in English or Spanish: contact details, target positions, level, spoken languages, main skills, experience, education, work mode and city, minimum salary, accepted offer languages, portals (each behind its terms warning) and your base CV PDFs.
+- Confirm is all-or-nothing: it writes `preferences.toml`, `profile.toml`, the CV manifest and a minimal working profile (claims and judge files built only from your answers, never overwriting files you wrote by hand), activates the chosen portals, and the bot switches to normal mode at once. If anything fails, nothing is changed and you are told which file to fix.
+- `/setup <section>` re-asks a single part (for example `/setup salary`), prefilled with your current answers.
+- Options › Profile in the extension: view and edit your positions, level, languages, skills, experience, location, salary and accepted offer languages.
+- Suggested searches follow your answers: your roles in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work.
+- Offer cards warn (⚠️) when the stated work mode or salary does not match your preferences; offers are never dropped for it.
+- Location matching by city name for any city or country outside the detailed Catalonia data (mismatches are flagged, never discarded).
+- "🔎 On LinkedIn / Google / InfoJobs" buttons on offer cards search the same offer elsewhere.
+- [docs/running.md](docs/running.md): keep the bot running on Linux (systemd), macOS (launchd) or Windows (Task Scheduler); README troubleshooting, updating, uninstalling and glossary.
+
+### Changed
+
+- The bot offers and delivers only the CV languages that have a base CV in your manifest.
+- Offer extraction and the AI judge run concurrently, roughly halving the analysis time per offer.
+- The synced tracker spreadsheet is written in the background a few seconds after a change instead of blocking the bot.
+- foorilla is labelled experimental.
+
+### Fixed
+
+- `uv run cli.py --help` and `check` work before `init` (no more missing-token traceback).
+- Pending offers are saved again when the bot shuts down.
+- foorilla scans no longer raise a false "offers without a company" alert.
+
 ## [0.5.0] - 2026-11-19
 
 ### Added
@@ -91,7 +120,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...HEAD
+[2.0.0-beta.1]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...v2.0.0-beta.1
 [0.5.0]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/SPujol98/lazyhunt/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/SPujol98/lazyhunt/compare/v0.4.0...v0.4.1

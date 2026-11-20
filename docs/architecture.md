@@ -56,11 +56,17 @@ flowchart LR
 4. **Storage** (`cva/tracker/`). Offers, scores, judgments, statuses and
    history live in `data/app.db` (SQLite, schema in
    `cva/tracker/schema.sql`). The `/panel` HTML dashboard and the Excel export
-   are built from it (`cva/report/`, `cva/tracker/xlsx.py`).
+   are built from it (`cva/report/`, `cva/tracker/xlsx.py`). In the bot, the
+   synced tracker xlsx is rewritten off the event loop: a change marks it
+   dirty and a worker thread writes it a few seconds after the last change
+   (one writer at a time); the 10-minute heartbeat retries a locked file and
+   shutdown writes anything pending. The CLI still writes it inline.
 5. **Matching** (`cva/match/`). The AI provider extracts requirements;
    deterministic gates (location, language, eligibility, stack walls) and the
    scorer run locally; the AI judge gives the 0-100 score and verdict against
-   your claims. Calibration examples from real outcomes feed the judge
+   your claims. The judge reads only the offer text, so the extraction and
+   judge calls run concurrently; a failed extraction cancels the judge.
+   Calibration examples from real outcomes feed the judge
    (`cva/calibration.py`).
 6. **AI provider** (`cva/llm.py`). One protocol, three implementations:
    your own `claude` CLI (default, run as a child process without your API

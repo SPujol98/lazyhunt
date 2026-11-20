@@ -18,6 +18,14 @@ exactly as before. Unknown tables/keys and wrongly typed values raise
 
     [location]
     home_region = "catalonia"          # key of cva.match.locations.REGIONS
+    city = "Valencia"                  # home city, free text; default: none
+    country = "España"                 # home country NAME, free text; default: none
+
+    [search]                           # onboarding answers (card warnings)
+    work_modes = ["remote", "hybrid"]  # subset of remote/hybrid/onsite; default: all
+    level = "mid"                      # junior | mid | senior; default: none
+    min_salary = 30000                 # gross per year, integer >= 0; default: none
+    currency = "EUR"                   # ISO 4217 code of min_salary; default EUR
 
     [search_targets]                   # cva/suggest.py
     ai_roles = ["AI Engineer", "LLM Engineer"]
@@ -49,6 +57,23 @@ exactly as before. Unknown tables/keys and wrongly typed values raise
     include_groups = [["Frontend", "React"]]
     exclude_terms = ["Senior"]         # the blocklist is appended
 
+``[location] city``/``country`` are matched by NAME against the offer's
+location text (no distances, no ISO codes: offers say "Madrid, España", not
+"ES"); ``home_region`` keeps selecting the detailed region pack.
+``[search_targets] locations`` is not reused for the city: it lists the search
+locations sent to the portals (it may hold "remoto"), not where the candidate
+lives. When it is not written, a profile that states ``[search] work_modes``
+or ``[location] city``/``country`` (the ``/setup`` answers) gets it derived
+when read: the city (else the country) if on-site or hybrid work is accepted,
+then "remoto" (Spanish or Catalan offers accepted) or "remote" if remote work
+is; a hand-written ``locations`` always wins, and a profile with neither keeps
+the engine default ``["Barcelona", "remoto"]``. Case is normalised (``work_modes``/``level`` lower, ``currency`` upper)
+and repeated work modes are dropped. ``[search]`` drives the ⚠️ offer-card
+warnings (work mode, salary below the minimum; never a discard), and
+``[location] city``/``country`` the generic by-name location gate when the
+city is outside ``home_region`` (see ``cva/match/warnings.py`` and
+``cva/match/gates.py``).
+
 Family ids are ``[a-z][a-z0-9_]*`` (the CV role key is ``id.upper()``). With no
 ``[families]`` table the built-in ``ai`` and ``backend`` families apply, filled
 from ``[title_filters.ai|backend]``, ``[search_targets] ai_roles|backend_roles``
@@ -65,6 +90,7 @@ operational knobs that ``Settings`` (``config.toml`` -> ``config.local.toml``
 and tests read them from there.
 """
 
+import re
 import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -118,6 +144,30 @@ class TitleFilterPrefs:
         }
 
 
+WORK_MODES: Final[tuple[str, ...]] = ("remote", "hybrid", "onsite")
+LEVELS: Final[tuple[str, ...]] = ("junior", "mid", "senior")
+_CURRENCY_RE: Final[re.Pattern[str]] = re.compile(r"[A-Z]{3}")
+
+
+@dataclass(frozen=True)
+class SearchPrefs:
+    """``[search]``: what the candidate accepts (onboarding-v2 S4/S7)."""
+
+    # Accepted work modes, in WORK_MODES order of first mention; all = no warning.
+    work_modes: tuple[str, ...] = WORK_MODES
+    level: str | None = None  # one of LEVELS; None = not stated
+    min_salary: int | None = None  # gross per year in ``currency``; None = any
+    currency: str = "EUR"  # ISO 4217
+
+
+@dataclass(frozen=True)
+class LocationPrefs:
+    """``[location] city``/``country``: where the candidate lives (S6)."""
+
+    city: str | None = None
+    country: str | None = None
+
+
 @dataclass(frozen=True)
 class ProfilePrefs:
     """Every preference the engine reads from the profile."""
@@ -130,6 +180,9 @@ class ProfilePrefs:
     cover_letter: CoverLetterPersona = OWNER_COVER_LETTER_PERSONA
     # Role families ([families.<id>]); the built-ins when none are declared.
     families: FamilyRegistry = field(default_factory=lambda: _BUILTINS)
+    # Questionnaire answers (onboarding-v2): [search] and [location] city/country.
+    search: SearchPrefs = SearchPrefs()
+    location: LocationPrefs = LocationPrefs()
 
 
 def _with_builtin_values(
@@ -170,6 +223,7 @@ _TABLES: Final[frozenset[str]] = frozenset(
         "title_filters",
         "cover_letter",
         "families",
+        "search",
     }
 )
 
@@ -263,7 +317,7 @@ def _gates(data: dict[str, Any]) -> GatePrefs:
     gates = _table(data, "gates")
     _only(gates, {"allowed_languages", "flag_english_above_c1"}, "gates")
     location = _table(data, "location")
-    _only(location, {"home_region"}, "location")
+    _only(location, {"home_region", "city", "country"}, "location")
     default = DEFAULT_GATE_PREFS
     codes = _strings(gates, "allowed_languages", "gates")
     allowed = default.allowed_languages
@@ -289,7 +343,93 @@ def _gates(data: dict[str, Any]) -> GatePrefs:
     )
 
 
-def _search_targets(data: dict[str, Any]) -> ProfileTargets:
+def _search(data: dict[str, Any]) -> SearchPrefs:
+    table = _table(data, "search")
+    _only(table, {"work_modes", "level", "min_salary", "currency"}, "search")
+    default = SearchPrefs()
+    modes = _strings(table, "work_modes", "search")
+    if modes is not None:
+        modes = tuple(dict.fromkeys(m.lower() for m in modes))
+        unknown = [m for m in modes if m not in WORK_MODES]
+        if not modes or unknown:
+            raise ProfileError(
+                "preferences.toml [search] work_modes must be a non-empty list of "
+                f"{', '.join(WORK_MODES)} (unknown: {unknown})"
+            )
+    level = _string(table, "level", "search")
+    if level is not None:
+        level = level.lower()
+        if level not in LEVELS:
+            raise ProfileError(
+                f"preferences.toml [search] level must be one of {', '.join(LEVELS)}"
+            )
+    salary = table.get("min_salary")
+    if salary is not None and (
+        isinstance(salary, bool) or not isinstance(salary, int) or salary < 0
+    ):
+        raise ProfileError(
+            "preferences.toml [search] min_salary must be a whole number >= 0 "
+            "(gross per year)"
+        )
+    currency = _string(table, "currency", "search")
+    if currency is not None:
+        currency = currency.upper()
+        if _CURRENCY_RE.fullmatch(currency) is None:
+            raise ProfileError(
+                "preferences.toml [search] currency must be a 3-letter ISO 4217 "
+                "code such as EUR"
+            )
+    return SearchPrefs(
+        work_modes=default.work_modes if modes is None else modes,
+        level=level,
+        min_salary=salary,
+        currency=default.currency if currency is None else currency,
+    )
+
+
+def _location(data: dict[str, Any]) -> LocationPrefs:
+    # Unknown keys are rejected by _gates, which owns home_region.
+    table = _table(data, "location")
+    return LocationPrefs(
+        city=_string(table, "city", "location"),
+        country=_string(table, "country", "location"),
+    )
+
+
+# Offer languages whose portals search remote work as "remoto" (the spelling
+# the extension's portal readers and the engine default already use).
+_REMOTO_LANGUAGES: Final[frozenset[str]] = frozenset({"es", "ca"})
+
+
+def _answer_locations(
+    data: dict[str, Any], search: SearchPrefs, location: LocationPrefs, gates: GatePrefs
+) -> tuple[str, ...] | None:
+    """Search locations derived from the onboarding answers (onboarding-v2 T6).
+
+    Only for a profile that states where the candidate works (``[search]
+    work_modes`` or ``[location] city``/``country``); ``None`` keeps the
+    engine default. The city (else the country) when on-site or hybrid work
+    is accepted, then a remote search when remote work is: "remoto" if
+    Spanish or Catalan offers are accepted, else "remote".
+    """
+    stated = "work_modes" in _table(data, "search")
+    place = location.city or location.country
+    if not stated and place is None:
+        return None
+    out: list[str] = []
+    if place is not None and {"onsite", "hybrid"} & set(search.work_modes):
+        out.append(place)
+    if "remote" in search.work_modes:
+        spanish = _REMOTO_LANGUAGES & set(gates.allowed_languages)
+        out.append("remoto" if spanish else "remote")
+    return tuple(out) or None
+
+
+def _search_targets(
+    data: dict[str, Any], answered: tuple[str, ...] | None = None
+) -> ProfileTargets:
+    """``[search_targets]``; ``answered`` (derived from the onboarding answers)
+    replaces the default ``locations`` only, never a hand-written list."""
     table = _table(data, "search_targets")
     _only(table, {"ai_roles", "backend_roles", "locations"}, "search_targets")
     default = DEFAULT_PROFILE_TARGETS
@@ -301,7 +441,7 @@ def _search_targets(data: dict[str, Any]) -> ProfileTargets:
     return ProfileTargets(
         ai_roles=default.ai_roles if ai is None else ai,
         backend_roles=default.backend_roles if backend is None else backend,
-        locations=default.locations if locations is None else locations,
+        locations=(answered or default.locations) if locations is None else locations,
     )
 
 
@@ -500,10 +640,23 @@ def load_preferences(preferences_toml: Path | None) -> ProfilePrefs:
         raise ProfileError(
             f"preferences.toml unreadable ({preferences_toml}): {exc}"
         ) from exc
+    return preferences_from_data(data)
+
+
+def preferences_from_data(data: dict[str, Any]) -> ProfilePrefs:
+    """Validate a parsed ``preferences.toml`` document (the strict loader).
+
+    Raises :class:`~cva.profile_identity.ProfileError` on any unknown table or
+    key and any wrongly typed value; used by :func:`load_preferences` and by
+    the writer (``cva/profile_writer.py``) before it replaces the file.
+    """
     unknown = sorted(set(data) - _TABLES)
     if unknown:
         raise ProfileError(f"preferences.toml unknown table(s): {', '.join(unknown)}")
-    targets = _search_targets(data)
+    search = _search(data)
+    location = _location(data)
+    gates = _gates(data)
+    targets = _search_targets(data, _answer_locations(data, search, location, gates))
     filters = _title_filters(data)
     persona = _cover_letter(data)
     families = _families(data, filters, targets, persona)
@@ -512,9 +665,11 @@ def load_preferences(preferences_toml: Path | None) -> ProfilePrefs:
         targets = replace(targets, families=families)
     return ProfilePrefs(
         stack_wall=_stack_wall(data),
-        gates=_gates(data),
+        gates=gates,
         search_targets=targets,
         title_filters=filters,
         cover_letter=persona,
         families=families,
+        search=search,
+        location=location,
     )

@@ -338,3 +338,20 @@ class Settings(BaseSettings):
             dotenv_settings,
             _NoSecretTomlSource(settings_cls, toml_file=toml_file_override),
         )
+
+
+def check_toml_settings(*documents: dict[str, Any]) -> Settings:
+    """Validate parsed TOML settings files with the :class:`Settings` field
+    validators, as the bot would load them: shallow-merged in order (later
+    keys win, like ``config.toml`` then ``config.local.toml``), secrets
+    dropped as the TOML source drops them. Nothing else is read (no
+    environment, no ``.env``): this checks the files, not the process.
+    Raises ``ValueError`` (pydantic's ``ValidationError``) when they would
+    not load."""
+    merged: dict[str, Any] = {}
+    for document in documents:
+        merged.update(document)
+    for key in _SECRET_TOML_KEYS:
+        merged.pop(key, None)
+    # The one required field is a secret (env-only): a placeholder stands in.
+    return Settings.model_validate({**merged, "CVA_TELEGRAM_TOKEN": "unchecked"})

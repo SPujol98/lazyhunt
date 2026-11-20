@@ -414,7 +414,11 @@ class _Server:
             **kwargs,
         )
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        threading.Thread(
+            target=self.httpd.serve_forever,
+            kwargs={"poll_interval": bridge.SERVE_POLL_INTERVAL},
+            daemon=True,
+        ).start()
 
     def post(self, jobs: list[dict[str, Any]]) -> httpx.Response:
         port = self.httpd.server_address[1]

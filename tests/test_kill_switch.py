@@ -16,6 +16,7 @@ import pytest
 from cva import bridge
 from cva.scheduler import GMAIL_KEY, heartbeat
 from cva.tracker import OfferInput, OfferRepository
+from tests.service_stub import service_stub
 from tests.test_scheduler import (
     HEALTHY,
     NOW,
@@ -199,7 +200,7 @@ def test_register_passes_the_config_default_pause(
         clean_settings(
             paused=True, owner_telegram_id=7, bridge_port=0, CVA_BRIDGE_SECRET="s"
         ),
-        SimpleNamespace(threshold=65),
+        service_stub(65),
     )
     assert handle is not None
     try:
