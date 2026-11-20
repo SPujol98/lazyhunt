@@ -21,6 +21,7 @@ from cva.report.panel import (
 )
 from cva.tracker import OfferRow
 from cva.tracker.xlsx import ESTADO_FILLS
+from tests.portability import posix_modes
 from tests.test_auto_triage import (
     JSONLD_BODY,
     OFFER_TEXT,
@@ -281,6 +282,7 @@ def test_service_panel_copy_failure_returns_html_and_cleans_temp(
     assert not list(target.parent.glob(".*.tmp"))
 
 
+@posix_modes
 def test_write_panel_atomic_keeps_previous_mode(tmp_path: Path) -> None:
     path = tmp_path / PANEL_FILENAME
     path.write_text("old", encoding="utf-8")
@@ -290,6 +292,7 @@ def test_write_panel_atomic_keeps_previous_mode(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o640
 
 
+@posix_modes
 def test_write_panel_atomic_new_file_is_world_readable(tmp_path: Path) -> None:
     path = tmp_path / "sub" / PANEL_FILENAME
     assert write_panel_atomic("x", path)

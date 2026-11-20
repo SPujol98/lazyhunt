@@ -25,7 +25,9 @@ BODY = (
 
 def test_bridge_card_shows_published_salary_and_button(tmp_path: Path) -> None:
     service, _repo, offer_id = _bridged(
-        tmp_path, FakeLlmClient(_extraction()), FakeFetcher(FetchResponse(200, BODY, OFFER_URL))
+        tmp_path,
+        FakeLlmClient(_extraction()),
+        FakeFetcher(FetchResponse(200, BODY, OFFER_URL)),
     )
     notify = _RecordingNotify()
     asyncio.run(

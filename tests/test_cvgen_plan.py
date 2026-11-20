@@ -7,7 +7,6 @@ in-memory :class:`MasterCv` fixture so every candidate/exclusion rule
 direct control, independent of any committed master JSON.
 """
 
-
 import pytest
 
 from cva.claimsdb import load_claims

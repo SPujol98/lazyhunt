@@ -35,7 +35,7 @@ Read these three points; they are also in the README.
 | A Telegram account | |
 | Chrome or another Chromium browser | |
 
-lazyhunt runs on Linux, macOS and Windows (CI runs on Linux). To install uv,
+lazyhunt runs on Linux, macOS and Windows (CI runs the tests on all three). To install uv,
 use the official one-liner ([other methods](https://docs.astral.sh/uv/getting-started/installation/)),
 then open a new terminal:
 

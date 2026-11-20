@@ -387,7 +387,9 @@ def test_profile_outside_the_base_or_inside_the_demo_is_asked_again(
     assert not (base / "profiles" / "demo").exists()
     assert (base / "profiles" / "me" / "README.md").is_file()
     assert "inside this directory" in scripted.transcript
-    assert 'profile_dir = "profiles/me"' in (base / "config.local.toml").read_text()
+    assert 'profile_dir = "profiles/me"' in (base / "config.local.toml").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_duplicate_env_keys_are_all_replaced(tmp_path: Path) -> None:
@@ -415,7 +417,9 @@ def test_an_unreadable_config_writes_nothing_at_all(tmp_path: Path) -> None:
         wizard(tmp_path, scripted)
     assert not (tmp_path / ".env").exists()
     assert not (tmp_path / "profiles").exists()
-    assert (tmp_path / "config.local.toml").read_text() == '"owner_telegram_id" = 3\n'
+    assert (tmp_path / "config.local.toml").read_text(
+        encoding="utf-8"
+    ) == '"owner_telegram_id" = 3\n'
 
 
 def test_bot_language_defaults_to_auto_and_is_written(tmp_path: Path) -> None:
@@ -524,3 +528,17 @@ def test_toml_set_key_refuses_a_result_that_is_not_toml() -> None:
 
     with pytest.raises(ValueError):
         toml_set_key("a = = 1\n", "k", ["x"])
+
+
+def test_an_invalid_config_stops_before_any_question_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    broken = b"owner_telegram_id = [unclosed\n"
+    (tmp_path / "config.local.toml").write_bytes(broken)
+    scripted = ScriptedIO([])  # any prompt would fail the test
+    assert wizard(tmp_path, scripted) == 1
+    assert "config.local.toml is not valid TOML" in scripted.transcript
+    assert "run init again" in scripted.transcript
+    assert scripted.prompts == []
+    assert (tmp_path / "config.local.toml").read_bytes() == broken
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]

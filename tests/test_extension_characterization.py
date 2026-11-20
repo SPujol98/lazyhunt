@@ -37,6 +37,7 @@ def _run(harness: Path, area: str) -> None:
         text=True,
         timeout=180,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 

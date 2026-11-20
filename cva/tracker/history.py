@@ -28,9 +28,7 @@ Estado = Literal[
     "retirada",
     "sin_respuesta",
 ]
-HistoryCvBase = Literal[
-    "AI_ES", "AI_EN", "DS_ES", "DS_EN", "BACKEND_ES", "BACKEND_EN"
-]
+HistoryCvBase = Literal["AI_ES", "AI_EN", "DS_ES", "DS_EN", "BACKEND_ES", "BACKEND_EN"]
 
 # Estados before an application went out: only these may be advanced by an
 # import; a post-send estado is the bot's (or the owner's) truth and is kept.

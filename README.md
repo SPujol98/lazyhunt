@@ -85,7 +85,7 @@ From a fresh clone to your first scored offer takes about 20 minutes. You do not
 | &nbsp;&nbsp;↳ or any OpenAI-compatible endpoint | A hosted or local model | [docs/providers.md](docs/providers.md) |
 | *Optional:* a Google Cloud project | Read-only Gmail status proposals | [docs/gmail.md](docs/gmail.md) |
 
-**Operating systems.** Linux, macOS and Windows. CI runs on Linux, which is also where lazyhunt is developed, so macOS and Windows get less testing. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
+**Operating systems.** Linux, macOS and Windows. CI runs the test suite on all three; lazyhunt is developed on Linux, so macOS and Windows get less day-to-day use. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
 
 **Installing uv.** If `uv --version` fails, install it with the official one-liner ([other methods](https://docs.astral.sh/uv/getting-started/installation/)), then open a new terminal:
 

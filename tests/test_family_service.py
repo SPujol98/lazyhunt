@@ -82,12 +82,17 @@ def test_family_cover_letter_emphasis_wins(tmp_path: Path) -> None:
 
 def test_branch_emphasis_table_accepts_a_declared_family(tmp_path: Path) -> None:
     prefs = _prefs(
-        tmp_path, FRONTEND + '[cover_letter.branch_emphasis]\nFRONTEND = "From the table."\n'
+        tmp_path,
+        FRONTEND + '[cover_letter.branch_emphasis]\nFRONTEND = "From the table."\n',
     )
-    assert _letter_system(prefs, "FRONTEND").endswith("Branch emphasis: From the table.")
+    assert _letter_system(prefs, "FRONTEND").endswith(
+        "Branch emphasis: From the table."
+    )
 
 
-def test_family_without_emphasis_uses_the_default_family_emphasis(tmp_path: Path) -> None:
+def test_family_without_emphasis_uses_the_default_family_emphasis(
+    tmp_path: Path,
+) -> None:
     prefs = _prefs(tmp_path, FRONTEND)
     ai = DEFAULT_PREFS.cover_letter.branch_emphasis["AI"]
     assert _letter_system(prefs, "FRONTEND").endswith(f"Branch emphasis: {ai}")
@@ -137,7 +142,9 @@ class _ExtractionLlm:
     def __init__(self, reply: OfferExtraction) -> None:
         self.reply = reply
 
-    async def json_completion(self, system: str, user: str, schema: type[object]) -> object:
+    async def json_completion(
+        self, system: str, user: str, schema: type[object]
+    ) -> object:
         return self.reply
 
 
@@ -146,9 +153,14 @@ def _extraction() -> OfferExtraction:
         title="Frontend Developer",
         company="Acme",
         requirements=[
-            Requirement(name="Python", category="skill", must_have=True, evidence="Python"),
             Requirement(
-                name="containers", category="tool", must_have=False, evidence="containers"
+                name="Python", category="skill", must_have=True, evidence="Python"
+            ),
+            Requirement(
+                name="containers",
+                category="tool",
+                must_have=False,
+                evidence="containers",
             ),
         ],
     )
@@ -180,7 +192,9 @@ def _service(
     return svc, repo
 
 
-def _offer(repo: OfferRepository, profile: str | None, title: str = "Frontend Developer") -> int:
+def _offer(
+    repo: OfferRepository, profile: str | None, title: str = "Frontend Developer"
+) -> int:
     return repo.upsert_offer(
         OfferInput(
             title=title,
@@ -212,7 +226,9 @@ def test_manual_offer_profile_is_inferred_from_the_families(tmp_path: Path) -> N
 # --- thresholds ------------------------------------------------------------------
 
 
-def _threshold(tmp_path: Path, prefs: str | None, profile: str | None, **kw: object) -> int:
+def _threshold(
+    tmp_path: Path, prefs: str | None, profile: str | None, **kw: object
+) -> int:
     svc, repo = _service(tmp_path, prefs, _ExtractionLlm(_extraction()), **kw)
     oid = _offer(repo, profile)
     asyncio.run(svc.analyze(oid))
@@ -227,7 +243,10 @@ def test_family_threshold_overrides_the_settings_gate(tmp_path: Path) -> None:
 
 
 def test_family_without_threshold_uses_the_settings_threshold(tmp_path: Path) -> None:
-    assert _threshold(tmp_path, FRONTEND, "frontend", threshold=70, backend_threshold=50) == 70
+    assert (
+        _threshold(tmp_path, FRONTEND, "frontend", threshold=70, backend_threshold=50)
+        == 70
+    )
 
 
 def test_declared_backend_threshold_overrides_backend_threshold(tmp_path: Path) -> None:
@@ -235,11 +254,16 @@ def test_declared_backend_threshold_overrides_backend_threshold(tmp_path: Path) 
     assert _threshold(tmp_path, body, "backend", backend_threshold=50) == 33
 
 
-@pytest.mark.parametrize(("profile", "expected"), [("ai", 70), ("backend", 50), (None, 70)])
+@pytest.mark.parametrize(
+    ("profile", "expected"), [("ai", 70), ("backend", 50), (None, 70)]
+)
 def test_builtin_thresholds_unchanged(
     tmp_path: Path, profile: str | None, expected: int
 ) -> None:
-    assert _threshold(tmp_path, None, profile, threshold=70, backend_threshold=50) == expected
+    assert (
+        _threshold(tmp_path, None, profile, threshold=70, backend_threshold=50)
+        == expected
+    )
 
 
 # --- judge -----------------------------------------------------------------------
@@ -255,7 +279,9 @@ def _judgment(cv_base: str) -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("cv_base", ["AI_ES", "AI_EN", "DS_ES", "DS_EN", "BACKEND_EN", "FRONTEND_ES"])
+@pytest.mark.parametrize(
+    "cv_base", ["AI_ES", "AI_EN", "DS_ES", "DS_EN", "BACKEND_EN", "FRONTEND_ES"]
+)
 def test_judgment_accepts_any_family_cv_base(cv_base: str) -> None:
     assert OfferJudgment.model_validate(_judgment(cv_base)).cv_base == cv_base
 
@@ -288,7 +314,8 @@ def test_anchor_line_uses_the_family_label(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("profile", "label"), [("ai", "AI"), ("backend", "Backend"), (None, "AI"), ("ds", "AI")]
+    ("profile", "label"),
+    [("ai", "AI"), ("backend", "Backend"), (None, "AI"), ("ds", "AI")],
 )
 def test_builtin_anchor_labels_unchanged(profile: str | None, label: str) -> None:
     assert anchor_line(_example(profile), threshold=60).startswith(f"- {label} role")
@@ -352,7 +379,9 @@ def test_family_without_rows_has_no_salary_reference(tmp_path: Path) -> None:
     assert line == ""
 
 
-@pytest.mark.parametrize(("perfil", "label"), [("ai", "AI"), ("backend", "Backend"), (None, "AI")])
+@pytest.mark.parametrize(
+    ("perfil", "label"), [("ai", "AI"), ("backend", "Backend"), (None, "AI")]
+)
 def test_builtin_salary_labels_unchanged(perfil: str | None, label: str) -> None:
     line = salary_line(
         title="Developer",
@@ -370,7 +399,10 @@ def test_suggestions_follow_the_declared_families(tmp_path: Path) -> None:
     prefs = _prefs(tmp_path, FRONTEND)
     searches = suggest_searches(load_claims(DEMO_CLAIMS), prefs.search_targets)
     frontend = [s for s in searches if s.filter_profile == "frontend"]
-    assert [s.keywords for s in frontend][:2] == ["Frontend Developer", "Frontend Developer"]
+    assert [s.keywords for s in frontend][:2] == [
+        "Frontend Developer",
+        "Frontend Developer",
+    ]
     assert "React Developer" in [s.keywords for s in frontend]
     assert {s.filter_profile for s in searches} == {"ai", "frontend"}
 
@@ -418,4 +450,6 @@ def test_panel_uses_the_family_label(tmp_path: Path) -> None:
 def test_builtin_panel_labels_unchanged(profile: str, tag: str) -> None:
     page = render_panel([], NOW, [_discarded(profile)])
     assert f"40 / 60 ({tag})" in page
-    assert page == render_panel([], NOW, [_discarded(profile)], families=BUILTIN_REGISTRY)
+    assert page == render_panel(
+        [], NOW, [_discarded(profile)], families=BUILTIN_REGISTRY
+    )

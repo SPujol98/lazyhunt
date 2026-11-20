@@ -198,7 +198,8 @@ def test_rubric_persona_preamble_before_the_first_slot_is_ignored(
     judge = _write_judge_dir(tmp_path, _custom_persona())
     path = judge / "rubric_persona.md"
     path.write_text(
-        "# My rubric\nNotes for me.\n\n" + path.read_text(), encoding="utf-8"
+        "# My rubric\nNotes for me.\n\n" + path.read_text(encoding="utf-8"),
+        encoding="utf-8",
     )
 
     assert load_judge_persona(judge) == _custom_persona()
@@ -371,7 +372,8 @@ def test_service_judge_uses_the_profile_persona(tmp_path: Path) -> None:
     )
 
     assert "Candidate timeline: Acme Corp since 2020." in llm.systems[0]
-    for owner_text in _OWNER_ONLY:
+    absent = list(_OWNER_ONLY)
+    for owner_text in absent:
         assert owner_text not in llm.systems[0], owner_text
 
 
@@ -380,7 +382,11 @@ def test_service_judge_uses_the_profile_persona(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("empty", ['""', '"   "'])
 @pytest.mark.parametrize(
-    "table", ["[cover_letter]\ncareer_change = {v}\n", "[cover_letter.branch_emphasis]\nAI = {v}\n"]
+    "table",
+    [
+        "[cover_letter]\ncareer_change = {v}\n",
+        "[cover_letter.branch_emphasis]\nAI = {v}\n",
+    ],
 )
 def test_empty_cover_letter_strings_are_rejected(
     tmp_path: Path, table: str, empty: str
@@ -391,9 +397,7 @@ def test_empty_cover_letter_strings_are_rejected(
 
 def test_rubric_slot_body_with_a_heading_is_rejected_on_render() -> None:
     persona = _custom_persona()
-    bad = dataclasses.replace(
-        persona.rubric, hard_walls="Intro\n## Sub heading\nmore"
-    )
+    bad = dataclasses.replace(persona.rubric, hard_walls="Intro\n## Sub heading\nmore")
     with pytest.raises(ProfileError, match="hard_walls.*##"):
         render_judge_persona_files(dataclasses.replace(persona, rubric=bad))
 

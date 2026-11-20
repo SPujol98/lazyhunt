@@ -39,8 +39,12 @@ def test_service_reads_must_haves_from_the_cached_extraction(tmp_path) -> None: 
         cache_key(text, model),
         OfferExtraction(
             requirements=[
-                Requirement(name="Python", category="skill", must_have=True, evidence="Python"),
-                Requirement(name="RAG", category="skill", must_have=False, evidence="RAG"),
+                Requirement(
+                    name="Python", category="skill", must_have=True, evidence="Python"
+                ),
+                Requirement(
+                    name="RAG", category="skill", must_have=False, evidence="RAG"
+                ),
             ]
         ),
         model=model,

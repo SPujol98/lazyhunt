@@ -10,14 +10,34 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
+      # Windows runners default to core.autocrlf=true, which would turn the
+      # fixtures' LF into CRLF and break the byte-exact tests.
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+      # The extension harness tests run under Node on every OS.
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
       - run: uv sync --locked
+      # No PYTHONUTF8: an implicit locale encoding must fail here, as it
+      # would for a Windows user.
       - run: uv run pytest -q
+
+  # Type checks, lint and formatting do not depend on the OS: Linux only.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
       - run: uv run mypy --strict cva
       - run: uv run ruff check cva tests bot.py cli.py scripts
+      - run: uv run ruff format --check .

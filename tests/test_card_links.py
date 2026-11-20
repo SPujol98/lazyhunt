@@ -1,4 +1,4 @@
-""""🔎 Search elsewhere" row on analysis cards (URL buttons, no callbacks).
+""" "🔎 Search elsewhere" row on analysis cards (URL buttons, no callbacks).
 
 Every rule goes through the public builders the bot uses: ``cv_keyboard``
 (with the offer row), the bot's analyze flow and toggles, and the service's
@@ -84,7 +84,9 @@ def test_link_set_searches_title_and_company_url_encoded() -> None:
 
 
 def test_labels_follow_the_ui_language() -> None:
-    labels = [t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=_offer(), ui_lang="es"))]
+    labels = [
+        t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=_offer(), ui_lang="es"))
+    ]
     assert labels == ["🔎 En LinkedIn", "🔎 En Google", "🔎 En InfoJobs"]
 
 
@@ -114,11 +116,15 @@ def test_no_title_and_no_company_means_no_row() -> None:
 
 def test_the_offers_own_portal_is_skipped() -> None:
     linkedin = _offer(origen="linkedin", url="https://www.linkedin.com/jobs/view/1/")
-    labels = [t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=linkedin, ui_lang="en"))]
+    labels = [
+        t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=linkedin, ui_lang="en"))
+    ]
     assert labels == ["🔎 On Google", "🔎 On InfoJobs"]
     # Detected from the URL when the stored origen is missing.
     by_url = _offer(origen=None, url="https://es.linkedin.com/jobs/view/1/")
-    labels = [t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=by_url, ui_lang="en"))]
+    labels = [
+        t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=by_url, ui_lang="en"))
+    ]
     assert labels == ["🔎 On Google", "🔎 On InfoJobs"]
     # An InfoJobs offer gets the Spanish search on Indeed instead.
     infojobs = _offer(origen="infojobs", url="https://www.infojobs.net/x/of-i123")
@@ -139,7 +145,9 @@ OFFER_URL = "https://www.linkedin.com/jobs/view/4459804598/"
 
 
 def test_lang_toggle_keeps_the_search_row(tmp_path: Path) -> None:
-    service, _llm = make_service(tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL)))
+    service, _llm = make_service(
+        tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))
+    )
     offer_id = service._repo.upsert_offer(
         OfferInput(
             job_id="4459804598",
@@ -154,12 +162,19 @@ def test_lang_toggle_keeps_the_search_row(tmp_path: Path) -> None:
     asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
     markup = query.edited_markups[-1]
     # origen "link" names no portal: the LinkedIn URL decides, so no LinkedIn.
-    assert [b.text for b in markup.inline_keyboard[-1]] == ["🔎 En Google", "🔎 En InfoJobs"]
+    assert [b.text for b in markup.inline_keyboard[-1]] == [
+        "🔎 En Google",
+        "🔎 En InfoJobs",
+    ]
     assert all(b.url for b in markup.inline_keyboard[-1])
 
 
-def test_lang_toggle_for_a_missing_offer_still_edits_the_keyboard(tmp_path: Path) -> None:
-    service, _llm = make_service(tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL)))
+def test_lang_toggle_for_a_missing_offer_still_edits_the_keyboard(
+    tmp_path: Path,
+) -> None:
+    service, _llm = make_service(
+        tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))
+    )
     query = FakeQuery("lang:999:AI:es")
     asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
     markup = query.edited_markups[-1]

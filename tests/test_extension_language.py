@@ -19,7 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
 HARNESS = Path(__file__).resolve().parent / "fixtures" / "extension_pages_harness.js"
 
-needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node not available")
+needs_node = pytest.mark.skipif(
+    shutil.which("node") is None, reason="node not available"
+)
 pytestmark = pytest.mark.skipif(not EXTENSION.is_dir(), reason="extension/ not present")
 
 
@@ -32,13 +34,18 @@ def test_language_selector_behaviour() -> None:
         text=True,
         timeout=180,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
 
 def test_selector_strings_exist_in_both_locales() -> None:
     for lang in ("en", "es"):
-        messages = json.loads((EXTENSION / "_locales" / lang / "messages.json").read_text(encoding="utf-8"))
+        messages = json.loads(
+            (EXTENSION / "_locales" / lang / "messages.json").read_text(
+                encoding="utf-8"
+            )
+        )
         for key in ("languageLabel", "languageAuto", "languageAutoTitle"):
             assert messages[key]["message"], (lang, key)
 
@@ -51,5 +58,7 @@ def test_selector_is_in_the_options_header_with_an_accessible_label() -> None:
 
 
 def test_uilanguage_is_whitelisted_where_keys_are_listed() -> None:
-    assert "'uiLanguage'" in (EXTENSION / "core" / "round.js").read_text(encoding="utf-8")
+    assert "'uiLanguage'" in (EXTENSION / "core" / "round.js").read_text(
+        encoding="utf-8"
+    )
     assert "'uiLanguage'" in (EXTENSION / "options.js").read_text(encoding="utf-8")

@@ -41,6 +41,7 @@ def test_background_safe_defaults_via_node_harness() -> None:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 

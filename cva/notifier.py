@@ -899,7 +899,9 @@ def search_elsewhere_rows(
         return []
     return [
         [
-            InlineKeyboardButton(t("notifier.search_on", lang, site=link.site), url=link.url)
+            InlineKeyboardButton(
+                t("notifier.search_on", lang, site=link.site), url=link.url
+            )
             for link in links
         ]
     ]

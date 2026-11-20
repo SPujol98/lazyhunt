@@ -33,6 +33,7 @@ def test_indeed_adapter_over_the_saved_page() -> None:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
@@ -77,6 +78,7 @@ def _search_url(args: str) -> str:
         text=True,
         timeout=60,
         check=True,
+        encoding="utf-8",
     ).stdout
 
 
@@ -111,5 +113,6 @@ def test_canonical_url_from_the_job_key() -> None:
         text=True,
         timeout=60,
         check=True,
+        encoding="utf-8",
     ).stdout
     assert out == "https://es.indeed.com/viewjob?jk=a1a1a1a1b2b2b2b2|null"

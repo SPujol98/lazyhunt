@@ -43,7 +43,9 @@ def _claims_db() -> ClaimsDB:
     return ClaimsDB(claims=claims, by_id={c.id: c for c in claims})
 
 
-def _judgment(*, score: int, verdict: str, hard_wall: str | None = None) -> OfferJudgment:
+def _judgment(
+    *, score: int, verdict: str, hard_wall: str | None = None
+) -> OfferJudgment:
     return OfferJudgment(
         score=score,
         verdict=verdict,  # type: ignore[arg-type]
@@ -264,8 +266,12 @@ def test_run_judge_eval_forwards_threshold_to_derive_verdict(tmp_path: Path) -> 
 
 def test_run_judge_eval_with_no_offers_reports_empty_bank(tmp_path: Path) -> None:
     labels_path = tmp_path / "labels.json"
-    labels_path.write_text(json.dumps({"tolerance": 10, "offers": []}), encoding="utf-8")
+    labels_path.write_text(
+        json.dumps({"tolerance": 10, "offers": []}), encoding="utf-8"
+    )
 
-    report = asyncio.run(run_judge_eval(labels_path, _claims_db(), FakeMultiReplyLlmClient([])))
+    report = asyncio.run(
+        run_judge_eval(labels_path, _claims_db(), FakeMultiReplyLlmClient([]))
+    )
 
     assert "No labeled offers" in report

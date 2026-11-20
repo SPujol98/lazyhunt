@@ -36,6 +36,7 @@ def test_tecnoempleo_adapter_over_the_saved_page() -> None:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
@@ -76,6 +77,7 @@ def _node(expr: str) -> str:
         text=True,
         timeout=60,
         check=True,
+        encoding="utf-8",
     ).stdout
 
 

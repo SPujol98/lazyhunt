@@ -1,4 +1,4 @@
-""""Search elsewhere" links for an offer card: pure URL builders, no I/O.
+""" "Search elsewhere" links for an offer card: pure URL builders, no I/O.
 
 The analysis card ends with a row of URL buttons that search the same offer
 (title + company) on other sites, so an offer seen on one portal can be
@@ -59,7 +59,8 @@ def search_links(
         links.append(
             SearchLink(
                 "LinkedIn",
-                "https://www.linkedin.com/jobs/search/?" + urlencode({"keywords": keywords}),
+                "https://www.linkedin.com/jobs/search/?"
+                + urlencode({"keywords": keywords}),
             )
         )
     links.append(
@@ -71,7 +72,9 @@ def search_links(
     )
     if origin == "infojobs":
         links.append(
-            SearchLink("Indeed", "https://es.indeed.com/jobs?" + urlencode({"q": keywords}))
+            SearchLink(
+                "Indeed", "https://es.indeed.com/jobs?" + urlencode({"q": keywords})
+            )
         )
     else:
         links.append(

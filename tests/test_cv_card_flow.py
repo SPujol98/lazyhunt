@@ -26,7 +26,12 @@ TECNO_URL = "https://www.tecnoempleo.com/python-dev/rf-a1b2c3d4e5f6a1b2c3d4"
 
 def _payloads(markup: InlineKeyboardMarkup) -> list[str]:
     # Callback buttons only: the "Search elsewhere" row holds URL buttons.
-    return [b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data]
+    return [
+        b.callback_data
+        for row in markup.inline_keyboard
+        for b in row
+        if b.callback_data
+    ]
 
 
 # --- C1: SourceSpec flag --------------------------------------------------------

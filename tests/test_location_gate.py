@@ -287,7 +287,9 @@ def test_teletrabajo_listed_among_perks_is_not_a_remote_role() -> None:
 
 
 def test_strong_remote_among_perks_is_still_remote() -> None:
-    text = "Puesto en Madrid.\nBeneficios: 100% teletrabajo, seguro médico y flexibilidad."
+    text = (
+        "Puesto en Madrid.\nBeneficios: 100% teletrabajo, seguro médico y flexibilidad."
+    )
     assert location_gate(text, "Madrid").verdict == "PASS"
 
 

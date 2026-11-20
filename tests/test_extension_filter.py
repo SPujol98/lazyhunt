@@ -46,6 +46,7 @@ def test_filter_js_behavior_via_node_harness() -> None:
         text=True,
         timeout=30,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, (
         f"filter.js node harness failed (exit {result.returncode})\n"

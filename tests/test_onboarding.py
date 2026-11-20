@@ -31,6 +31,7 @@ from cva.profile_identity import load_identity
 from cva.profile_prefs import load_preferences
 from cva.service import JobService
 from cva.setup_mode import missing_profile_files
+from tests.portability import has_posix_modes
 from tests.test_bot import FakeMessage, FakeQuery, FakeUpdate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -479,7 +480,8 @@ def test_whole_questionnaire_writes_loadable_files_and_reloads_the_service(
         "linkedin": "https://linkedin.com/in/jose",
     }
     assert record["portals"] == ["linkedin", "infojobs"]
-    assert stat.S_IMODE(answers_file.stat().st_mode) == 0o600
+    if has_posix_modes():
+        assert stat.S_IMODE(answers_file.stat().st_mode) == 0o600
 
     # The running service picked the new preferences up.
     assert service.preferences.search.level == "senior"

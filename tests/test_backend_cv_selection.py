@@ -20,7 +20,9 @@ from tests.demo import DEMO_CLAIMS, DEMO_MASTERS, DEMO_SYNONYMS
 _ROOT = Path(__file__).resolve().parent.parent
 MASTERS = DEMO_MASTERS
 URL = "https://www.linkedin.com/jobs/view/4459804598/"
-ES_TEXT = "Buscamos desarrollador backend. Imprescindible Python y experiencia con APIs."
+ES_TEXT = (
+    "Buscamos desarrollador backend. Imprescindible Python y experiencia con APIs."
+)
 EN_TEXT = "We are hiring a backend developer. Python and REST APIs are required for this role."
 CA_TEXT = "Cerquem un desenvolupador backend amb experiència en Python i en APIs. Treballaràs amb nosaltres."
 
@@ -31,12 +33,16 @@ CA_TEXT = "Cerquem un desenvolupador backend amb experiència en Python i en API
 class _Llm:
     model = "m"
 
-    async def json_completion(self, system: str, user: str, schema: type[object]) -> object:
+    async def json_completion(
+        self, system: str, user: str, schema: type[object]
+    ) -> object:
         return OfferExtraction(
             title="Dev",
             company="A",
             requirements=[
-                Requirement(name="Python", category="skill", must_have=True, evidence="Python")
+                Requirement(
+                    name="Python", category="skill", must_have=True, evidence="Python"
+                )
             ],
         )
 
@@ -97,7 +103,9 @@ def test_backend_offer_without_forced_role_gets_backend_cv(
 
 
 @pytest.mark.parametrize("profile", ["ai", None])
-def test_ai_and_legacy_offers_keep_the_ai_cv(tmp_path: Path, profile: str | None) -> None:
+def test_ai_and_legacy_offers_keep_the_ai_cv(
+    tmp_path: Path, profile: str | None
+) -> None:
     svc, repo = _service(tmp_path)
     oid = _offer(repo, ES_TEXT, profile)
     asyncio.run(svc.generate_cv(oid))
@@ -111,7 +119,13 @@ def test_forced_role_beats_the_offer_profile(tmp_path: Path) -> None:
     assert repo.get_offer(oid).cv_base == "AI_ES"
     oid2 = _offer(repo, EN_TEXT, "ai")
     repo.upsert_offer(
-        OfferInput(title="Other", company="B", url=URL + "2", text=EN_TEXT, source="bridge-inline")
+        OfferInput(
+            title="Other",
+            company="B",
+            url=URL + "2",
+            text=EN_TEXT,
+            source="bridge-inline",
+        )
     )
     asyncio.run(svc.generate_cv(oid2, "BACKEND", "en"))
     assert repo.get_offer(oid2).cv_base == "BACKEND_EN"

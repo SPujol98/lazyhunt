@@ -26,6 +26,7 @@ from cva.gmail.client import (
     run_auth_flow,
     write_token_file,
 )
+from tests.portability import has_posix_modes, posix_modes
 
 
 def _b64(text: str) -> str:
@@ -56,9 +57,11 @@ def test_write_token_file_is_0600_even_over_a_loose_file(tmp_path: Path) -> None
     path.chmod(0o644)
     write_token_file(path, '{"a": 1}')
     assert path.read_text(encoding="utf-8") == '{"a": 1}'
-    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    if has_posix_modes():
+        assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
 
+@posix_modes
 def test_write_token_file_creates_missing_directory(tmp_path: Path) -> None:
     path = tmp_path / "new" / "token.json"
     write_token_file(path, "{}")
@@ -270,7 +273,8 @@ def test_expired_token_is_refreshed_and_written_back_0600(
     assert client.list_message_ids(datetime(2026, 11, 1, tzinfo=UTC)) == ([], False)
     assert refreshed == [True]
     assert json.loads(token.read_text(encoding="utf-8"))["token"] == "new-access"
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
+    if has_posix_modes():
+        assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
 
 
 def test_revoked_refresh_token_raises_auth_error(
@@ -325,7 +329,8 @@ def test_run_auth_flow_writes_the_token_0600_with_the_read_only_scope(
     assert seen["scopes"] == [GMAIL_SCOPE]
     assert seen["credentials"] == tmp_path / "credentials.json"
     assert token.read_text(encoding="utf-8") == '{"token": "fake"}'
-    assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
+    if has_posix_modes():
+        assert stat.S_IMODE(os.stat(token).st_mode) == 0o600
 
 
 def test_run_auth_flow_reports_a_missing_credentials_file(tmp_path: Path) -> None:

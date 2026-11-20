@@ -71,10 +71,24 @@ class FakeJudgeLlmClient:
 def _claims_db() -> ClaimsDB:
     claims = [
         Claim(id="skill-python", text="Python", category="skill", tags=["python"]),
-        Claim(id="skill-python_en", text="Python (en)", category="skill", tags=["python"]),
-        Claim(id="skill-rag", text="Pipelines RAG con recall medido", category="skill", tags=["rag"]),
-        Claim(id="skill-rag_ca", text="Pipelines RAG (ca)", category="skill", tags=["rag"]),
-        Claim(id="edu-bootcamp-data", text="Bootcamp de datos, FP-equivalente", category="education", tags=["bootcamp"]),
+        Claim(
+            id="skill-python_en", text="Python (en)", category="skill", tags=["python"]
+        ),
+        Claim(
+            id="skill-rag",
+            text="Pipelines RAG con recall medido",
+            category="skill",
+            tags=["rag"],
+        ),
+        Claim(
+            id="skill-rag_ca", text="Pipelines RAG (ca)", category="skill", tags=["rag"]
+        ),
+        Claim(
+            id="edu-bootcamp-data",
+            text="Bootcamp de datos, FP-equivalente",
+            category="education",
+            tags=["bootcamp"],
+        ),
     ]
     return ClaimsDB(claims=claims, by_id={c.id: c for c in claims})
 
@@ -254,7 +268,9 @@ def test_build_system_prompt_names_fine_tuning_as_daily_core_example() -> None:
     assert "training/fine-tuning your own models" in prompt or "own models" in prompt
 
 
-def test_build_system_prompt_clarifies_generic_ml_or_cloud_lines_are_not_daily_core() -> None:
+def test_build_system_prompt_clarifies_generic_ml_or_cloud_lines_are_not_daily_core() -> (
+    None
+):
     """Regression from eval run4 (odd/tasks/judge-wall-rules.md T3b): a mixed
     LLM-chatbot role with generic 'develop and deploy ML models' wording and
     ML-framework/cloud-platform lists in the requirements was wrongly read
@@ -269,7 +285,9 @@ def test_build_system_prompt_clarifies_generic_ml_or_cloud_lines_are_not_daily_c
     prompt = build_system_prompt(_claims_db()).lower()
     assert "most of the working week" in prompt
     assert "do not by themselves" in prompt or "does not by itself" in prompt
-    assert "llm" in prompt and ("chatbot" in prompt or "rag" in prompt or "agent" in prompt)
+    assert "llm" in prompt and (
+        "chatbot" in prompt or "rag" in prompt or "agent" in prompt
+    )
 
 
 def test_build_system_prompt_never_leaks_en_or_ca_claim_ids() -> None:

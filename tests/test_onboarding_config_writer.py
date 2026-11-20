@@ -11,6 +11,7 @@ import pytest
 
 import bot
 from cva.i18n import t
+from tests.portability import symlink_or_skip
 from tests.test_onboarding import Driver, _answer_everything, _setup_mode
 from tests.test_onboarding_sections import _set_up, _start
 
@@ -62,7 +63,7 @@ def test_setup_portals_writes_through_a_symlinked_config(tmp_path: Path) -> None
     real.parent.mkdir()
     real.write_text(config.read_text("utf-8"), encoding="utf-8")
     config.unlink()
-    config.symlink_to(real)
+    symlink_or_skip(config, real)
     _portals_run(d)
     assert d.replies[-1].startswith(t("onboarding.saved", "en"))
     assert config.is_symlink() and config.resolve() == real.resolve()
@@ -78,7 +79,7 @@ def test_undo_puts_a_symlinked_file_back_through_the_link(tmp_path: Path) -> Non
     real.parent.mkdir()
     real.write_text("before\n", encoding="utf-8")
     link = tmp_path / "config.local.toml"
-    link.symlink_to(real)
+    symlink_or_skip(link, real)
     snap = Snapshot.take([link], [])
     real.write_text("after\n", encoding="utf-8")
     snap.restore()
@@ -90,7 +91,7 @@ def test_language_switch_writes_through_a_symlinked_config(tmp_path: Path) -> No
     real = tmp_path / "dotfiles" / "cva.toml"
     real.parent.mkdir()
     real.write_text("# mine\n", encoding="utf-8")
-    config.symlink_to(real)
+    symlink_or_skip(config, real)
     d.start()
     _answer_everything(d, "es")
     d.press("confirm")

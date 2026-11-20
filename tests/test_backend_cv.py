@@ -30,14 +30,21 @@ def db() -> Any:
 
 
 @pytest.mark.parametrize("variant", [CvVariant.BACKEND_ES, CvVariant.BACKEND_EN])
-def test_backend_masters_load_and_reference_known_claims(variant: CvVariant, db: Any) -> None:
+def test_backend_masters_load_and_reference_known_claims(
+    variant: CvVariant, db: Any
+) -> None:
     master = load_master(variant, MASTERS, db)
     assert master.variant == variant
     assert master_leaf_ids(master) <= set(db.by_id)
     assert master.header.tagline is not None
     assert master.header.tagline.text.startswith("Python Backend Developer")
     assert list(master.sections) == [
-        "summary", "experience", "projects", "education", "certifications", "skills",
+        "summary",
+        "experience",
+        "projects",
+        "education",
+        "certifications",
+        "skills",
     ]
 
 
@@ -68,7 +75,11 @@ def test_backend_summary_is_backend_not_ai(db: Any) -> None:
     es = load_master(CvVariant.BACKEND_ES, MASTERS, db)
     assert es.sections["summary"].paragraphs[0].text.startswith("Desarrollador backend")
     en = load_master(CvVariant.BACKEND_EN, MASTERS, db)
-    assert en.sections["summary"].paragraphs[0].text.startswith("Junior Python backend developer")
+    assert (
+        en.sections["summary"]
+        .paragraphs[0]
+        .text.startswith("Junior Python backend developer")
+    )
 
 
 def test_backend_has_no_catalan_variant() -> None:
@@ -78,7 +89,9 @@ def test_backend_has_no_catalan_variant() -> None:
 # --- migration v7 ----------------------------------------------------------
 
 
-def test_migration_v7_widens_cv_base_check_and_keeps_every_column(tmp_path: Path) -> None:
+def test_migration_v7_widens_cv_base_check_and_keeps_every_column(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "legacy.db"
     legacy = sqlite3.connect(path)
     legacy.executescript(_SCHEMA_SQL)
@@ -99,7 +112,9 @@ def test_migration_v7_widens_cv_base_check_and_keeps_every_column(tmp_path: Path
     assert repo.get_offer(1).cv_base == "BACKEND_EN"
     # Since v23 the CHECK is a shape rule (<ROLE>_<LANG>); per-family languages are enforced in code.
     with pytest.raises(sqlite3.IntegrityError):
-        repo._conn.execute("INSERT INTO offers (source_data, cv_base) VALUES ('t', 'backend_ca')")
+        repo._conn.execute(
+            "INSERT INTO offers (source_data, cv_base) VALUES ('t', 'backend_ca')"
+        )
     columns = [r[1] for r in repo._conn.execute("PRAGMA table_info(offers)")]
     for name in ("analyze_attempts", "next_analyze_at", "perfil"):
         assert columns.count(name) == 1
@@ -159,6 +174,12 @@ def test_history_import_accepts_backend_cv_base() -> None:
     from cva.tracker.history import HistoryRecord
 
     rec = HistoryRecord.model_validate(
-        {"log_id": 1, "empresa": "A", "posicion": "B", "estado": "enviada", "cv_base": "BACKEND_ES"}
+        {
+            "log_id": 1,
+            "empresa": "A",
+            "posicion": "B",
+            "estado": "enviada",
+            "cv_base": "BACKEND_ES",
+        }
     )
     assert rec.cv_base == "BACKEND_ES"

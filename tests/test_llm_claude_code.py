@@ -134,7 +134,9 @@ def test_model_flag_present_only_when_configured() -> None:
 
 def test_timeout_seconds_forwarded_to_runner() -> None:
     run = _FakeRun(stdout=_success_result_string())
-    asyncio.run(_client(run, timeout_seconds=42.0).json_completion("sys", "text", Reply))
+    asyncio.run(
+        _client(run, timeout_seconds=42.0).json_completion("sys", "text", Reply)
+    )
 
     _argv, _stdin, timeout_seconds = run.calls[0]
     assert timeout_seconds == 42.0
@@ -289,7 +291,9 @@ def test_timeout_raises_llm_response_error_naming_the_budget() -> None:
     run = _FakeRun(raises=TimeoutError())
 
     with pytest.raises(LlmResponseError, match="180"):
-        asyncio.run(_client(run, timeout_seconds=180.0).json_completion("sys", "text", Reply))
+        asyncio.run(
+            _client(run, timeout_seconds=180.0).json_completion("sys", "text", Reply)
+        )
 
 
 def test_file_not_found_raises_actionable_error_naming_claude_code_path() -> None:

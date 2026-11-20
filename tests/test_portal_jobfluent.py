@@ -36,6 +36,7 @@ def test_jobfluent_adapter_over_the_saved_page() -> None:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
@@ -76,6 +77,7 @@ def _node(expr: str) -> str:
         text=True,
         timeout=60,
         check=True,
+        encoding="utf-8",
     ).stdout
 
 
@@ -127,6 +129,7 @@ def test_age_cutoff_keeps_up_to_a_week() -> None:
         text=True,
         timeout=60,
         check=True,
+        encoding="utf-8",
     ).stdout
     assert json.loads(out) == ["000001", "000002", "000004", "000006", "000008"]
 

@@ -102,7 +102,9 @@ def test_generated_copy_leaves_original_and_overwrites_silently(
     with caplog.at_level(logging.WARNING, logger="cva.mirror"):
         assert on_generated(root, pdf) is True
     assert pdf.read_bytes() == b"%PDF-1.7 regenerated"  # adaptadas/ untouched
-    assert (root / "nuevos" / pdf.parent.name / pdf.name).read_bytes() == b"%PDF-1.7 regenerated"
+    assert (
+        root / "nuevos" / pdf.parent.name / pdf.name
+    ).read_bytes() == b"%PDF-1.7 regenerated"
     assert caplog.records == []
 
 
@@ -111,7 +113,9 @@ def test_generated_oserror_warns_and_returns_false(
 ) -> None:
     """Spec: copy failure → WARNING, no exception, mirror skipped."""
     pdf = _make_pdf(adaptadas)
-    (tmp_path / "mirror").write_text("a file blocks the mirror root")  # mkdir fails
+    (tmp_path / "mirror").write_text(
+        "a file blocks the mirror root", encoding="utf-8"
+    )  # mkdir fails
     with caplog.at_level(logging.WARNING, logger="cva.mirror"):
         assert on_generated(tmp_path / "mirror", pdf) is False
     assert caplog.records

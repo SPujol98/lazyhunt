@@ -47,6 +47,7 @@ def _node(mode: str, stdin: str | None = None) -> str:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     return result.stdout

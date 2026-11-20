@@ -36,3 +36,17 @@ packages = ["cva"]
 [[tool.mypy.overrides]]
 module = ["googleapiclient.*", "google_auth_oauthlib.*"]
 ignore_missing_imports = true
+
+[tool.ruff.format]
+# ruff 0.16 also formats Python fences inside Markdown; those are prose
+# snippets (often partial expressions), so keep the formatter on .py files.
+exclude = ["*.md"]
+
+[tool.coverage.run]
+branch = true
+source = ["cva", "bot", "cli"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+sort = "cover"

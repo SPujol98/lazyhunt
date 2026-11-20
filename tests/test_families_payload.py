@@ -27,9 +27,7 @@ def test_builtin_family_with_its_own_title_filter_is_served(tmp_path: Path) -> N
 
 
 def test_title_filters_table_alone_still_serves_no_families(tmp_path: Path) -> None:
-    prefs = _prefs(
-        tmp_path, '[title_filters.backend]\ninclude_groups = [["Python"]]\n'
-    )
+    prefs = _prefs(tmp_path, '[title_filters.backend]\ninclude_groups = [["Python"]]\n')
     assert families_payload(prefs.families, prefs.title_filters) is None
 
 

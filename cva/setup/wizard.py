@@ -93,7 +93,13 @@ def default_runner(argv: Sequence[str]) -> tuple[int, str]:
     """Run a local command; return ``(exit code, stdout)``, ``(-1, "")`` on failure."""
     try:
         proc = subprocess.run(
-            list(argv), capture_output=True, text=True, timeout=30, check=False
+            list(argv),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
         )
     except (OSError, subprocess.SubprocessError):
         return -1, ""

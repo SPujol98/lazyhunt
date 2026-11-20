@@ -28,7 +28,9 @@ from cva.tracker import OfferInput, OfferRepository
 from tests.demo import DEMO_BASE_PDFS, DEMO_CLAIMS, DEMO_SYNONYMS
 
 URL = "https://www.linkedin.com/jobs/view/4459804598/"
-ES_TEXT = "Buscamos desarrollador frontend. Imprescindible React y experiencia con APIs."
+ES_TEXT = (
+    "Buscamos desarrollador frontend. Imprescindible React y experiencia con APIs."
+)
 EN_TEXT = "We are hiring a frontend developer. React and REST APIs are required for this role."
 CA_TEXT = "Cerquem un desenvolupador frontend amb experiència en React i en APIs. Treballaràs amb nosaltres."
 
@@ -44,7 +46,9 @@ title_terms = ["Frontend", "React"]
 class _Llm:
     model = "m"
 
-    async def json_completion(self, system: str, user: str, schema: type[object]) -> object:  # pragma: no cover
+    async def json_completion(
+        self, system: str, user: str, schema: type[object]
+    ) -> object:  # pragma: no cover
         raise AssertionError("no LLM call expected")
 
 
@@ -60,7 +64,10 @@ def _pdf(text: str) -> bytes:
         b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
         b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
         b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n"
-        b"4 0 obj<</Length " + str(len(stream)).encode() + b">>stream\n" + stream
+        b"4 0 obj<</Length "
+        + str(len(stream)).encode()
+        + b">>stream\n"
+        + stream
         + b"\nendstream endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
     )
 
@@ -130,9 +137,19 @@ _FRONTEND = {"FRONTEND_ES": {"text": "front es"}, "FRONTEND_EN": {"text": "front
 @pytest.mark.parametrize(
     ("text", "lang", "key", "name"),
     [
-        pytest.param(ES_TEXT, None, "FRONTEND_ES", "Alex_Rivera_Frontend_ES.pdf", id="es"),
-        pytest.param(EN_TEXT, None, "FRONTEND_EN", "Alex_Rivera_Frontend_EN.pdf", id="en"),
-        pytest.param(ES_TEXT, "en", "FRONTEND_EN", "Alex_Rivera_Frontend_EN.pdf", id="explicit-en"),
+        pytest.param(
+            ES_TEXT, None, "FRONTEND_ES", "Alex_Rivera_Frontend_ES.pdf", id="es"
+        ),
+        pytest.param(
+            EN_TEXT, None, "FRONTEND_EN", "Alex_Rivera_Frontend_EN.pdf", id="en"
+        ),
+        pytest.param(
+            ES_TEXT,
+            "en",
+            "FRONTEND_EN",
+            "Alex_Rivera_Frontend_EN.pdf",
+            id="explicit-en",
+        ),
     ],
 )
 def test_declared_family_delivers_its_manifest_base_cv(
@@ -230,7 +247,7 @@ def test_explicit_language_the_family_lacks_is_a_clear_error(tmp_path: Path) -> 
 
 
 def test_declared_backend_without_catalan_rejects_backend_ca(tmp_path: Path) -> None:
-    prefs = '[families.ai]\n[families.backend]\n'
+    prefs = "[families.ai]\n[families.backend]\n"
     base = _base(tmp_path, {"BACKEND_CA": {"text": "backend ca"}})
     svc, repo = _service(tmp_path, base, prefs)
     oid = _offer(repo, ES_TEXT, "backend")
@@ -261,10 +278,15 @@ def test_unknown_manifest_keys_do_not_break_builtin_delivery(tmp_path: Path) -> 
     pdf = asyncio.run(svc.generate_cv(oid))
     assert repo.get_offer(oid).cv_base == "AI_ES"
     assert pdf.name == "Alex_Rivera_Ingeniero_IA.pdf"
-    assert pdf.read_bytes() == (DEMO_BASE_PDFS / "CV_AI_Engineer_Alex_Rivera.pdf").read_bytes()
+    assert (
+        pdf.read_bytes()
+        == (DEMO_BASE_PDFS / "CV_AI_Engineer_Alex_Rivera.pdf").read_bytes()
+    )
     assert "MARKETING_ES" in deliverable_variants(base)
     assert "MARKETING_ES" not in deliverable_variants(base, BUILTIN_REGISTRY)
-    assert deliverable_variants(base, BUILTIN_REGISTRY) == deliverable_variants(DEMO_BASE_PDFS)
+    assert deliverable_variants(base, BUILTIN_REGISTRY) == deliverable_variants(
+        DEMO_BASE_PDFS
+    )
 
 
 def test_offer_of_an_undeclared_family_degrades_to_the_default(tmp_path: Path) -> None:

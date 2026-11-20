@@ -20,7 +20,7 @@ from cva import bridge
 from cva.config import Settings
 from cva.i18n import Lang, t
 from cva.onboarding import flow
-from cva.onboarding.portals import portal_label
+from cva.onboarding.portals import portal_label, write_enabled_portals
 from tests.test_onboarding import Driver, _answer_everything, _full_app, _setup_mode
 from tests.test_onboarding_sections import _start
 
@@ -163,3 +163,33 @@ def test_legacy_install_without_profile_dir_never_writes_the_config(
     d.start()
     assert d.last == t("onboarding.no_profile_dir", "en")
     assert config.read_bytes() == CONFIG.encode("utf-8")
+
+
+# --- write_enabled_portals refuses what the bot could not load --------------------
+
+
+def test_an_unknown_portal_id_is_refused_and_the_config_keeps_its_bytes(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config.local.toml"
+    config.write_bytes(CONFIG.encode("utf-8"))
+    with pytest.raises(ValueError, match="unknown portal id"):
+        write_enabled_portals(config, ["linkedin", "nope"])
+    assert config.read_bytes() == CONFIG.encode("utf-8")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]
+
+
+def test_a_failed_replace_keeps_the_config_and_leaves_no_temp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.local.toml"
+    config.write_bytes(CONFIG.encode("utf-8"))
+
+    def refuse(src: object, dst: object) -> None:
+        raise PermissionError("locked by another program")
+
+    monkeypatch.setattr("cva.fsutil.os.replace", refuse)
+    with pytest.raises(PermissionError):
+        write_enabled_portals(config, ["linkedin"])
+    assert config.read_bytes() == CONFIG.encode("utf-8")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]

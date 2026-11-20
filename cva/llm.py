@@ -771,7 +771,6 @@ def _no_json_diagnostic(
     )
 
 
-
 def _unwrap_double_encoded(data: object) -> object:
     """Undo a model answer whose string field holds the whole JSON answer again.
 
@@ -798,6 +797,7 @@ def _unwrap_double_encoded(data: object) -> object:
             value = inner[key]
         fixed[key] = value
     return fixed
+
 
 def _extract_json_object(
     content: str, *, finish_reason: str | None = None, label: str = "finish_reason"

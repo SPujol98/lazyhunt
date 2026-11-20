@@ -23,7 +23,9 @@ from tests.demo import DEMO_BASE_PDFS, DEMO_CLAIMS, DEMO_SYNONYMS
 _ROOT = Path(__file__).resolve().parent.parent
 BASE = DEMO_BASE_PDFS
 URL = "https://www.linkedin.com/jobs/view/4459804598/"
-ES_TEXT = "Buscamos desarrollador backend. Imprescindible Python y experiencia con APIs."
+ES_TEXT = (
+    "Buscamos desarrollador backend. Imprescindible Python y experiencia con APIs."
+)
 EN_TEXT = "We are hiring a backend developer. Python and REST APIs are required for this role."
 CA_TEXT = "Cerquem un desenvolupador backend amb experiència en Python i en APIs. Treballaràs amb nosaltres."
 
@@ -39,12 +41,16 @@ FILES = {
 class _Llm:
     model = "m"
 
-    async def json_completion(self, system: str, user: str, schema: type[object]) -> object:
+    async def json_completion(
+        self, system: str, user: str, schema: type[object]
+    ) -> object:
         return OfferExtraction(
             title="Dev",
             company="A",
             requirements=[
-                Requirement(name="Python", category="skill", must_have=True, evidence="Python")
+                Requirement(
+                    name="Python", category="skill", must_have=True, evidence="Python"
+                )
             ],
         )
 
@@ -58,7 +64,9 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _service(tmp_path: Path, base_dir: Path = BASE) -> tuple[JobService, OfferRepository]:
+def _service(
+    tmp_path: Path, base_dir: Path = BASE
+) -> tuple[JobService, OfferRepository]:
     conn = sqlite3.connect(tmp_path / "app.db", check_same_thread=False)
     repo = OfferRepository(conn)
     db = load_claims(DEMO_CLAIMS)
@@ -107,15 +115,24 @@ def _offer(
         pytest.param(None, ES_TEXT, None, None, "AI_ES", id="legacy-null-is-ai"),
         pytest.param("backend", ES_TEXT, None, None, "BACKEND_ES", id="backend-es"),
         pytest.param("backend", EN_TEXT, None, None, "BACKEND_EN", id="backend-en"),
-        pytest.param("backend", CA_TEXT, None, None, "BACKEND_ES", id="backend-ca-to-es"),
+        pytest.param(
+            "backend", CA_TEXT, None, None, "BACKEND_ES", id="backend-ca-to-es"
+        ),
         pytest.param("backend", ES_TEXT, "AI", None, "AI_ES", id="forced-ai"),
         pytest.param("ai", EN_TEXT, "BACKEND", None, "BACKEND_EN", id="forced-backend"),
         pytest.param("ai", ES_TEXT, "AI", "ca", "AI_CA", id="explicit-ca-ai"),
-        pytest.param("ai", ES_TEXT, "BACKEND", "en", "BACKEND_EN", id="explicit-en-backend"),
+        pytest.param(
+            "ai", ES_TEXT, "BACKEND", "en", "BACKEND_EN", id="explicit-en-backend"
+        ),
     ],
 )
 def test_variant_selection_delivers_the_matching_base_pdf(
-    tmp_path: Path, profile: str | None, text: str, role: str | None, lang: str | None, expected: str
+    tmp_path: Path,
+    profile: str | None,
+    text: str,
+    role: str | None,
+    lang: str | None,
+    expected: str,
 ) -> None:
     svc, repo = _service(tmp_path)
     oid = _offer(repo, text, profile)
@@ -147,7 +164,9 @@ def test_ai_offer_gets_generic_ai_name_in_offer_folder(tmp_path: Path) -> None:
     svc, repo = _service(tmp_path)
     oid = _offer(repo, ES_TEXT, "ai", title="Junior AI Engineer (all genders welcome)")
     pdf = asyncio.run(svc.generate_cv(oid))
-    assert pdf == tmp_path / "adaptadas" / f"{oid}_Acme" / "Alex_Rivera_Ingeniero_IA.pdf"
+    assert (
+        pdf == tmp_path / "adaptadas" / f"{oid}_Acme" / "Alex_Rivera_Ingeniero_IA.pdf"
+    )
     row = repo.get_offer(oid)
     assert row.cv_adaptado == str(pdf)
     assert (row.cambios or "").startswith(BASE_CAMBIOS)
@@ -237,7 +256,9 @@ def test_company_slug_is_ascii_and_has_fallback(
     assert pdf.parent.name == f"{oid}_{slug}"
 
 
-def test_delivery_never_renders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_delivery_never_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import cva.service as service_module
 
     assert not hasattr(service_module, "render")
@@ -289,12 +310,12 @@ def test_variant_not_in_manifest_is_an_error(tmp_path: Path) -> None:
 
 
 def test_manifest_covers_exactly_the_deliverable_variants() -> None:
-    manifest = json.loads((BASE / "manifest.json").read_text())["variants"]
+    manifest = json.loads((BASE / "manifest.json").read_text(encoding="utf-8"))[
+        "variants"
+    ]
     assert {CvVariant[name] for name in manifest} == set(deliverable_variants(BASE))
     assert {name: entry["file"] for name, entry in manifest.items()} == FILES
     assert sorted(p.name for p in BASE.glob("*.pdf")) == sorted(FILES.values())
-
-
 
 
 def test_delivery_is_atomic_on_copy_failure(tmp_path: Path, monkeypatch) -> None:

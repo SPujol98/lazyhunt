@@ -30,6 +30,7 @@ from cva.profile_identity import ProfileError, load_identity
 from cva.profile_persona import RUBRIC_SLOTS, load_judge_persona
 from cva.service import JobService
 from cva.setup_mode import REQUIRED_PROFILE_FILES, missing_profile_files, needs_setup
+from tests.portability import posix_modes
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO_PROFILE = REPO_ROOT / "profiles" / "demo"
@@ -105,6 +106,7 @@ def test_empty_profile_leaves_setup_mode_and_the_service_loads(
     assert claims.by_id[identity.identity_claim_id].text.startswith("Jane Roe")
 
 
+@posix_modes
 def test_claims_file_is_private(tmp_path: Path) -> None:
     profile, answers = _confirmed(tmp_path)
     generate_minimal_profile(profile, answers, "en")

@@ -65,9 +65,12 @@ def test_load_missing_file_is_empty(tmp_path: Path) -> None:
 
 def test_placeholder_rows_are_never_loaded(tmp_path: Path) -> None:
     path = tmp_path / "ref.toml"
-    path.write_text(FIXTURE + "\n[[range]]\nbranch=\"AI\"\nlevel=\"mid\"\ncity=\"madrid\"\n"
-        "low=0\nmedian=0\nhigh=0\nask=0\nsources=[\"x\"]\nconfidence=\"low\"\n"
-        "as_of=\"0000-00\"\nplaceholder=true\n", encoding="utf-8")
+    path.write_text(
+        FIXTURE + '\n[[range]]\nbranch="AI"\nlevel="mid"\ncity="madrid"\n'
+        'low=0\nmedian=0\nhigh=0\nask=0\nsources=["x"]\nconfidence="low"\n'
+        'as_of="0000-00"\nplaceholder=true\n',
+        encoding="utf-8",
+    )
     assert len(load_reference_table(path)) == 2
 
 
@@ -138,7 +141,10 @@ def test_reference_line_flags_undetected_city_and_low_confidence(
     table: list[ReferenceRange],
 ) -> None:
     line = salary_line(
-        title="Backend Engineer", text="2-5 años de experiencia en Python", perfil="backend", table=table
+        title="Backend Engineer",
+        text="2-5 años de experiencia en Python",
+        perfil="backend",
+        table=table,
     )
     assert "Backend mid" in line
     assert "ubicación no detectada" in line
@@ -148,13 +154,17 @@ def test_reference_line_flags_undetected_city_and_low_confidence(
 
 def test_senior_shows_no_reference(table: list[ReferenceRange]) -> None:
     assert (
-        salary_line(title="Senior AI Engineer", text="Barcelona", perfil="ai", table=table)
+        salary_line(
+            title="Senior AI Engineer", text="Barcelona", perfil="ai", table=table
+        )
         == ""
     )
 
 
 def test_no_matching_row_no_line(table: list[ReferenceRange]) -> None:
-    assert salary_line(title="AI Engineer", text="Madrid", perfil="ai", table=table) == ""
+    assert (
+        salary_line(title="AI Engineer", text="Madrid", perfil="ai", table=table) == ""
+    )
     assert salary_line(title="AI Engineer", text="Madrid", perfil="ai", table=[]) == ""
 
 
@@ -170,7 +180,10 @@ def test_published_salary_wins_over_reference(table: list[ReferenceRange]) -> No
 
 def test_published_monthly_states_conversion(table: list[ReferenceRange]) -> None:
     line = salary_line(
-        title="AI Engineer", text="2.000 - 2.500 € brutos al mes", perfil="ai", table=table
+        title="AI Engineer",
+        text="2.000 - 2.500 € brutos al mes",
+        perfil="ai",
+        table=table,
     )
     assert line.startswith("💶 Salario publicado: 24.000–30.000 € brutos/año")
     assert "mensual x12" in line

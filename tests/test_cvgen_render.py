@@ -315,7 +315,9 @@ def test_tampered_contact_block_blocks_delivery(
     tampered = original.model_copy(deep=True)
     # Swap the phone leaf for a different claim-clean number: the render is
     # whitelist-clean but no longer matches the master's contact block.
-    phone_leaf = next(leaf for leaf in tampered.header.contact if leaf.text.startswith("+34"))
+    phone_leaf = next(
+        leaf for leaf in tampered.header.contact if leaf.text.startswith("+34")
+    )
     phone_leaf.text = "+34 611 222 333"
     _, result = _render_to(
         tmp_path, "tampered.pdf", tampered, neutral_plan(CvVariant.AI_ES), db
@@ -341,9 +343,10 @@ def test_output_naming_convention(tmp_path: Path) -> None:
 
 def test_tailored_output_path_drops_parenthesised_title_noise(tmp_path: Path) -> None:
     """LinkedIn title markers like "(all genders welcome)" never reach the name."""
-    assert tailored_output_path(
-        "Junior AI Engineer (all genders welcome)", tmp_path
-    ) == tmp_path / f"{SLUG}_Junior_AI_Engineer.pdf"
+    assert (
+        tailored_output_path("Junior AI Engineer (all genders welcome)", tmp_path)
+        == tmp_path / f"{SLUG}_Junior_AI_Engineer.pdf"
+    )
     assert tailored_output_path("Data Scientist [m/f/d] (Remote)", tmp_path) == (
         tmp_path / f"{SLUG}_Data_Scientist.pdf"
     )
@@ -511,7 +514,9 @@ def test_tampered_en_contact_block_still_gated(
     """The contact gate must keep enforcing `_en` identity twins, not skip them."""
     original = masters[variant.value]
     tampered = original.model_copy(deep=True)
-    phone_leaf = next(leaf for leaf in tampered.header.contact if leaf.text.startswith("+34"))  # type: ignore[union-attr]
+    phone_leaf = next(
+        leaf for leaf in tampered.header.contact if leaf.text.startswith("+34")
+    )  # type: ignore[union-attr]
     phone_leaf.text = "+34 611 222 333"
     _out, result = _render_to(
         tmp_path, f"tampered-{variant.value}.pdf", tampered, neutral_plan(variant), db

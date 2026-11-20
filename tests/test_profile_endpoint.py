@@ -584,6 +584,58 @@ def test_a_failing_write_rolls_everything_back(
     assert _hashes(live.profile) == before
 
 
+def test_a_failed_undo_is_reported_and_never_claims_a_rollback(
+    live: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken_hook(profile_dir: Path, answers: dict[str, Any]) -> None:
+        raise OSError("disk full")
+
+    def broken_restore(self: object) -> None:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(profile_edit, "CONFIRM_HOOKS", [broken_hook])
+    monkeypatch.setattr("cva.onboarding.snapshot.Snapshot.restore", broken_restore)
+    resp = _post(live, {"section": "background", "values": BACKGROUND})
+    assert resp.status_code == 500
+    body = resp.json()
+    assert body["error"] == "write failed"
+    assert body["rolledBack"] is False
+    assert "disk full" in body["detail"]
+    assert "read-only file system" in body["rollbackError"]
+    assert str(live.profile) not in resp.text
+
+
+def test_an_unexpected_error_still_rolls_back_and_answers_500(
+    live: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = _hashes(live.profile)
+
+    def buggy_hook(profile_dir: Path, answers: dict[str, Any]) -> None:
+        (profile_dir / "claims.json").write_text("garbage", "utf-8")
+        raise RuntimeError("bug in a hook")
+
+    monkeypatch.setattr(profile_edit, "CONFIRM_HOOKS", [buggy_hook])
+    resp = _post(live, {"section": "background", "values": BACKGROUND})
+    assert resp.status_code == 500
+    assert resp.json() == {"error": "internal error"}
+    assert _hashes(live.profile) == before
+    # The server keeps serving after the failed request.
+    assert _get(live).status_code == 200
+
+
+def test_get_profile_failure_is_a_500_without_details(
+    live: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken_view(profile_dir: Path) -> dict[str, Any]:
+        raise ValueError(f"cannot parse {profile_dir}/claims.json")
+
+    monkeypatch.setattr(profile_edit, "profile_view", broken_view)
+    resp = _get(live)
+    assert resp.status_code == 500
+    assert resp.json() == {"error": "internal error"}
+    assert str(live.profile) not in resp.text
+
+
 # --- rule: never interleaved with a /setup Confirm or another POST ------------------
 
 

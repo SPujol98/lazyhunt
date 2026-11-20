@@ -22,12 +22,16 @@ LOCALES = EXTENSION / "_locales"
 HARNESS = Path(__file__).resolve().parent / "fixtures" / "extension_pages_harness.js"
 PAGES = {"popup.js": "popup.html", "options.js": "options.html"}
 
-needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node not available")
+needs_node = pytest.mark.skipif(
+    shutil.which("node") is None, reason="node not available"
+)
 pytestmark = pytest.mark.skipif(not EXTENSION.is_dir(), reason="extension/ not present")
 
 
 def _messages(lang: str) -> dict[str, dict]:
-    data: dict[str, dict] = json.loads((LOCALES / lang / "messages.json").read_text(encoding="utf-8"))
+    data: dict[str, dict] = json.loads(
+        (LOCALES / lang / "messages.json").read_text(encoding="utf-8")
+    )
     return data
 
 
@@ -43,13 +47,24 @@ def _run(area: str) -> None:
         text=True,
         timeout=180,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
 
 @needs_node
 @pytest.mark.parametrize(
-    "area", ["i18n", "portals", "save", "interval", "suggest", "maintenance", "popup", "nobridge"]
+    "area",
+    [
+        "i18n",
+        "portals",
+        "save",
+        "interval",
+        "suggest",
+        "maintenance",
+        "popup",
+        "nobridge",
+    ],
 )
 def test_pages_behaviour(area: str) -> None:
     _run(area)
@@ -63,10 +78,14 @@ def test_locales_have_the_same_keys_and_placeholders() -> None:
         assert re.fullmatch(r"[A-Za-z0-9_]+", key), key
         for lang, item in (("en", entry), ("es", es[key])):
             assert isinstance(item.get("message"), str) and item["message"], (lang, key)
-            used = {m.lower() for m in re.findall(r"\$([A-Za-z0-9_@]+)\$", item["message"])}
+            used = {
+                m.lower() for m in re.findall(r"\$([A-Za-z0-9_@]+)\$", item["message"])
+            }
             declared = set(item.get("placeholders", {}))
             assert used == declared, (lang, key, used, declared)
-        assert set(entry.get("placeholders", {})) == set(es[key].get("placeholders", {})), key
+        assert set(entry.get("placeholders", {})) == set(
+            es[key].get("placeholders", {})
+        ), key
 
 
 def test_every_key_the_pages_use_exists() -> None:
@@ -88,10 +107,20 @@ def test_every_id_the_scripts_use_is_in_their_page() -> None:
 
 
 def test_pages_load_nothing_remote_and_have_no_telegram() -> None:
-    names = ["popup.html", "popup.js", "popup.css", "options.html", "options.js", "options.css", "shared.css"]
+    names = [
+        "popup.html",
+        "popup.js",
+        "popup.css",
+        "options.html",
+        "options.js",
+        "options.css",
+        "shared.css",
+    ]
     names += [f"_locales/{lang}/messages.json" for lang in ("en", "es")]
     for name in names:
         text = _read(name)
         assert "telegram" not in text.lower(), name
-        assert not re.search(r"googleapis|gstatic|@import|url\(\s*['\"]?https?:", text), name
+        assert not re.search(
+            r"googleapis|gstatic|@import|url\(\s*['\"]?https?:", text
+        ), name
         assert not re.search(r'(?:src|href)="https?:', text), name

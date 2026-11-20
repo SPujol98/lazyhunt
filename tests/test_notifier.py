@@ -220,7 +220,9 @@ def _judgment(
     )
 
 
-def test_judge_breakdown_message_falls_back_to_keyword_breakdown_when_no_judgment() -> None:
+def test_judge_breakdown_message_falls_back_to_keyword_breakdown_when_no_judgment() -> (
+    None
+):
     """keyword-only mode (or hybrid with no fallback note): identical to
     breakdown_message — byte-for-byte, so the keyword-mode card never changes."""
     from cva.notifier import breakdown_message, judge_breakdown_message
@@ -897,6 +899,21 @@ def test_sent_keyboard_offers_regenerate_with_the_delivered_variant() -> None:
     rows = sent_keyboard(OFFER_ID, cv_base="BACKEND_EN").inline_keyboard
     regen = [b for row in rows for b in row if "Rehacer" in b.text]
     assert [b.callback_data for b in regen] == [f"cv:{OFFER_ID}:BACKEND:en"]
-    assert [b.callback_data for row in sent_keyboard(OFFER_ID, cv_base="AI_CA").inline_keyboard for b in row if "Rehacer" in b.text] == [f"cv:{OFFER_ID}:AI:ca"]
-    assert [b.callback_data for row in sent_keyboard(OFFER_ID, cv_base="DS_ES").inline_keyboard for b in row if "Rehacer" in b.text] == [f"cv:{OFFER_ID}:AI:es"]
-    assert not [b for row in sent_keyboard(OFFER_ID).inline_keyboard for b in row if "Rehacer" in b.text]
+    assert [
+        b.callback_data
+        for row in sent_keyboard(OFFER_ID, cv_base="AI_CA").inline_keyboard
+        for b in row
+        if "Rehacer" in b.text
+    ] == [f"cv:{OFFER_ID}:AI:ca"]
+    assert [
+        b.callback_data
+        for row in sent_keyboard(OFFER_ID, cv_base="DS_ES").inline_keyboard
+        for b in row
+        if "Rehacer" in b.text
+    ] == [f"cv:{OFFER_ID}:AI:es"]
+    assert not [
+        b
+        for row in sent_keyboard(OFFER_ID).inline_keyboard
+        for b in row
+        if "Rehacer" in b.text
+    ]

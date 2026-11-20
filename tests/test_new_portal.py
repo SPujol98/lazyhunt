@@ -40,7 +40,9 @@ export const PORTALS = [linkedin, infojobs];
 def tree(tmp_path: Path) -> Path:
     """A minimal repo layout the scaffold edits."""
     (tmp_path / "extension" / "portals").mkdir(parents=True)
-    (tmp_path / "extension" / "portals" / "registry.js").write_text(REGISTRY)
+    (tmp_path / "extension" / "portals" / "registry.js").write_text(
+        REGISTRY, encoding="utf-8"
+    )
     (tmp_path / "tests" / "fixtures" / "portals").mkdir(parents=True)
     return tmp_path
 
@@ -57,7 +59,7 @@ def test_scaffold_creates_the_portal_files(tree: Path) -> None:
     ).is_file()
     assert (tree / "tests" / "test_portal_tecnoempleo.py").is_file()
     assert adapter in created
-    source = adapter.read_text()
+    source = adapter.read_text(encoding="utf-8")
     assert "id: 'tecnoempleo'" in source
     assert 'label: "Tecnoempleo"' in source
     assert "www.tecnoempleo.com" in source
@@ -75,7 +77,9 @@ def test_scaffold_creates_the_portal_files(tree: Path) -> None:
 
 def test_scaffold_registers_the_portal(tree: Path) -> None:
     new_portal.scaffold(tree, "tecnoempleo", "Tecnoempleo", "www.tecnoempleo.com")
-    registry = (tree / "extension" / "portals" / "registry.js").read_text()
+    registry = (tree / "extension" / "portals" / "registry.js").read_text(
+        encoding="utf-8"
+    )
     assert "import tecnoempleo from './tecnoempleo.js';" in registry
     assert "export const PORTALS = [linkedin, infojobs, tecnoempleo];" in registry
     assert registry.index("import tecnoempleo") > registry.index("import infojobs")
@@ -95,25 +99,27 @@ def test_scaffold_needs_no_fork_test_nor_provenance(tree: Path) -> None:
 def test_scaffolded_test_starts_red(tree: Path) -> None:
     """The generated test refuses the empty placeholder fixture: RED first."""
     new_portal.scaffold(tree, "tecnoempleo", "Tecnoempleo", "www.tecnoempleo.com")
-    test_source = (tree / "tests" / "test_portal_tecnoempleo.py").read_text()
+    test_source = (tree / "tests" / "test_portal_tecnoempleo.py").read_text(
+        encoding="utf-8"
+    )
     assert "extension_portal_fixture_harness.js" in test_source
     assert "tecnoempleo" in test_source
     assert "host_permissions" in test_source
     expected = json.loads(
         (
             tree / "tests" / "fixtures" / "portals" / "tecnoempleo.expected.json"
-        ).read_text()
+        ).read_text(encoding="utf-8")
     )
     assert expected["cards"] == []
 
 
 def test_scaffold_refuses_to_overwrite_and_changes_nothing(tree: Path) -> None:
     adapter = tree / "extension" / "portals" / "tecnoempleo.js"
-    adapter.write_text("// owner work\n")
-    before = {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
+    adapter.write_text("// owner work\n", encoding="utf-8")
+    before = {p: p.read_text(encoding="utf-8") for p in tree.rglob("*") if p.is_file()}
     with pytest.raises(new_portal.ScaffoldError, match="already exists"):
         new_portal.scaffold(tree, "tecnoempleo", "Tecnoempleo", "www.tecnoempleo.com")
-    after = {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
+    after = {p: p.read_text(encoding="utf-8") for p in tree.rglob("*") if p.is_file()}
     assert after == before
 
 
@@ -139,7 +145,7 @@ def test_invalid_hosts_are_rejected(tree: Path, bad_host: str) -> None:
 
 def test_missing_registry_marker_changes_nothing(tree: Path) -> None:
     (tree / "extension" / "portals" / "registry.js").write_text(
-        "export const OTHER = [];\n"
+        "export const OTHER = [];\n", encoding="utf-8"
     )
     before = sorted(p for p in tree.rglob("*") if p.is_file())
     with pytest.raises(new_portal.ScaffoldError, match="registry"):
@@ -149,10 +155,9 @@ def test_missing_registry_marker_changes_nothing(tree: Path) -> None:
 
 def test_label_with_quotes_is_escaped(tree: Path) -> None:
     new_portal.scaffold(tree, "xportal", 'X "Jobs"', "www.x.com")
-    assert (
-        'label: "X \\"Jobs\\""'
-        in (tree / "extension" / "portals" / "xportal.js").read_text()
-    )
+    assert 'label: "X \\"Jobs\\""' in (
+        tree / "extension" / "portals" / "xportal.js"
+    ).read_text(encoding="utf-8")
 
 
 def test_main_prints_next_steps(tree: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -203,6 +208,7 @@ def test_end_to_end_red_then_green_in_a_copy(tmp_path: Path) -> None:
             text=True,
             timeout=60,
             check=False,
+            encoding="utf-8",
         )
 
     red = run()
@@ -215,7 +221,8 @@ def test_end_to_end_red_then_green_in_a_copy(tmp_path: Path) -> None:
             f'<article class="job"><a href="/job/{i}">Role {i}</a><span>Acme</span><em>Barcelona</em></article>'
             for i in (1, 2, 3)
         )
-        + "</main>"
+        + "</main>",
+        encoding="utf-8",
     )
     cards = [
         {
@@ -234,10 +241,11 @@ def test_end_to_end_red_then_green_in_a_copy(tmp_path: Path) -> None:
                 "no_results_text": "Sin resultados",
                 "urls": ["https://www.toyjobs.test/x"],
             }
-        )
+        ),
+        encoding="utf-8",
     )
     adapter_path = tmp_path / "extension" / "portals" / "toyjobs.js"
-    source = adapter_path.read_text()
+    source = adapter_path.read_text(encoding="utf-8")
     start = source.index("function extractToyjobsCards(")
     end = source.index("\n}\n", start) + 3
     adapter_path.write_text(
@@ -258,10 +266,14 @@ def test_end_to_end_red_then_green_in_a_copy(tmp_path: Path) -> None:
   );
 }
 """
-        + source[end:]
+        + source[end:],
+        encoding="utf-8",
     )
     adapter_path.write_text(
-        adapter_path.read_text().replace("'TODO: no-results copy'", "'sin resultados'")
+        adapter_path.read_text(encoding="utf-8").replace(
+            "'TODO: no-results copy'", "'sin resultados'"
+        ),
+        encoding="utf-8",
     )
     green = run()
     assert green.returncode == 0, f"{green.stdout}\n{green.stderr}"
@@ -307,9 +319,12 @@ def test_scaffold_keeps_owner_portals_last(tmp_path: Path) -> None:
     (tmp_path / "extension" / "portals" / "registry.js").write_text(
         "import linkedin from './linkedin.js';\n"
         "import { OWNER_PORTALS } from './owner_portals.js';\n\n"
-        "export const PORTALS = [linkedin, ...OWNER_PORTALS];\n"
+        "export const PORTALS = [linkedin, ...OWNER_PORTALS];\n",
+        encoding="utf-8",
     )
     (tmp_path / "tests" / "fixtures" / "portals").mkdir(parents=True)
     new_portal.scaffold(tmp_path, "toyjobs", "ToyJobs", "www.toyjobs.test")
-    registry = (tmp_path / "extension" / "portals" / "registry.js").read_text()
+    registry = (tmp_path / "extension" / "portals" / "registry.js").read_text(
+        encoding="utf-8"
+    )
     assert "export const PORTALS = [linkedin, toyjobs, ...OWNER_PORTALS];" in registry

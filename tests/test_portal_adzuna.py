@@ -32,6 +32,7 @@ def test_adzuna_adapter_over_the_saved_page() -> None:
         text=True,
         timeout=60,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
@@ -78,6 +79,7 @@ def test_build_search_url_matches_the_owner_url_and_remote_filter() -> None:
             text=True,
             timeout=60,
             check=True,
+            encoding="utf-8",
         ).stdout
 
     # The owner's URL: https://www.adzuna.es/search?f=7&loc=206508&q=backend

@@ -70,6 +70,7 @@ def test_python_port_matches_filterjs_on_representative_titles() -> None:
         text=True,
         timeout=30,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, (
         f"title filter parity harness failed (exit {result.returncode})\n"
@@ -93,6 +94,7 @@ def test_python_constants_equal_the_filterjs_defaults() -> None:
         text=True,
         timeout=30,
         check=False,
+        encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     js = json.loads(result.stdout)
@@ -134,12 +136,16 @@ def test_matches_term_is_whole_word_only() -> None:
 
 
 def test_passes_filter_disabled_always_true() -> None:
-    disabled = TitleFilter(enabled=False, include_groups=[["nomatch"]], exclude_terms=["x"])
+    disabled = TitleFilter(
+        enabled=False, include_groups=[["nomatch"]], exclude_terms=["x"]
+    )
     assert passes_filter("Random Job Nobody Wants", "Whatever Inc", disabled) is True
 
 
 def test_passes_filter_include_groups_anded_terms_ored() -> None:
-    assert passes_filter("Machine Learning Engineer", "Acme", DEFAULT_TITLE_FILTER) is True
+    assert (
+        passes_filter("Machine Learning Engineer", "Acme", DEFAULT_TITLE_FILTER) is True
+    )
     assert passes_filter("AI Specialist", "Acme", DEFAULT_TITLE_FILTER) is False
 
 

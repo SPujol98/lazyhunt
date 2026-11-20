@@ -88,7 +88,9 @@ def test_prefers_first_salary_in_description_over_similar_jobs() -> None:
 
 
 def test_first_salary_wins() -> None:
-    found = _ok("Salario 28.000 - 34.000 € brutos/año. Bonus aparte. Antes 40.000 - 50.000 €")
+    found = _ok(
+        "Salario 28.000 - 34.000 € brutos/año. Bonus aparte. Antes 40.000 - 50.000 €"
+    )
     assert found.min_eur == 28000
 
 

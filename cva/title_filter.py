@@ -33,9 +33,7 @@ def normalize(text: str | None) -> str:
     if not text:
         return ""
     decomposed = unicodedata.normalize("NFD", text.lower())
-    without_marks = "".join(
-        ch for ch in decomposed if unicodedata.category(ch) != "Mn"
-    )
+    without_marks = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
     return _NON_ALNUM.sub(" ", without_marks).strip()
 
 

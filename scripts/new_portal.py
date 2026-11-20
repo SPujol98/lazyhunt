@@ -125,6 +125,7 @@ def test_{pid}_adapter_over_the_saved_page() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )
