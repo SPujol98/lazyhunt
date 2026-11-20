@@ -459,6 +459,8 @@ class _TimedLlm(FakeLlmClient):
         self._extract_error = extract_error
         self._judge_error_timed = judge_error
         self.judge_finished = False
+        self.in_flight = 0
+        self.max_in_flight = 0
 
     async def json_completion(
         self,
@@ -468,18 +470,23 @@ class _TimedLlm(FakeLlmClient):
         *,
         model: str | None = None,
     ) -> object:
-        if schema is OfferJudgment:
-            self.judge_calls += 1
-            await asyncio.sleep(self._judge_delay)
-            self.judge_finished = True
-            if self._judge_error_timed is not None:
-                raise self._judge_error_timed
-            return self._judge_reply
-        self.calls += 1
-        await asyncio.sleep(self._extract_delay)
-        if self._extract_error is not None:
-            raise self._extract_error
-        return self._reply
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            if schema is OfferJudgment:
+                self.judge_calls += 1
+                await asyncio.sleep(self._judge_delay)
+                self.judge_finished = True
+                if self._judge_error_timed is not None:
+                    raise self._judge_error_timed
+                return self._judge_reply
+            self.calls += 1
+            await asyncio.sleep(self._extract_delay)
+            if self._extract_error is not None:
+                raise self._extract_error
+            return self._reply
+        finally:
+            self.in_flight -= 1
 
 
 def _seed_prior_analysis(repo: OfferRepository, offer_id: int) -> None:
@@ -514,17 +521,14 @@ def test_analyze_hybrid_runs_extraction_and_judge_concurrently(
     tmp_path: Path,
 ) -> None:
     """The judge never reads the extraction, so both LLM calls overlap: the
-    analysis takes about the slower call, not the sum of both."""
-    import time
-
-    llm = _TimedLlm(extract_delay=0.3, judge_delay=0.3)
+    analysis takes about the slower call, not the sum of both. Overlap is
+    measured by counting calls in flight, not by wall time (slow CI runners)."""
+    llm = _TimedLlm(extract_delay=0.05, judge_delay=0.05)
     service, repo, offer_id = _timed_service(tmp_path, llm)
 
-    started = time.perf_counter()
     result = asyncio.run(service.analyze(offer_id))
-    elapsed = time.perf_counter() - started
 
-    assert elapsed < 0.5  # sequential would be >= 0.6
+    assert llm.max_in_flight == 2  # sequential would never exceed 1
     assert result.score == 80
     judge_row = repo.latest_judge_result(offer_id)
     assert judge_row is not None and judge_row.score == 80
@@ -573,7 +577,7 @@ def test_analyze_hybrid_extraction_fails_cancels_the_inflight_judge(
     import time
 
     llm = _TimedLlm(
-        extract_delay=0.05, judge_delay=1.0, extract_error=LlmResponseError("x")
+        extract_delay=0.05, judge_delay=3.0, extract_error=LlmResponseError("x")
     )
     service, repo, offer_id = _timed_service(tmp_path, llm)
     _seed_prior_analysis(repo, offer_id)
@@ -583,7 +587,7 @@ def test_analyze_hybrid_extraction_fails_cancels_the_inflight_judge(
     with pytest.raises(LlmResponseError):
         asyncio.run(service.analyze(offer_id))
 
-    assert time.perf_counter() - started < 0.5
+    assert time.perf_counter() - started < 1.5  # not the judge's 3 s
     assert llm.judge_finished is False
     assert _persisted(repo, offer_id) == before
 

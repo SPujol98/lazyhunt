@@ -546,7 +546,7 @@ def test_deferred_mutation_does_not_block_on_the_xlsx_write(
     import time
 
     service, _repo, offer_id, target = _deferred_service(tmp_path, monkeypatch)
-    state = _count_writes(monkeypatch, delay=0.5)
+    state = _count_writes(monkeypatch, delay=1.0)
 
     async def scenario() -> tuple[float, int]:
         started = time.perf_counter()
@@ -562,7 +562,7 @@ def test_deferred_mutation_does_not_block_on_the_xlsx_write(
 
     elapsed, ticks = asyncio.run(scenario())
 
-    assert elapsed < 0.2  # the 0.5 s write did not run inside discard
+    assert elapsed < 0.5  # the 1 s write did not run inside discard (slow CI margin)
     assert ticks > 10  # the loop kept ticking during the write
     assert state["writes"] == 1
     assert service.tracker_dirty is False
