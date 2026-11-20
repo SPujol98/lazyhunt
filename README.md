@@ -68,6 +68,8 @@ There is no server, no account and no shared backend. Everything the bot knows a
 
 ## Quick start
 
+🇪🇸 ¿Prefieres español? [Guía rápida en español](docs/guia-rapida-es.md)
+
 From a fresh clone to your first scored offer takes about 20 minutes. You do not write any profile file by hand: a short terminal wizard sets up the bot, and the bot itself then asks about you in Telegram (about 10 minutes). Every step below is also in the longer [getting-started guide](docs/getting-started.md).
 
 ### What you need
