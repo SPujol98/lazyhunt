@@ -8,7 +8,8 @@ provider with `llm_provider` in `config.toml` / `config.local.toml`. Secrets
 | --- | --- | --- |
 | `claude_code` (default) | your installed Claude Code CLI | yes |
 | `anthropic` | the Anthropic Messages API | yes |
-| `openai_compatible` | any OpenAI-style `/chat/completions` endpoint | OpenAI-style endpoints in general only; see the note below |
+| `openai_compatible` | any OpenAI-style `/chat/completions` endpoint | yes with Gemini (free-tier key); others at your own risk, see below |
+| `codex_cli` | your installed Codex CLI (`codex exec`) | with a fake CLI only; a real run is pending |
 
 ## 1. Claude Code (default)
 
@@ -28,8 +29,9 @@ silently switch from your subscription to API billing. To let it use them on
 purpose, set `claude_code_pass_api_key = true`. `CVA_*` variables (this app's
 own secrets) are never passed either way.
 
-This is the only provider that can research company facts on the web;
-the other two answer "not available" instead of guessing.
+Claude Code and Codex CLI are the providers that can research company facts
+and salaries on the web; the HTTP providers answer "not available" instead of
+guessing.
 
 ## 2. Anthropic API
 
@@ -59,6 +61,7 @@ llm_base_url = "https://api.openai.com/v1"
 llm_model = "gpt-4o-mini"
 # llm_disable_thinking = false   # GLM-style endpoints
 # llm_429_retry_wait_seconds = 25
+# llm_transient_retries = 2      # extra attempts on HTTP 5xx/timeouts (~2 s, ~5 s); 0 = off
 ```
 
 ```sh
@@ -73,18 +76,62 @@ Examples (`llm_base_url` / `llm_model`; confirm model names with the provider):
 | OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` |
 | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
 | Mistral | `https://api.mistral.ai/v1` | `mistral-small-latest` |
-| Gemini (OpenAI-compatible endpoint) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+| Gemini (OpenAI-compatible endpoint) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.5-flash-lite` |
 | Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
 | LM Studio (local) | `http://localhost:1234/v1` | the model id LM Studio shows |
+
+Gemini (tested with a free-tier AI Studio key on 2026-11-21): `gemini-3.5-flash-lite` (fast, cheap) and `gemini-3-flash-preview` (stronger) both completed extraction and judging. Model ids change and old ones are retired (HTTP 404 "no longer available to new users"); the `gemini-flash-latest` alias did not answer for a new key at that date (requests timed out), so pick an explicit id from AI Studio's model list. The free tier can answer HTTP 503 "high demand" at busy times; the bot retries twice with a short backoff and then shows the provider's message.
 
 Local servers ignore the key but cva still requires `CVA_LLM_API_KEY` to be set
 (any non-empty value).
 
-**Tested vs. at your own risk.** Only Claude Code and the Anthropic API are
-tested. For any other provider the endpoint must support JSON-schema
+**Tested vs. at your own risk.** Claude Code, the Anthropic API and Gemini's
+OpenAI-compatible endpoint are tested against the real service; Codex CLI is
+tested with a simulated CLI only. For any other provider the endpoint must support JSON-schema
 structured output (`response_format: json_schema`); models or servers that do
 not will fail with "completion content contains no JSON object" or schema
 errors. Use them at your own risk and check the first results by hand.
+
+## 4. Codex CLI
+
+cva runs your own, unmodified `codex` CLI non-interactively (`codex exec`),
+logged in with your own ChatGPT account (`codex login`). It never reads,
+copies or forwards the CLI's credentials; the CLI handles its own login.
+
+```toml
+llm_provider = "codex_cli"
+# codex_cli_path = "codex"          # full path if it is not on PATH
+# codex_cli_model = "gpt-5"         # omit to use the CLI's default model
+# codex_cli_timeout_seconds = 180
+```
+
+Each call runs, roughly:
+
+```sh
+codex -a never exec --sandbox read-only --ephemeral --skip-git-repo-check \
+  --ignore-user-config --color never -C <empty temp dir> \
+  --output-schema <schema.json> -o <last-message.txt> \
+  -c web_search="disabled" [-m <model>] -
+```
+
+The prompt goes through stdin, the answer shape is enforced with
+`--output-schema`, and cva reads only the final message file. The CLI works in
+an empty temporary folder with a read-only sandbox, never asks for approval,
+keeps no session and does not load your `~/.codex/config.toml` (so your MCP
+servers and hooks are not used; your login still is).
+
+The child process does not inherit `OPENAI_API_KEY`, `CODEX_API_KEY` or
+`CODEX_ACCESS_TOKEN` from your environment: if it did, the CLI could switch
+from your ChatGPT plan to API billing. To let it use them on purpose, set
+`codex_cli_pass_api_key = true`. `CVA_*` variables are never passed either way.
+
+Web research (salary and company facts, on demand only) adds Codex's
+`--search` flag, which turns on its live web search tool for that call; all
+other calls keep web search disabled.
+
+If the CLI is not logged in, the error tells you to run `codex login`.
+
+**Tested status:** tested with a fake CLI only; a real run is pending.
 
 ## Which one is active?
 

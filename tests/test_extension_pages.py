@@ -11,10 +11,11 @@ exists. Skipped without ``node``, like the other extension tests.
 import json
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.helpers import read_extension, run_node_harness
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
@@ -35,23 +36,6 @@ def _messages(lang: str) -> dict[str, dict]:
     return data
 
 
-def _read(name: str) -> str:
-    return (EXTENSION / name).read_text(encoding="utf-8")
-
-
-def _run(area: str) -> None:
-    result = subprocess.run(
-        ["node", str(HARNESS), area],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-        encoding="utf-8",
-    )
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-
-
 @needs_node
 @pytest.mark.parametrize(
     "area",
@@ -67,7 +51,7 @@ def _run(area: str) -> None:
     ],
 )
 def test_pages_behaviour(area: str) -> None:
-    _run(area)
+    run_node_harness(HARNESS, area)
 
 
 def test_locales_have_the_same_keys_and_placeholders() -> None:
@@ -92,16 +76,16 @@ def test_every_key_the_pages_use_exists() -> None:
     en = _messages("en")
     used: set[str] = set()
     for script, html in PAGES.items():
-        used |= set(re.findall(r"\btr\('(\w+)'", _read(script)))
-        used |= set(re.findall(r'data-i18n(?:-[\w-]+)?="(\w+)"', _read(html)))
+        used |= set(re.findall(r"\btr\('(\w+)'", read_extension(script)))
+        used |= set(re.findall(r'data-i18n(?:-[\w-]+)?="(\w+)"', read_extension(html)))
     assert len(used) > 50
     assert sorted(used - set(en)) == []
 
 
 def test_every_id_the_scripts_use_is_in_their_page() -> None:
     for script, html in PAGES.items():
-        ids = set(re.findall(r"\$\('([\w-]+)'\)", _read(script)))
-        present = set(re.findall(r'\bid="([\w-]+)"', _read(html)))
+        ids = set(re.findall(r"\$\('([\w-]+)'\)", read_extension(script)))
+        present = set(re.findall(r'\bid="([\w-]+)"', read_extension(html)))
         assert ids, script
         assert sorted(ids - present) == [], script
 
@@ -118,7 +102,7 @@ def test_pages_load_nothing_remote_and_have_no_telegram() -> None:
     ]
     names += [f"_locales/{lang}/messages.json" for lang in ("en", "es")]
     for name in names:
-        text = _read(name)
+        text = read_extension(name)
         assert "telegram" not in text.lower(), name
         assert not re.search(
             r"googleapis|gstatic|@import|url\(\s*['\"]?https?:", text

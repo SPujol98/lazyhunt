@@ -34,8 +34,10 @@ plantilla que corresponda (fallo o propuesta). Un buen reporte incluye:
 | --- | --- | --- |
 | **[uv](https://docs.astral.sh/uv/)** (trae Python 3.12 él solo) | Ejecuta el bot e instala sus dependencias | `uv --version` |
 | **Telegram** | Es la única interfaz: creas tu propio bot con [@BotFather](https://t.me/BotFather) | |
-| **Claude Code** con la sesión iniciada | Puntúa ofertas y escribe cartas, con tu propia suscripción y sin clave de API | `claude auth status` |
-| o bien **una clave de API** | Anthropic o cualquier endpoint compatible con OpenAI; se paga por uso | [providers.md](providers.md) |
+| **Una IA**: Claude Code (por defecto) con la sesión iniciada | Puntúa ofertas y escribe cartas, con tu propia suscripción y sin clave de API | `claude auth status` |
+| o **Codex CLI** con la sesión iniciada | Igual, con tu cuenta de OpenAI y sin clave de API | `codex login status` |
+| o **una clave de API** | Anthropic, OpenAI o cualquier API compatible con OpenAI (Gemini, OpenRouter, Groq, Mistral); se paga por uso | [providers.md](providers.md) |
+| o **un modelo local** | Ollama o LM Studio en tu ordenador: gratis y sin enviar nada fuera | [providers.md](providers.md) |
 | **Chrome o Brave** | Aloja la extensión; déjalo abierto mientras escanea | |
 
 Funciona en Linux, macOS y Windows (se desarrolla y prueba sobre todo en Linux).
@@ -81,14 +83,15 @@ en Telegram. **Sus preguntas están en inglés**; aquí tienes qué contestar en
 cada una. Pulsa Intro para saltar un paso; no escribe nada hasta que
 confirmas el resumen y puedes repetirlo cuando quieras.
 
-1. **Prerequisites.** Comprueba Python, `uv` y que `claude` esté instalado y
-   con la sesión iniciada. Si falta algo, te dice cómo arreglarlo y sigue.
+1. **Prerequisites.** Comprueba Python, `uv`, que `claude` esté instalado y
+   con la sesión iniciada, y si tienes `codex`. Si falta algo, te dice cómo
+   arreglarlo y sigue.
 2. **Bot language.** `auto` (el idioma de tu sistema), `en` o `es`. Escribe
    `es` para tener el bot, la línea de comandos y el panel en español. Los CV
    y las cartas siguen el idioma de cada oferta.
-3. **AI provider.** Deja `claude_code` (Intro). Con `anthropic` u
-   `openai_compatible` tendrás que añadir tú la clave a `.env`
-   ([providers.md](providers.md)).
+3. **AI provider.** Pulsa Intro para `claude_code`, o elige otra IA (puedes
+   escribir el nombre o su número): `codex_cli`, `anthropic` u
+   `openai_compatible`. Mira [¿Otra IA?](#otra-ia) más abajo.
 4. **Telegram.**
    - Abre [@BotFather](https://t.me/BotFather), envía `/newbot` y sigue los
      pasos (un nombre y un usuario que acabe en `bot`). Pega el token que te
@@ -107,6 +110,28 @@ confirmas el resumen y puedes repetirlo cuando quieras.
 Al final contesta `y` a `Write these changes?`. Después te ofrece mostrar el
 secreto del puente (`Show the bridge secret now…?`): di `y` y guárdalo para el
 paso 7, o búscalo luego como `CVA_BRIDGE_SECRET` en `.env`.
+
+### ¿Otra IA?
+
+Cualquier IA sigue las mismas instrucciones del programa, así que la
+puntuación, los CV y las cartas funcionan con todas. En el paso 3 del asistente:
+
+- **`codex_cli`**: tu Codex CLI de OpenAI, instalado y con la sesión iniciada
+  (`codex login`). No pide clave.
+- **`anthropic`**: te pide tu clave de API de Anthropic (no se ve al
+  escribirla) y la guarda en `.env` como `ANTHROPIC_API_KEY`.
+- **`openai_compatible`**: eliges un preajuste (OpenAI, Gemini, OpenRouter,
+  Groq, Mistral, Ollama local, LM Studio local u Otro, escribiendo la URL),
+  luego el modelo (ya viene rellenado; con Ollama o LM Studio escribes el
+  nombre del modelo que hayas descargado) y la clave, que se guarda en `.env`
+  como `CVA_LLM_API_KEY`. Un servidor local no usa la clave, pero tiene que
+  haber una: vale cualquier texto, y con Intro se pone `local`.
+
+Una diferencia: **la búsqueda en la web de datos de la empresa** para la carta
+solo funciona con Claude Code y Codex CLI, porque pueden navegar; los modelos
+por API no tienen esa herramienta, así que esa búsqueda aparece como no
+disponible en vez de inventarse. Para cambiar de IA, vuelve a ejecutar `uv run cli.py init`: con Intro
+conservas todo lo demás. Detalles: [providers.md](providers.md).
 
 ## 5. Arrancar el bot
 

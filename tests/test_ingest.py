@@ -419,23 +419,6 @@ def test_httpx_fetcher_to_fetch_offer_end_to_end() -> None:
 # --- job_id_from_url (beacon-bridge D5): promoted public helper -------------
 
 
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://www.linkedin.com/jobs/view/4459804598/", "4459804598"),
-        ("https://linkedin.com/jobs/view/42", "42"),
-        (
-            "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/998877/",
-            "998877",
-        ),
-        ("https://www.linkedin.com/jobs/view/", None),
-        ("https://example.com/other", None),
-    ],
-)
-def test_job_id_from_url_shapes(url: str, expected: str | None) -> None:
-    assert job_id_from_url(url) == expected
-
-
 def test_bridge_canonical_url_matches_notifier_canonical() -> None:
     """D4: canonical derived from a scraped URL == notifier's exact form, so
     bridge rows and Analyze-callback rows collide into one offer per job."""

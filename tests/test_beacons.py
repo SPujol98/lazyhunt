@@ -274,18 +274,20 @@ def test_ok_check_after_wall_resets_counter(tmp_path: Path) -> None:
     assert row.last_wall_kind is None
 
 
-def test_rate_limited_counts_as_wall(tmp_path: Path) -> None:
-    repo, beacon, _ = wall_case(tmp_path, "slow down", status=429)
+@pytest.mark.parametrize(
+    ("body", "status", "kind"),
+    [
+        pytest.param("slow down", 429, "rate_limited", id="rate-limited"),
+        pytest.param("plain 404 page", 404, "not_found", id="not-found"),
+    ],
+)
+def test_http_status_counts_as_wall(
+    tmp_path: Path, body: str, status: int, kind: str
+) -> None:
+    repo, beacon, _ = wall_case(tmp_path, body, status=status)
     row = repo.get_beacon(beacon.id)
     assert row.consecutive_walls == 1
-    assert row.last_wall_kind == "rate_limited"
-
-
-def test_not_found_counts_as_wall(tmp_path: Path) -> None:
-    repo, beacon, _ = wall_case(tmp_path, "plain 404 page", status=404)
-    row = repo.get_beacon(beacon.id)
-    assert row.consecutive_walls == 1
-    assert row.last_wall_kind == "not_found"
+    assert row.last_wall_kind == kind
 
 
 def test_resume_clears_degradation_state(tmp_path: Path) -> None:

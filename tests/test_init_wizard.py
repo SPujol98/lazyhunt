@@ -542,3 +542,229 @@ def test_an_invalid_config_stops_before_any_question_and_writes_nothing(
     assert scripted.prompts == []
     assert (tmp_path / "config.local.toml").read_bytes() == broken
     assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]
+
+
+# --- llm-providers T2: choosing and configuring any AI provider ------------------
+
+API_KEY = "sk-test-FakeKeyForTestsOnly-0123456789"
+
+
+def provider_answers(*provider_part: str) -> list[str]:
+    """Fresh-install answers with ``provider_part`` answering step 3."""
+    return ["", *provider_part, OWNER_ID, "", "3", "y", "n"]
+
+
+def local_settings(base: Path) -> dict[str, object]:
+    return tomllib.loads((base / "config.local.toml").read_text(encoding="utf-8"))
+
+
+def test_provider_step_lists_every_provider_with_an_explanation(
+    tmp_path: Path,
+) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    for name in ("claude_code", "codex_cli", "anthropic", "openai_compatible"):
+        assert name in scripted.transcript
+    assert "Provider [claude_code]" in scripted.transcript
+
+
+def test_default_claude_code_asks_no_api_key_and_writes_no_endpoint(
+    tmp_path: Path,
+) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_provider"] == "claude_code"
+    assert "llm_base_url" not in local and "llm_model" not in local
+    env = read_env(tmp_path / ".env")
+    assert sorted(env) == ["CVA_BRIDGE_SECRET", "CVA_TELEGRAM_TOKEN"]
+    assert not any("API key" in p for p in scripted.prompts)
+
+
+def test_codex_cli_writes_only_the_provider(tmp_path: Path) -> None:
+    scripted = ScriptedIO(provider_answers("codex_cli"), [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_provider"] == "codex_cli"
+    assert "llm_base_url" not in local and "llm_model" not in local
+    env = read_env(tmp_path / ".env")
+    assert sorted(env) == ["CVA_BRIDGE_SECRET", "CVA_TELEGRAM_TOKEN"]
+    assert "codex login" in scripted.transcript
+
+
+def test_provider_can_be_chosen_by_number(tmp_path: Path) -> None:
+    assert wizard(tmp_path, ScriptedIO(provider_answers("2"), [TOKEN])) == 0
+    assert local_settings(tmp_path)["llm_provider"] == "codex_cli"
+
+
+def test_anthropic_asks_the_key_hidden_and_writes_it_to_env(tmp_path: Path) -> None:
+    scripted = ScriptedIO(provider_answers("anthropic"), [API_KEY, TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_provider"] == "anthropic"
+    assert "llm_base_url" not in local
+    env = read_env(tmp_path / ".env")
+    assert env["ANTHROPIC_API_KEY"] == API_KEY
+    assert "CVA_LLM_API_KEY" not in env
+    assert API_KEY not in scripted.transcript
+    assert API_KEY not in (tmp_path / "config.local.toml").read_text("utf-8")
+    assert "ANTHROPIC_API_KEY (value hidden)" in scripted.transcript
+    if os.name == "posix":
+        assert stat.S_IMODE((tmp_path / ".env").stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    ("preset", "url", "model"),
+    [
+        ("1", "https://api.openai.com/v1", "gpt-4o-mini"),
+        (
+            "2",
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            "gemini-3.5-flash-lite",
+        ),
+        ("3", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
+        ("4", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+        ("5", "https://api.mistral.ai/v1", "mistral-small-latest"),
+    ],
+)
+def test_openai_compatible_presets_fill_url_and_model(
+    tmp_path: Path, preset: str, url: str, model: str
+) -> None:
+    # provider, preset, model (Enter keeps the preset's model).
+    scripted = ScriptedIO(
+        provider_answers("openai_compatible", preset, ""), [API_KEY, TOKEN]
+    )
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_provider"] == "openai_compatible"
+    assert local["llm_base_url"] == url
+    assert local["llm_model"] == model
+    env = read_env(tmp_path / ".env")
+    assert env["CVA_LLM_API_KEY"] == API_KEY
+    assert "ANTHROPIC_API_KEY" not in env
+    assert API_KEY not in scripted.transcript
+    assert f"Model [{model}]" in scripted.transcript
+
+
+def test_preset_model_can_be_overridden(tmp_path: Path) -> None:
+    scripted = ScriptedIO(
+        provider_answers("openai_compatible", "1", "gpt-4.1"), [API_KEY, TOKEN]
+    )
+    assert wizard(tmp_path, scripted) == 0
+    assert local_settings(tmp_path)["llm_model"] == "gpt-4.1"
+
+
+@pytest.mark.parametrize(
+    ("preset", "url"),
+    [("6", "http://localhost:11434/v1"), ("7", "http://localhost:1234/v1")],
+)
+def test_local_servers_take_a_typed_model_and_a_placeholder_key(
+    tmp_path: Path, preset: str, url: str
+) -> None:
+    # provider, preset, model: Enter is refused (no default), then typed.
+    # The key prompt gets Enter: the placeholder is used.
+    scripted = ScriptedIO(
+        provider_answers("openai_compatible", preset, "", "llama3.1"), ["", TOKEN]
+    )
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_base_url"] == url
+    assert local["llm_model"] == "llama3.1"
+    assert read_env(tmp_path / ".env")["CVA_LLM_API_KEY"] == "local"
+    assert "any non-empty value works" in scripted.transcript
+
+
+def test_local_server_accepts_a_typed_key_too(tmp_path: Path) -> None:
+    scripted = ScriptedIO(
+        provider_answers("openai_compatible", "6", "qwen2.5"), ["anything", TOKEN]
+    )
+    assert wizard(tmp_path, scripted) == 0
+    assert read_env(tmp_path / ".env")["CVA_LLM_API_KEY"] == "anything"
+
+
+def test_other_endpoint_asks_the_url_and_rejects_a_non_url(tmp_path: Path) -> None:
+    scripted = ScriptedIO(
+        provider_answers(
+            "openai_compatible", "8", "not a url", "https://llm.example.org/v1", "m-1"
+        ),
+        [API_KEY, TOKEN],
+    )
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_base_url"] == "https://llm.example.org/v1"
+    assert local["llm_model"] == "m-1"
+    assert "http://" in scripted.transcript  # the re-ask explains the format
+
+
+def test_unknown_preset_is_asked_again(tmp_path: Path) -> None:
+    scripted = ScriptedIO(
+        provider_answers("openai_compatible", "9", "1", ""), [API_KEY, TOKEN]
+    )
+    assert wizard(tmp_path, scripted) == 0
+    assert local_settings(tmp_path)["llm_base_url"] == "https://api.openai.com/v1"
+
+
+def test_skipped_remote_key_is_reported_as_not_set(tmp_path: Path) -> None:
+    scripted = ScriptedIO(provider_answers("openai_compatible", "1", ""), ["", TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    assert "CVA_LLM_API_KEY" not in read_env(tmp_path / ".env")
+    assert "CVA_LLM_API_KEY not set" in scripted.transcript
+
+
+def test_empty_answers_keep_the_existing_provider_settings(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(
+        "CVA_LLM_API_KEY=old-key\nCVA_BRIDGE_SECRET=s\n", encoding="utf-8"
+    )
+    (tmp_path / "config.local.toml").write_text(
+        'llm_provider = "openai_compatible"\n'
+        'llm_base_url = "https://api.groq.com/openai/v1"\n'
+        'llm_model = "my-model"\n',
+        encoding="utf-8",
+    )
+    env_before = (tmp_path / ".env").read_text(encoding="utf-8")
+    # language, provider (Enter: current), preset (Enter: current = Groq),
+    # model (Enter: current), owner id skipped, keep the bridge secret, profile
+    # dir, profile kind, confirm, no secret show. Key and token: Enter.
+    scripted = ScriptedIO(["", "", "", "", "", "n", "", "3", "y", "n"], ["", ""])
+    assert wizard(tmp_path, scripted) == 0
+    local = local_settings(tmp_path)
+    assert local["llm_provider"] == "openai_compatible"
+    assert local["llm_base_url"] == "https://api.groq.com/openai/v1"
+    assert local["llm_model"] == "my-model"
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == env_before
+    assert "Provider [openai_compatible]" in scripted.transcript
+    assert "Model [my-model]" in scripted.transcript
+    assert "old-key" not in scripted.transcript
+
+
+def test_codex_cli_on_path_reports_version_and_login_only(tmp_path: Path) -> None:
+    """Codex answers only ``--version`` and ``login status``; the status text
+    (it can name the account) is never shown, only logged in yes/no."""
+    calls: list[list[str]] = []
+
+    def recording(argv: Sequence[str]) -> tuple[int, str]:
+        calls.append(list(argv))
+        if argv[0] == "/usr/bin/codex":
+            if argv[1:] == ["--version"]:
+                return 0, "codex-cli 9.9.9\n"
+            return 0, "Logged in using ChatGPT (someone@example.com)\n"
+        return logged_in_runner(argv)
+
+    def both(name: str) -> str | None:
+        return {"claude": "/usr/bin/claude", "codex": "/usr/bin/codex"}.get(name)
+
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+    run_init(
+        tmp_path, scripted.io, runner=recording, which=both, demo_profile=DEMO_PROFILE
+    )
+    assert "Codex CLI: codex-cli 9.9.9" in scripted.transcript
+    assert "Codex CLI: logged in." in scripted.transcript
+    assert "someone@example.com" not in scripted.transcript
+    codex_calls = [call[1:] for call in calls if call[0] == "/usr/bin/codex"]
+    assert codex_calls == [["--version"], ["login", "status"]]
+
+
+def test_codex_cli_missing_is_reported(tmp_path: Path) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+    assert wizard(tmp_path, scripted) == 0
+    assert "Codex CLI: not installed" in scripted.transcript

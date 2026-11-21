@@ -336,7 +336,11 @@ class _RecordingSleep:
 
 
 def _retry_client(
-    handler: _CallCountingHandler, sleep: _RecordingSleep, *, wait: float = 25.0
+    handler: Callable[[httpx.Request], httpx.Response],
+    sleep: _RecordingSleep,
+    *,
+    wait: float = 25.0,
+    transient_retries: int = 2,
 ) -> OpenAiCompatibleLlmClient:
     return OpenAiCompatibleLlmClient(
         base_url="https://unit.test/v1",
@@ -345,6 +349,8 @@ def _retry_client(
         transport=httpx.MockTransport(handler),
         retry_429_wait_seconds=wait,
         sleep=sleep,
+        transient_retries=transient_retries,
+        jitter=lambda: 0.0,
     )
 
 
@@ -377,15 +383,15 @@ def test_429_twice_raises_with_status_after_single_retry() -> None:
     assert sleep.calls == [25.0]
 
 
-def test_500_is_single_attempt_no_retry() -> None:
-    """Non-429 HTTP statuses keep the unchanged single-attempt contract."""
-    handler = _CallCountingHandler([500, 500])
+def test_400_is_single_attempt_no_retry() -> None:
+    """Client errors other than 429 are never retried."""
+    handler = _CallCountingHandler([400, 200])
     sleep = _RecordingSleep()
 
     with pytest.raises(LlmResponseError) as excinfo:
         asyncio.run(_retry_client(handler, sleep).json_completion("sys", "user", Reply))
 
-    assert excinfo.value.status == 500
+    assert excinfo.value.status == 400
     assert handler.calls == 1
     assert sleep.calls == []
 
@@ -402,6 +408,245 @@ def test_429_retry_disabled_when_wait_is_zero() -> None:
 
     assert handler.calls == 1
     assert sleep.calls == []
+
+
+# --- Bounded backoff for transient provider failures (5xx, timeouts) ---
+
+_GOOD = '{"title": "ML Engineer", "must_haves": ["python"]}'
+_HIGH_DEMAND = (
+    "This model is currently experiencing high demand. Spikes in demand are "
+    "usually temporary. Please try again later."
+)
+
+
+def _error_response(status: int, message: str) -> httpx.Response:
+    return httpx.Response(
+        status,
+        json={"error": {"code": status, "message": message, "status": "X"}},
+        request=httpx.Request("POST", "https://unit.test/v1/chat/completions"),
+    )
+
+
+class _SequenceHandler:
+    """Plays a scripted sequence: an exception to raise or a response to return."""
+
+    def __init__(self, steps: list[httpx.Response | Exception]) -> None:
+        self._steps = steps
+        self.calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        step = self._steps[min(self.calls, len(self._steps) - 1)]
+        self.calls += 1
+        if isinstance(step, Exception):
+            raise step
+        return step
+
+
+def test_503_then_200_succeeds_after_backoff() -> None:
+    handler = _SequenceHandler(
+        [_error_response(503, _HIGH_DEMAND), _completion_response(_GOOD)]
+    )
+    sleep = _RecordingSleep()
+
+    reply = asyncio.run(
+        _retry_client(handler, sleep).json_completion("sys", "user", Reply)
+    )
+
+    assert reply == Reply(title="ML Engineer", must_haves=["python"])
+    assert handler.calls == 2
+    assert sleep.calls == [2.0]
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+def test_persistent_5xx_raises_after_bounded_attempts_with_provider_message(
+    status: int,
+) -> None:
+    handler = _SequenceHandler([_error_response(status, _HIGH_DEMAND)])
+    sleep = _RecordingSleep()
+
+    with pytest.raises(LlmResponseError) as excinfo:
+        asyncio.run(_retry_client(handler, sleep).json_completion("sys", "user", Reply))
+
+    assert excinfo.value.status == status
+    assert handler.calls == 3
+    assert sleep.calls == [2.0, 5.0]
+    message = str(excinfo.value)
+    assert f"HTTP {status}" in message
+    assert "high demand" in message
+
+
+def test_timeout_then_200_succeeds_after_backoff() -> None:
+    handler = _SequenceHandler(
+        [httpx.ReadTimeout("read timed out"), _completion_response(_GOOD)]
+    )
+    sleep = _RecordingSleep()
+
+    reply = asyncio.run(
+        _retry_client(handler, sleep).json_completion("sys", "user", Reply)
+    )
+
+    assert reply.title == "ML Engineer"
+    assert handler.calls == 2
+    assert sleep.calls == [2.0]
+
+
+def test_persistent_connection_error_raises_llm_error_without_status() -> None:
+    handler = _SequenceHandler([httpx.ConnectError("connection refused")])
+    sleep = _RecordingSleep()
+
+    with pytest.raises(LlmResponseError) as excinfo:
+        asyncio.run(_retry_client(handler, sleep).json_completion("sys", "user", Reply))
+
+    assert excinfo.value.status is None
+    assert "ConnectError" in str(excinfo.value)
+    assert handler.calls == 3
+    assert sleep.calls == [2.0, 5.0]
+
+
+def test_404_is_not_retried_and_carries_the_provider_message() -> None:
+    gone = (
+        "This model models/gemini-2.0-flash is no longer available to new users. "
+        "Please update your code to use models/gemini-3.8-flash instead."
+    )
+    handler = _SequenceHandler([_error_response(404, gone)])
+    sleep = _RecordingSleep()
+
+    with pytest.raises(LlmResponseError) as excinfo:
+        asyncio.run(_retry_client(handler, sleep).json_completion("sys", "user", Reply))
+
+    assert excinfo.value.status == 404
+    assert handler.calls == 1
+    assert sleep.calls == []
+    assert str(excinfo.value) == f"LLM endpoint returned HTTP 404: {gone}"
+
+
+def test_provider_message_is_flattened_truncated_and_never_echoes_the_key() -> None:
+    handler = _SequenceHandler([_error_response(400, "bad\nrequest " + "x" * 500)])
+
+    with pytest.raises(LlmResponseError) as excinfo:
+        asyncio.run(
+            _retry_client(handler, _RecordingSleep()).json_completion(
+                "sys", "user", Reply
+            )
+        )
+
+    message = str(excinfo.value)
+    assert "\n" not in message
+    assert "sk-test" not in message
+    assert message.startswith("LLM endpoint returned HTTP 400: bad request x")
+    assert len(message) <= len("LLM endpoint returned HTTP 400: ") + 201
+
+
+def test_non_json_error_body_keeps_the_bare_status_message() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(418, text="<html>teapot</html>")
+
+    with pytest.raises(LlmResponseError) as excinfo:
+        asyncio.run(
+            _retry_client(handler, _RecordingSleep()).json_completion(
+                "sys", "user", Reply
+            )
+        )
+
+    assert str(excinfo.value) == "LLM endpoint returned HTTP 418"
+
+
+def test_transient_retries_zero_disables_the_backoff() -> None:
+    handler = _SequenceHandler([_error_response(503, _HIGH_DEMAND)])
+    sleep = _RecordingSleep()
+
+    with pytest.raises(LlmResponseError):
+        asyncio.run(
+            _retry_client(handler, sleep, transient_retries=0).json_completion(
+                "sys", "user", Reply
+            )
+        )
+
+    assert handler.calls == 1
+    assert sleep.calls == []
+
+
+def test_429_then_503_then_200_keeps_the_single_429_retry() -> None:
+    handler = _SequenceHandler(
+        [
+            _error_response(429, "slow down"),
+            _error_response(503, _HIGH_DEMAND),
+            _completion_response(_GOOD),
+        ]
+    )
+    sleep = _RecordingSleep()
+
+    reply = asyncio.run(
+        _retry_client(handler, sleep).json_completion("sys", "user", Reply)
+    )
+
+    assert reply.title == "ML Engineer"
+    assert handler.calls == 3
+    assert sleep.calls == [25.0, 2.0]
+
+
+def test_backoff_adds_jitter_to_each_wait() -> None:
+    handler = _SequenceHandler([_error_response(503, _HIGH_DEMAND)])
+    sleep = _RecordingSleep()
+    client = OpenAiCompatibleLlmClient(
+        base_url="https://unit.test/v1",
+        api_key="sk-test",
+        model="test-model",
+        transport=httpx.MockTransport(handler),
+        sleep=sleep,
+        jitter=lambda: 0.25,
+    )
+
+    with pytest.raises(LlmResponseError):
+        asyncio.run(client.json_completion("sys", "user", Reply))
+
+    assert sleep.calls == [2.25, 5.25]
+
+
+def test_cancellation_during_backoff_stops_promptly() -> None:
+    handler = _SequenceHandler([_error_response(503, _HIGH_DEMAND)])
+    client = OpenAiCompatibleLlmClient(
+        base_url="https://unit.test/v1",
+        api_key="sk-test",
+        model="test-model",
+        transport=httpx.MockTransport(handler),
+        transient_backoff_seconds=60.0,
+    )
+
+    async def scenario() -> float:
+        loop = asyncio.get_running_loop()
+        task = asyncio.create_task(client.json_completion("sys", "user", Reply))
+        while handler.calls == 0:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
+        started = loop.time()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return loop.time() - started
+
+    elapsed = asyncio.run(scenario())
+
+    assert elapsed < 1.0
+    assert handler.calls == 1
+
+
+def test_from_settings_wires_transient_retries(
+    monkeypatch: pytest.MonkeyPatch, clean_settings: Callable[..., Settings]
+) -> None:
+    monkeypatch.setenv("CVA_LLM_API_KEY", "sk-test")
+    assert clean_settings().llm_transient_retries == 2
+    monkeypatch.setenv("CVA_LLM_TRANSIENT_RETRIES", "0")
+    settings = clean_settings()
+    handler = _SequenceHandler([_error_response(503, _HIGH_DEMAND)])
+    client = OpenAiCompatibleLlmClient.from_settings(
+        settings, transport=httpx.MockTransport(handler)
+    )
+
+    with pytest.raises(LlmResponseError):
+        asyncio.run(client.json_completion("sys", "user", Reply))
+
+    assert handler.calls == 1
 
 
 def test_parse_error_status_is_none() -> None:

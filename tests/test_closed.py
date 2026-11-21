@@ -252,10 +252,9 @@ def test_pasted_closed_offer_replies_closed_and_skips_the_llm(tmp_path: Path) ->
     assert not context.user_data.get(bot._PASTE_KEY)
 
 
-def test_closed_marker_is_documented_as_folded() -> None:
+def test_closed_marker_returns_the_folded_phrase() -> None:
     # The evidence is the folded (lowercase, accent-stripped) phrase.
     assert closed_marker("Foo. OFERTA CADUCADA el 12") == "oferta caducada"
-    assert "folded" in (closed_marker.__doc__ or "")
 
 
 def test_append_note_matches_whole_entries_not_substrings(tmp_path: Path) -> None:

@@ -1586,7 +1586,10 @@ class _SetupBridge:
             ("127.0.0.1", self._port), _make_setup_handler(self._secret)
         )
         thread = threading.Thread(
-            target=self._httpd.serve_forever, name="cva-bridge-setup", daemon=True
+            target=self._httpd.serve_forever,
+            kwargs={"poll_interval": SERVE_POLL_INTERVAL},
+            name="cva-bridge-setup",
+            daemon=True,
         )
         thread.start()
 

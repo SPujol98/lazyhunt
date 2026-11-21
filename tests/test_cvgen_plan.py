@@ -124,12 +124,15 @@ def test_neutral_plan_is_identity_and_passes(db: object, ai_es_master: object) -
 # --- claim_family (design D3) ---------------------------------------------------
 
 
-def test_claim_family_strips_en_suffix() -> None:
-    assert claim_family("exp-acme-maintenance_en") == "exp-acme-maintenance"
-
-
-def test_claim_family_strips_ca_suffix() -> None:
-    assert claim_family("sum-ds-goal_ca") == "sum-ds-goal"
+@pytest.mark.parametrize(
+    ("claim_id", "family"),
+    [
+        pytest.param("exp-acme-maintenance_en", "exp-acme-maintenance", id="en-suffix"),
+        pytest.param("sum-ds-goal_ca", "sum-ds-goal", id="ca-suffix"),
+    ],
+)
+def test_claim_family_strips_language_suffix(claim_id: str, family: str) -> None:
+    assert claim_family(claim_id) == family
 
 
 def test_claim_family_without_suffix_is_identity() -> None:

@@ -456,14 +456,13 @@ def test_bridge_payload_of_only_text_less_inline_jobs_is_a_200_with_nothing_new(
     assert _rows(started.workdir) == []
 
 
-def test_validated_rejects_blank_text() -> None:
+@pytest.mark.parametrize(
+    "text",
+    [pytest.param("   ", id="blank"), pytest.param(123, id="non-string")],
+)
+def test_validated_rejects_invalid_text(text: object) -> None:
     with pytest.raises(bridge._BadRequest):
-        bridge._validated({"beacon": "b", "jobs": [_infojobs_job(text="   ")]})
-
-
-def test_validated_rejects_non_string_text() -> None:
-    with pytest.raises(bridge._BadRequest):
-        bridge._validated({"beacon": "b", "jobs": [_infojobs_job(text=123)]})
+        bridge._validated({"beacon": "b", "jobs": [_infojobs_job(text=text)]})
 
 
 def test_validated_rejects_text_over_20000_chars() -> None:

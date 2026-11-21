@@ -185,10 +185,57 @@ async def test_401_is_a_clear_auth_error() -> None:
 
 @_sync
 async def test_other_http_error_carries_status() -> None:
-    client = _client(lambda r: httpx.Response(500, json={}))
+    client = _client(lambda r: httpx.Response(400, json={}))
     with pytest.raises(LlmResponseError) as info:
         await client.json_completion("s", "u", Reply)
-    assert info.value.status == 500
+    assert info.value.status == 400
+    assert str(info.value) == "Anthropic API returned HTTP 400"
+
+
+@_sync
+async def test_overloaded_5xx_is_retried_then_carries_the_provider_message() -> None:
+    calls: list[int] = []
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(
+            529 if len(calls) == 1 else 503,
+            json={"type": "error", "error": {"type": "x", "message": "Overloaded"}},
+        )
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    client = _client(handler, sleep=fake_sleep, jitter=lambda: 0.0)
+    with pytest.raises(LlmResponseError) as info:
+        await client.json_completion("s", "u", Reply)
+
+    assert info.value.status == 503
+    assert str(info.value) == "Anthropic API returned HTTP 503: Overloaded"
+    assert len(calls) == 3
+    assert slept == [2.0, 5.0]
+
+
+@_sync
+async def test_timeout_then_success_is_retried() -> None:
+    calls: list[int] = []
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectTimeout("connect timed out")
+        return _message(GOOD)
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    client = _client(handler, sleep=fake_sleep, jitter=lambda: 0.0)
+    result = await client.json_completion("s", "u", Reply)
+
+    assert result.title == "ML Engineer"
+    assert slept == [2.0]
 
 
 @_sync

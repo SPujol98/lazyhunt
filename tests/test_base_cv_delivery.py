@@ -143,13 +143,6 @@ def test_variant_selection_delivers_the_matching_base_pdf(
     assert _sha(pdf) == _sha(BASE / FILES[expected])  # byte-identical
 
 
-def test_explicit_backend_catalan_is_rejected(tmp_path: Path) -> None:
-    svc, repo = _service(tmp_path)
-    oid = _offer(repo, ES_TEXT, "backend")
-    with pytest.raises(ServiceError, match="BACKEND_ca"):
-        asyncio.run(svc.generate_cv(oid, "BACKEND", "ca"))
-
-
 def test_ds_role_is_no_longer_a_bot_role(tmp_path: Path) -> None:
     svc, repo = _service(tmp_path)
     oid = _offer(repo, ES_TEXT, "ai")

@@ -31,7 +31,7 @@ Read these three points; they are also in the README.
 | You need | Check |
 | --- | --- |
 | [uv](https://docs.astral.sh/uv/) (it downloads Python 3.12 for you) | `uv --version` |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code), logged in (or another provider, see [providers.md](providers.md)) | `claude auth status` |
+| One AI provider: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (default) or [Codex CLI](https://github.com/openai/codex), installed and logged in; or an API key for Anthropic, OpenAI or any OpenAI-compatible API (Gemini, OpenRouter, Groq, Mistral); or a local model with Ollama or LM Studio. Web research of company facts works only with the two CLIs (API models have no browsing tool). See [providers.md](providers.md) | `claude auth status` / `codex login status` |
 | A Telegram account | |
 | Chrome or another Chromium browser | |
 
@@ -73,14 +73,27 @@ it never overwrites a value without asking.
 1. **Prerequisites.** It checks Python, `uv`, and `claude` (`claude --version`
    and `claude auth status`; only the "logged in" yes/no is read). If
    `claude` is missing or logged out it tells you how to fix it and goes on.
+   It also says whether `codex` is installed (it is not run).
 2. **Bot language.** `auto` (default: your system language, Spanish if it
    starts with `es`, English otherwise), `en` or `es` to force one: the
    language of the Telegram bot, the command line and the dashboard, saved as
    `ui_language`. CVs and
    letters keep following each offer's language. To change it later, edit
    `ui_language` in `config.local.toml` (or run the wizard again).
-3. **AI provider.** `claude_code` by default. For `anthropic` or
-   `openai_compatible`, add the API key to `.env` yourself.
+3. **AI provider.** `claude_code` (default), `codex_cli`, `anthropic` or
+   `openai_compatible`, each with a one-line explanation (a number 1-4 also
+   works).
+   - `claude_code` and `codex_cli` use your own CLI login; no key is asked.
+   - `anthropic` asks your API key (hidden input), saved as
+     `ANTHROPIC_API_KEY` in `.env`.
+   - `openai_compatible` asks an endpoint preset: OpenAI, Gemini, OpenRouter,
+     Groq, Mistral, Ollama (local), LM Studio (local) or Other (type the base
+     URL). Then the model, filled in from the preset (type it for a local
+     server), and the API key (hidden), saved as `CVA_LLM_API_KEY`. A local
+     server ignores the key, but one must be set: any non-empty value works,
+     and Enter sets the placeholder `local`.
+
+   On a re-run, Enter keeps every current value, including the key.
 4. **Telegram.** Create a bot: open [@BotFather](https://t.me/BotFather),
    send `/newbot` and follow the steps; paste the token it gives you (the
    input is hidden). Get your numeric user id from
@@ -97,8 +110,8 @@ Where things go:
 
 | File | Contents |
 | --- | --- |
-| `.env` (mode 600) | `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET` |
-| `config.local.toml` | `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir` |
+| `.env` (mode 600) | `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, and `ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY` if your provider needs one |
+| `config.local.toml` | `ui_language`, `llm_provider` (plus `llm_base_url` and `llm_model` for `openai_compatible`), `owner_telegram_id`, `profile_dir` |
 | `profiles/me/` | your profile |
 
 Both files are gitignored. Secrets are read from the environment only;

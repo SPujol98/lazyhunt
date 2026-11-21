@@ -441,34 +441,22 @@ def test_rejudge_report_only_skips_the_quota_warning(
     assert "cuota" not in printed.lower() and "quota" not in printed.lower()
 
 
-def test_rejudge_since_rejects_a_malformed_date() -> None:
+@pytest.mark.parametrize(
+    "flags",
+    [
+        pytest.param(["--since", "01-09-2026"], id="since-malformed-date"),
+        pytest.param(["--limit", "0"], id="limit-non-positive"),
+        pytest.param(["--pace", "-1"], id="pace-negative"),
+        pytest.param(["--min-score", "101"], id="min-score-out-of-range"),
+        pytest.param(
+            ["--max-consecutive-failures", "0"], id="max-failures-non-positive"
+        ),
+    ],
+)
+def test_rejudge_rejects_invalid_flag_values(flags: list[str]) -> None:
     service = FakeService()
     with pytest.raises(SystemExit):
-        run(["rejudge", "--since", "01-09-2026"], service)
-
-
-def test_rejudge_limit_rejects_non_positive_values() -> None:
-    service = FakeService()
-    with pytest.raises(SystemExit):
-        run(["rejudge", "--limit", "0"], service)
-
-
-def test_rejudge_pace_rejects_negative_values() -> None:
-    service = FakeService()
-    with pytest.raises(SystemExit):
-        run(["rejudge", "--pace", "-1"], service)
-
-
-def test_rejudge_min_score_rejects_out_of_range_values() -> None:
-    service = FakeService()
-    with pytest.raises(SystemExit):
-        run(["rejudge", "--min-score", "101"], service)
-
-
-def test_rejudge_max_consecutive_failures_rejects_non_positive_values() -> None:
-    service = FakeService()
-    with pytest.raises(SystemExit):
-        run(["rejudge", "--max-consecutive-failures", "0"], service)
+        run(["rejudge", *flags], service)
 
 
 def test_rejudge_dry_run_reports_exclusion_reasons_and_limit_capping(

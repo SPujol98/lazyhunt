@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import read_extension
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
 HARNESS = Path(__file__).resolve().parent / "fixtures" / "extension_filter_harness.js"
@@ -31,10 +33,6 @@ pytestmark = pytest.mark.skipif(
 requires_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node executable not available"
 )
-
-
-def _read(name: str) -> str:
-    return (EXTENSION / name).read_text(encoding="utf-8")
 
 
 @requires_node
@@ -57,7 +55,7 @@ def test_filter_js_behavior_via_node_harness() -> None:
 def test_company_blocklist_is_one_shared_constant() -> None:
     """R2-dup-company-blocklist: both profiles derive the company blocklist
     from one constant instead of repeating the literal list."""
-    js = _read("filter.js")
+    js = read_extension("filter.js")
     assert "const COMPANY_BLOCKLIST" in js
     assert js.count("'Bending Spoons'") == 1
     assert js.count("...COMPANY_BLOCKLIST") == 2

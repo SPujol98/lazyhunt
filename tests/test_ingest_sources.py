@@ -73,6 +73,7 @@ def test_source_from_url_hostname_dispatch(url: str, expected: str | None) -> No
         ("https://www.linkedin.com/jobs/view/4459804598/", "4459804598"),
         ("https://linkedin.com/jobs/view/42", "42"),
         (LINKEDIN_GUEST, "998877"),
+        (LINKEDIN_GUEST + "/", "998877"),
         ("https://www.linkedin.com/jobs/view/", None),
         # InfoJobs shape: /of-<32 lowercase hex-ish chars>.
         (INFOJOBS_OFFER, INFOJOBS_ID),

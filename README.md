@@ -81,9 +81,12 @@ From a fresh clone to your first scored offer takes about 20 minutes. You do not
 | **A Telegram account** | The bot's only interface; you create your own bot with [@BotFather](https://t.me/BotFather) | |
 | **One AI provider** | Scores offers and writes letters | see below |
 | &nbsp;&nbsp;↳ [Claude Code](https://docs.anthropic.com/en/docs/claude-code) *(default)* | Your own installed and logged-in CLI; no API key needed | `claude auth status` |
+| &nbsp;&nbsp;↳ or [Codex CLI](https://github.com/openai/codex) | Your own installed and logged-in OpenAI CLI; no API key needed | `codex login status` |
 | &nbsp;&nbsp;↳ or an Anthropic API key | Pay-per-use API | [docs/providers.md](docs/providers.md) |
-| &nbsp;&nbsp;↳ or any OpenAI-compatible endpoint | A hosted or local model | [docs/providers.md](docs/providers.md) |
+| &nbsp;&nbsp;↳ or an OpenAI API key, or any OpenAI-compatible API | Gemini, OpenRouter, Groq, Mistral, or a local model with Ollama or LM Studio (free, runs on your machine) | [docs/providers.md](docs/providers.md) |
 | *Optional:* a Google Cloud project | Read-only Gmail status proposals | [docs/gmail.md](docs/gmail.md) |
+
+**Which AI?** Any of them follows the same instructions, so scoring, CVs and letters work with all. One difference: the cover letter's **web research of company facts** works only with Claude Code and Codex CLI, because they can browse the web; API models have no browsing tool, so with them that research is reported as not available instead of guessed. You pick the provider in the setup wizard, and can change it any time by running it again. Details and costs: [docs/providers.md](docs/providers.md).
 
 **Operating systems.** Linux, macOS and Windows. CI runs the test suite on all three; lazyhunt is developed on Linux, so macOS and Windows get less day-to-day use. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
 
@@ -119,9 +122,9 @@ uv run cli.py init
 
 The wizard only sets up the bot itself; everything about you comes later, in Telegram. It asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
 
-1. **Prerequisites.** Checks Python, `uv` and that `claude` is installed and logged in (only the yes/no is read). If something is missing it tells you how to fix it and carries on.
+1. **Prerequisites.** Checks Python, `uv`, that `claude` is installed and logged in (only the yes/no is read) and whether `codex` is installed. If something is missing it tells you how to fix it and carries on.
 2. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`.
-3. **AI provider.** `claude_code` by default. For `anthropic` or `openai_compatible`, you add the API key to `.env` yourself.
+3. **AI provider.** `claude_code` (default), `codex_cli`, `anthropic` or `openai_compatible`. The two CLIs use your own login and need no key. For `anthropic` it asks your API key (hidden). For `openai_compatible` it offers presets (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, or another URL), then the model (filled in from the preset) and the API key (hidden; for a local Ollama or LM Studio server any value works, and Enter sets a placeholder).
 4. **Telegram.** Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the steps, then paste the token it gives you (the input is hidden). Get your numeric user id from [@userinfobot](https://t.me/userinfobot): the bot will answer **only** that id.
 5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot.
 6. **Profile directory.** Creates `profiles/me` (gitignored). Choose **empty** (the default and the recommended choice): the bot then starts in *setup mode* and builds the profile with you through `/setup`. The other choices are a skeleton with placeholders to fill in by hand, or a copy of the fictional demo profile to try things first.
@@ -131,8 +134,8 @@ Where things end up:
 
 | File | Contents |
 | --- | --- |
-| `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET` |
-| `config.local.toml` | Settings: `ui_language`, `llm_provider`, `owner_telegram_id`, `profile_dir`; later `enabled_portals`, the portals you choose in `/setup` |
+| `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, and the API key if your provider needs one (`ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY`) |
+| `config.local.toml` | Settings: `ui_language`, `llm_provider` (with `llm_base_url` and `llm_model` for `openai_compatible`), `owner_telegram_id`, `profile_dir`; later `enabled_portals`, the portals you choose in `/setup` |
 | `profiles/me/` | Your profile (empty until `/setup`) |
 
 > [!TIP]
@@ -327,7 +330,7 @@ Settings are layered: code defaults, then `config.toml`, then `config.local.toml
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `llm_provider` | `claude_code` | `claude_code`, `anthropic` or `openai_compatible` ([docs/providers.md](docs/providers.md)) |
+| `llm_provider` | `claude_code` | `claude_code`, `codex_cli`, `anthropic` or `openai_compatible` ([docs/providers.md](docs/providers.md)) |
 | `profile_dir` | unset | Directory with your claims, base CVs, voice and preferences |
 | `enabled_portals` | unset | Restrict which portals the bot accepts; unset lets the extension decide |
 | `match_mode` | `keyword` | `hybrid` lets the AI judge drive notifications |
@@ -348,7 +351,7 @@ Everything that describes you or your search is yours to change, and none of it 
 | How the AI judges offers for you | `<profile>/judge/facts.md`, `anchors.md`, `rubric_persona.md` | Plain text: facts about you, a few example offers with the score you would give, and how to weigh requirements. `cli.py init` creates them with instructions |
 | Your experience (the only source for CVs and letters) | `<profile>/claims.json`, `<profile>/masters/`, your base CVs | A claim that is not here never appears in a CV or a letter |
 | Cover-letter voice and emphasis | `<profile>/voice.md`, `<profile>/preferences.toml` `[cover_letter]` | |
-| AI provider and model | `llm_provider` in `config.local.toml`; the API key in `.env` | Your own Claude Code login (default, no key), an Anthropic API key, or any OpenAI-compatible endpoint: [docs/providers.md](docs/providers.md) |
+| AI provider and model | `llm_provider` in `config.local.toml`; the API key in `.env` | Your own Claude Code or Codex CLI login (no key), an Anthropic API key, or any OpenAI-compatible endpoint (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio): run `cli.py init` again or see [docs/providers.md](docs/providers.md) |
 | Role families: your own kinds of job (CV variants, filters, thresholds) | `<profile>/preferences.toml` `[families.<id>]`, `<profile>/cv_base_pdfs/manifest.json` | Frontend, marketing, nursing... with no code: [docs/role-families.md](docs/role-families.md) |
 | Score threshold, match mode, accepted portals | `config.local.toml` | See [Configuration](#configuration) |
 | A portal that is not supported yet | Ask a coding agent | Open `claude` in the repository and say "add portal &lt;name&gt;" with a saved results page: the [`add-portal`](.claude/skills/add-portal/SKILL.md) skill scaffolds the adapter and its tests with `scripts/new_portal.py`. By hand: [docs/portals.md](docs/portals.md) |
@@ -457,7 +460,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.1`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.2`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

@@ -584,7 +584,7 @@ def test_unknown_stage_and_provider_without_json_are_service_errors(
     service, _repo, oid = make(tmp_path, FakeLlm())
     with pytest.raises(ServiceError):
         asyncio.run(service.prepare_interview(oid, "bogus"))
-    plain, _r, pid = make(tmp_path / "x" if False else tmp_path, FakeLlm())
+    plain, _r, pid = make(tmp_path, FakeLlm())
     plain._llm = object()  # type: ignore[assignment]
     with pytest.raises(ServiceError):
         asyncio.run(plain.prepare_interview(pid, "rrhh"))

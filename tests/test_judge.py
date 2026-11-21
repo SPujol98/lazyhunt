@@ -232,28 +232,20 @@ def test_build_system_prompt_states_closed_list_of_four_hard_wall_cases() -> Non
     assert "daily core" in prompt
 
 
-def test_build_system_prompt_marks_cloud_platform_requirement_as_soft() -> None:
-    """A cloud platform (AWS/Azure/GCP) stays SOFT even when the offer
-    states it as a requirement, not merely a plus — the BETWEEN offer
-    ("Experiencia con plataformas cloud (AWS, Azure, GCP)") was wrongly
-    hard-walled before this rule was made explicit."""
-    prompt = build_system_prompt(_claims_db()).lower()
-    assert "even when it is stated as a requirement" in prompt
-
-
-def test_build_system_prompt_marks_one_option_among_several_framework_as_soft() -> None:
-    """A framework listed as one option among several (e.g. 'TensorFlow,
-    PyTorch or Scikit-learn') stays SOFT — never a hard wall by itself."""
-    prompt = build_system_prompt(_claims_db()).lower()
-    assert "one option among several" in prompt
-
-
-def test_build_system_prompt_marks_new_business_domain_as_soft() -> None:
-    """A new business domain the candidate has not worked in before
-    (e.g. marketing ops, a new industry vertical) stays SOFT — never a hard
-    wall by itself (a marketing-systems offer)."""
-    prompt = build_system_prompt(_claims_db()).lower()
-    assert "new business domain" in prompt
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        # A cloud platform (AWS/Azure/GCP) stays SOFT even when the offer states
+        # it as a requirement (the BETWEEN offer was wrongly hard-walled).
+        pytest.param("even when it is stated as a requirement", id="cloud-platform"),
+        # A framework listed as one option among several stays SOFT.
+        pytest.param("one option among several", id="one-option-framework"),
+        # A new business domain stays SOFT, never a hard wall by itself.
+        pytest.param("new business domain", id="new-business-domain"),
+    ],
+)
+def test_build_system_prompt_keeps_soft_rule_phrase(phrase: str) -> None:
+    assert phrase in build_system_prompt(_claims_db()).lower()
 
 
 def test_build_system_prompt_names_fine_tuning_as_daily_core_example() -> None:

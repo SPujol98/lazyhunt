@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import read_extension
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
 HARNESS = (
@@ -26,10 +28,6 @@ pytestmark = pytest.mark.skipif(
 requires_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not available"
 )
-
-
-def _read(name: str) -> str:
-    return (EXTENSION / name).read_text(encoding="utf-8")
 
 
 @requires_node
@@ -47,7 +45,7 @@ def test_background_safe_defaults_via_node_harness() -> None:
 
 
 def test_manifest_portal_hosts_are_optional_permissions() -> None:
-    manifest = json.loads(_read("manifest.json"))
+    manifest = json.loads(read_extension("manifest.json"))
     # Only the loopback bridge is required; Telegram is gone (extension-rewrite S4).
     assert manifest["host_permissions"] == ["http://127.0.0.1/*"]
     assert "https://www.linkedin.com/*" in manifest["optional_host_permissions"]
@@ -55,8 +53,8 @@ def test_manifest_portal_hosts_are_optional_permissions() -> None:
 
 
 def test_options_has_a_portals_section_with_permission_flow() -> None:
-    html = _read("options.html")
-    js = _read("options.js")
+    html = read_extension("options.html")
+    js = read_extension("options.js")
     assert 'id="portalList"' in html
     assert "chrome.permissions.request" in js
     assert "chrome.permissions.remove" in js
@@ -66,6 +64,6 @@ def test_options_has_a_portals_section_with_permission_flow() -> None:
 
 
 def test_popup_shows_the_bot_pause_and_skipped_portals() -> None:
-    popup = _read("popup.js")
+    popup = read_extension("popup.js")
     assert "botConfig" in popup
     assert "no_permission" in popup

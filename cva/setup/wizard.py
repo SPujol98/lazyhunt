@@ -7,8 +7,11 @@ prompt) leaves the installation untouched. It writes:
 * secrets (``CVA_TELEGRAM_TOKEN``, ``CVA_BRIDGE_SECRET``) to ``.env`` only,
   updating keys in place, mode 600 on POSIX, and never prints their values
   (the bridge secret is shown once, and only on request, at the very end);
-* non-secret settings (``llm_provider``, ``owner_telegram_id``,
-  ``profile_dir``) to ``config.local.toml``;
+* the AI provider's API key, when the chosen provider needs one
+  (``ANTHROPIC_API_KEY`` or ``CVA_LLM_API_KEY``), asked with hidden input and
+  handled like the other secrets;
+* non-secret settings (``llm_provider``, ``llm_base_url``, ``llm_model``,
+  ``owner_telegram_id``, ``profile_dir``) to ``config.local.toml``;
 * a new profile directory: empty (recommended; the bot starts in setup mode
   and the guided ``/setup`` in Telegram fills it in), a skeleton with clearly
   marked placeholders, or a verbatim copy of the fictional demo profile. An
@@ -21,7 +24,9 @@ A key that already has a different value is replaced only after an explicit
 Claude Code checks run the user's own ``claude`` binary: ``claude --version``
 and ``claude auth status --json``, of which only the boolean ``loggedIn`` is
 read. Claude credential files are never opened, and no network call is made
-by the wizard itself.
+by the wizard itself. The Codex CLI, when installed, answers only
+``--version`` and ``login status``, of which only the exit code is read
+(see :mod:`cva.setup.prereq`); its credentials are never opened.
 
 Every side channel is injectable (``WizardIO``, ``runner``, ``which``,
 ``demo_profile``) so tests drive the public entry ``run_init`` in a
@@ -42,6 +47,7 @@ from pathlib import Path
 from typing import Final
 
 from cva.fsutil import atomic_write
+from cva.setup.prereq import check_codex
 
 Runner = Callable[[Sequence[str]], tuple[int, str]]
 Which = Callable[[str], str | None]
@@ -53,11 +59,53 @@ SECRET_KEY: Final[str] = "CVA_BRIDGE_SECRET"
 DEFAULT_PROFILE: Final[str] = "profiles/me"
 DEFAULT_BRIDGE_PORT: Final[int] = 8765
 UI_LANGUAGES: Final[tuple[str, ...]] = ("auto", "en", "es")
-PROVIDERS: Final[tuple[str, ...]] = ("claude_code", "anthropic", "openai_compatible")
+PROVIDERS: Final[tuple[str, ...]] = (
+    "claude_code",
+    "codex_cli",
+    "anthropic",
+    "openai_compatible",
+)
+_PROVIDER_HELP: Final[dict[str, str]] = {
+    "claude_code": "your own installed and logged-in Claude Code CLI; no API key "
+    "(default)",
+    "codex_cli": "your own installed and logged-in OpenAI Codex CLI; no API key",
+    "anthropic": "the Anthropic API with your API key",
+    "openai_compatible": "any OpenAI-compatible API: OpenAI, Gemini, OpenRouter, "
+    "Groq, Mistral, or a local model with Ollama or LM Studio",
+}
 _PROVIDER_KEY: Final[dict[str, str]] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai_compatible": "CVA_LLM_API_KEY",
 }
+
+
+@dataclass(frozen=True)
+class _Preset:
+    """A ready-made OpenAI-compatible endpoint offered by the wizard."""
+
+    label: str
+    base_url: str  # "" = typed by the user ("Other")
+    model: str  # "" = typed by the user
+    local: bool = False
+
+
+_PRESETS: Final[dict[str, _Preset]] = {
+    "1": _Preset("OpenAI", "https://api.openai.com/v1", "gpt-4o-mini"),
+    "2": _Preset(
+        "Google Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-3.5-flash-lite",
+    ),
+    "3": _Preset("OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
+    "4": _Preset("Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    "5": _Preset("Mistral", "https://api.mistral.ai/v1", "mistral-small-latest"),
+    "6": _Preset("Ollama (local)", "http://localhost:11434/v1", "", local=True),
+    "7": _Preset("LM Studio (local)", "http://localhost:1234/v1", "", local=True),
+    "8": _Preset("Other (type the base URL)", "", ""),
+}
+_OTHER_PRESET: Final[str] = "8"
+# Local servers ignore the key, but the client always sends one.
+LOCAL_KEY_PLACEHOLDER: Final[str] = "local"
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 DEMO_PROFILE: Final[Path] = _REPO_ROOT / "profiles" / "demo"
 _MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
@@ -195,6 +243,13 @@ def _check_prerequisites(io: WizardIO, runner: Runner, which: Which) -> None:
         io.print(
             "  uv was not found on PATH: install it from https://docs.astral.sh/uv/"
         )
+    # Codex is optional: when installed, only its version and a yes/no
+    # "logged in" are read (``check_codex`` discards the status output).
+    if which("codex") is None:
+        io.print("  Codex CLI: not installed (optional provider codex_cli).")
+    else:
+        for line in check_codex(runner, which):
+            io.print(line)
     claude = which("claude")
     if claude is None:
         io.print(
@@ -296,23 +351,32 @@ def _step_language(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) 
     return language
 
 
-def _step_provider(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> str:
+def _step_provider(
+    io: WizardIO,
+    plan: _Plan,
+    existing_env: dict[str, str],
+    existing_toml: dict[str, object],
+) -> str:
     io.print("")
     io.print("Step 3/7 - AI provider")
     current = existing_toml.get("llm_provider")
     default = (
         current if isinstance(current, str) and current in PROVIDERS else PROVIDERS[0]
     )
+    io.print("  Which AI writes and judges for you (details: docs/providers.md):")
+    for number, name in enumerate(PROVIDERS, start=1):
+        io.print(f"  [{number}] {name}: {_PROVIDER_HELP[name]}")
     io.print(
-        "  claude_code (default): your own installed and logged-in Claude Code CLI; "
-        "no API key involved. anthropic: an Anthropic API key. openai_compatible: "
-        "any OpenAI-compatible endpoint. See docs/providers.md."
+        "  Web research of company facts works only with claude_code and codex_cli: "
+        "API models have no browsing tool."
     )
+    by_number = {str(n): name for n, name in enumerate(PROVIDERS, start=1)}
     while True:
-        provider = _ask(io, f"  Provider [{default}]: ", default)
+        answer = _ask(io, f"  Provider [{default}]: ", default)
+        provider = by_number.get(answer, answer)
         if provider in PROVIDERS:
             break
-        io.print(f"  Please choose one of: {', '.join(PROVIDERS)}.")
+        io.print(f"  Please choose one of: {', '.join(PROVIDERS)} (or 1-4).")
     _propose(
         io,
         plan.toml,
@@ -322,12 +386,106 @@ def _step_provider(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) 
         where=LOCAL_TOML,
         secret=False,
     )
-    if provider in _PROVIDER_KEY:
+    if provider == "claude_code":
+        io.print("  Uses your Claude Code login (`claude auth login`); no key needed.")
+    elif provider == "codex_cli":
         io.print(
-            f"  Add {_PROVIDER_KEY[provider]}=<your key> to .env yourself; the wizard "
-            "does not ask for API keys."
+            "  Uses your Codex CLI login (run `codex login` once); no key needed. "
+            "Set codex_cli_path in config.local.toml if `codex` is not on PATH."
         )
+    elif provider == "anthropic":
+        _ask_api_key(io, plan, existing_env, "ANTHROPIC_API_KEY", local=False)
+    else:
+        local = _ask_endpoint(io, plan, existing_toml)
+        _ask_api_key(io, plan, existing_env, "CVA_LLM_API_KEY", local=local)
     return provider
+
+
+def _ask_endpoint(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> bool:
+    """Plan ``llm_base_url`` and ``llm_model``; True for a local server."""
+    current_url = existing_toml.get("llm_base_url")
+    current_url = current_url if isinstance(current_url, str) else ""
+    current_model = existing_toml.get("llm_model")
+    current_model = current_model if isinstance(current_model, str) else ""
+    default = next(
+        (n for n, p in _PRESETS.items() if current_url and p.base_url == current_url),
+        _OTHER_PRESET if current_url else "1",
+    )
+    io.print("  OpenAI-compatible endpoint:")
+    for number, preset in _PRESETS.items():
+        shown = f" - {preset.base_url}" if preset.base_url else ""
+        io.print(f"  [{number}] {preset.label}{shown}")
+    while True:
+        choice = _ask(io, f"  Endpoint [{default}]: ", default)
+        if choice in _PRESETS:
+            break
+        io.print(f"  Please answer a number from 1 to {len(_PRESETS)}.")
+    preset = _PRESETS[choice]
+    url = preset.base_url
+    while not url:
+        shown = f" [{current_url}]" if current_url else ""
+        answer = _ask(io, f"  Base URL{shown}: ", current_url)
+        if answer.startswith(("http://", "https://")):
+            url = answer.rstrip("/")
+        else:
+            io.print(
+                "  Please type the full base URL, starting with http:// or https:// "
+                "(for example https://api.example.com/v1)."
+            )
+    model_default = current_model if current_url == url and current_model else ""
+    model_default = model_default or preset.model
+    if preset.local and not model_default:
+        io.print(
+            "  Type the name of a model you have downloaded "
+            "(for Ollama, see `ollama list`)."
+        )
+    while True:
+        shown = f" [{model_default}]" if model_default else ""
+        model = _ask(io, f"  Model{shown}: ", model_default)
+        if model:
+            break
+        io.print("  Please type a model name.")
+    for key, value in (("llm_base_url", url), ("llm_model", model)):
+        _propose(
+            io, plan.toml, existing_toml, key, value, where=LOCAL_TOML, secret=False
+        )
+    return preset.local
+
+
+def _ask_api_key(
+    io: WizardIO,
+    plan: _Plan,
+    existing_env: dict[str, str],
+    key: str,
+    *,
+    local: bool,
+) -> None:
+    """Plan the provider's API key in .env (hidden input, never printed)."""
+    has_key = bool(existing_env.get(key))
+    if local:
+        io.print(
+            "  A local server ignores the API key, but one must be set: any "
+            f"non-empty value works. Press Enter to use the placeholder "
+            f"{LOCAL_KEY_PLACEHOLDER!r}."
+        )
+    if has_key:
+        hint = "Enter to keep the current key"
+    elif local:
+        hint = "Enter for the placeholder"
+    else:
+        hint = "Enter to skip"
+    value = _ask_secret(io, f"  API key, stored as {key} in .env (hidden; {hint}): ")
+    if not value and local and not has_key:
+        value = LOCAL_KEY_PLACEHOLDER
+    if value:
+        if _propose(
+            io, plan.env, existing_env, key, value, where=ENV_FILE, secret=True
+        ):
+            plan.env_replaced.add(key)
+    elif has_key:
+        io.print(f"  Keeping the {key} already in .env.")
+    else:
+        io.print(f"  Skipped: add {key}=<your key> to .env before starting the bot.")
 
 
 def _step_telegram(
@@ -485,12 +643,19 @@ def _step_gmail(io: WizardIO) -> None:
 # --- summary and writing --------------------------------------------------
 
 
-def _print_summary(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> None:
+def _print_summary(
+    io: WizardIO,
+    plan: _Plan,
+    existing_toml: dict[str, object],
+    missing_key: str = "",
+) -> None:
     io.print("")
     io.print("Planned changes:")
     for key in plan.env:
         verb = "replace" if key in plan.env_replaced else "set"
         io.print(f"  {ENV_FILE}: {verb} {key} (value hidden)")
+    if missing_key:
+        io.print(f"  {ENV_FILE}: {missing_key} not set (the AI provider needs it)")
     for key, value in plan.toml.items():
         before = existing_toml.get(key)
         if before in _UNSET:
@@ -860,7 +1025,7 @@ def _run(
 
     _check_prerequisites(io, runner, which)
     _step_language(io, plan, existing_toml)
-    _step_provider(io, plan, existing_toml)
+    provider = _step_provider(io, plan, existing_env, existing_toml)
     _step_telegram(io, plan, existing_env, existing_toml)
     _step_bridge_secret(io, plan, existing_env)
     _step_profile(io, plan, base_dir, existing_toml, demo_profile)
@@ -870,7 +1035,11 @@ def _run(
         io.print("")
         io.print("Nothing to change: your configuration already matches these answers.")
     else:
-        _print_summary(io, plan, existing_toml)
+        key = _PROVIDER_KEY.get(provider, "")
+        missing = (
+            key if key and key not in plan.env and not existing_env.get(key) else ""
+        )
+        _print_summary(io, plan, existing_toml, missing)
         if not _yes(io, "Write these changes?"):
             io.print("Nothing was written.")
             return 0

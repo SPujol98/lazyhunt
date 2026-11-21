@@ -1,8 +1,10 @@
 """LLM seam: ``LlmClient`` protocol + three implementations.
 
-``OpenAiCompatibleLlmClient`` makes one HTTP attempt per call (temperature 0,
-JSON-schema response format) with a single bounded retry for transient HTTP
-429 only; every other retry policy belongs to callers. The endpoint is
+``OpenAiCompatibleLlmClient`` makes one HTTP call per completion (temperature 0,
+JSON-schema response format) with a single bounded retry for HTTP 429 and a
+small bounded exponential backoff with jitter for transient failures (HTTP
+500/502/503/529, httpx timeouts and connection errors); other 4xx are never
+retried and every other retry policy belongs to callers. The endpoint is
 provider-swappable via Settings (``CVA_LLM_BASE_URL`` / ``CVA_LLM_MODEL``).
 Content parsing extracts the first balanced JSON object, tolerating trailing
 chat prose and code fences; ``CVA_LLM_DISABLE_THINKING`` sends
@@ -11,7 +13,9 @@ chat prose and code fences; ``CVA_LLM_DISABLE_THINKING`` sends
 ``ClaudeCodeLlmClient`` (claude-code-llm-provider) instead shells out to the
 local `claude` CLI in headless mode (`claude -p --output-format json`),
 billed against the owner's Claude subscription instead of API usage.
-``AnthropicLlmClient`` talks to the Anthropic Messages API over raw httpx
+``CodexCliLlmClient`` runs the user's own `codex exec` CLI the same way
+(read-only sandbox, output schema file, final message file), on their own
+ChatGPT login. ``AnthropicLlmClient`` talks to the Anthropic Messages API over raw httpx
 (structured output via ``output_config.format``; no SDK dependency).
 ``build_llm_client`` selects between them from ``Settings.llm_provider``.
 """
@@ -21,6 +25,8 @@ import functools
 import json
 import logging
 import os
+import random
+import re
 import tempfile
 from collections.abc import Awaitable, Callable
 from typing import Protocol
@@ -52,6 +58,11 @@ def describe_llm_setup(settings: Settings) -> str:
         extraction = settings.extraction_model or default
         judge = settings.judge_model or default
         return f"LLM: proveedor=anthropic · extracción={extraction} · juez={judge}"
+    if settings.llm_provider == "codex_cli":
+        default = settings.codex_cli_model or "default"
+        extraction = settings.extraction_model or default
+        judge = settings.judge_model or default
+        return f"LLM: proveedor=codex_cli · extracción={extraction} · juez={judge}"
     host = urlparse(settings.llm_base_url).hostname or settings.llm_base_url
     extraction = settings.extraction_model or settings.llm_model
     judge = settings.judge_model or settings.llm_model
@@ -64,9 +75,18 @@ def describe_llm_setup(settings: Settings) -> str:
 # Credentials of the Anthropic API that would silently move the `claude` CLI
 # from the user's subscription to API billing.
 _ANTHROPIC_CREDENTIAL_VARS = frozenset({"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"})
+# Credentials that would move the `codex` CLI from the user's ChatGPT login to
+# API billing (`codex exec` reads CODEX_API_KEY; `codex login --with-api-key`
+# / `--with-access-token` document OPENAI_API_KEY / CODEX_ACCESS_TOKEN).
+_CODEX_CREDENTIAL_VARS = frozenset(
+    {"OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"}
+)
 
 
-def _child_env(pass_api_key: bool = False) -> dict[str, str]:
+def _child_env(
+    pass_api_key: bool = False,
+    credential_vars: frozenset[str] = _ANTHROPIC_CREDENTIAL_VARS,
+) -> dict[str, str]:
     """Environment for the `claude` subprocess: the parent's, minus secrets.
 
     Inherits every OS variable (the CLI may need ones nobody listed in
@@ -76,14 +96,15 @@ def _child_env(pass_api_key: bool = False) -> dict[str, str]:
     needs this app's own secrets. It also drops ``ANTHROPIC_API_KEY`` /
     ``ANTHROPIC_AUTH_TOKEN`` unless ``pass_api_key`` (setting
     ``claude_code_pass_api_key``) opts in, so the CLI keeps using the user's
-    own login instead of silently switching to API billing. Name checks are
+    own login instead of silently switching to API billing. The Codex
+    provider passes ``_CODEX_CREDENTIAL_VARS`` instead. Name checks are
     case-insensitive because Windows environment names are.
     """
     return {
         key: value
         for key, value in os.environ.items()
         if not key.upper().startswith("CVA_")
-        and (pass_api_key or key.upper() not in _ANTHROPIC_CREDENTIAL_VARS)
+        and (pass_api_key or key.upper() not in credential_vars)
     }
 
 
@@ -133,12 +154,100 @@ class LlmResponseError(RuntimeError):
         self.status = status
 
 
+# Transient provider failures worth another attempt (529 is Anthropic's
+# "overloaded"). Other 4xx are caller errors and are never retried.
+_TRANSIENT_STATUSES = frozenset({500, 502, 503, 529})
+_TRANSIENT_BACKOFF_FACTOR = 2.5
+_PROVIDER_MESSAGE_LIMIT = 200
+
+
+def _default_jitter() -> float:
+    return random.uniform(0.0, 1.0)
+
+
+def _provider_error_detail(response: httpx.Response) -> str:
+    """The provider's own short error text (``error.message``), flattened and
+    truncated; empty when the body is not the usual JSON error envelope.
+
+    Only the response body is read, never the request, so no header or key
+    can leak into the message.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    error = body.get("error") if isinstance(body, dict) else None
+    message = error.get("message") if isinstance(error, dict) else error
+    if not isinstance(message, str):
+        return ""
+    flat = " ".join(message.split())
+    if len(flat) > _PROVIDER_MESSAGE_LIMIT:
+        flat = flat[:_PROVIDER_MESSAGE_LIMIT] + "…"
+    return flat
+
+
+def _http_error(prefix: str, response: httpx.Response) -> "LlmResponseError":
+    """``<prefix> HTTP <code>[: <provider message>]``; the ``HTTP <code>``
+    wording is parsed by ``notifier.failure_reason``, keep it."""
+    detail = _provider_error_detail(response)
+    message = f"{prefix} HTTP {response.status_code}"
+    return LlmResponseError(
+        f"{message}: {detail}" if detail else message, status=response.status_code
+    )
+
+
+async def _send_with_retries(
+    send: Callable[[], Awaitable[httpx.Response]],
+    *,
+    retry_429_delay: Callable[[httpx.Response], float] | None,
+    transient_retries: int,
+    backoff_seconds: float,
+    sleep: Callable[[float], Awaitable[None]],
+    jitter: Callable[[], float],
+    label: str,
+) -> httpx.Response:
+    """Send with ONE retry on HTTP 429 (when ``retry_429_delay`` is given) and
+    up to ``transient_retries`` extra attempts on transient failures, waiting
+    ``backoff_seconds * 2.5**n + jitter()`` before each (≈2 s, ≈5 s).
+
+    Returns the final response (any status) for the caller to map; raises
+    ``LlmResponseError`` when the transport keeps failing. Cancellation is
+    never caught: a cancelled caller aborts at once, even mid-backoff.
+    """
+    retried_429 = False
+    transient_used = 0
+    while True:
+        try:
+            response = await send()
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            if transient_used >= transient_retries:
+                raise LlmResponseError(
+                    f"{label} unreachable after {transient_used + 1} attempt(s): "
+                    f"{type(exc).__name__}"
+                ) from exc
+        else:
+            if response.status_code == 429 and retry_429_delay and not retried_429:
+                retried_429 = True
+                await sleep(retry_429_delay(response))
+                continue
+            if (
+                response.status_code not in _TRANSIENT_STATUSES
+                or transient_used >= transient_retries
+            ):
+                return response
+        await sleep(
+            backoff_seconds * _TRANSIENT_BACKOFF_FACTOR**transient_used + jitter()
+        )
+        transient_used += 1
+
+
 def supports_web_search(client: object) -> bool:
     """True when the provider can run a completion with web search enabled.
 
-    Only the Claude Code CLI provider can (``WebSearch``/``WebFetch`` tools);
-    the OpenAI-compatible endpoint has no such capability here, so callers
-    must say "not available" instead of asking it to guess.
+    Only the CLI providers can: Claude Code (``WebSearch``/``WebFetch``
+    tools) and Codex (``--search``). The HTTP providers have no such
+    capability here, so callers must say "not available" instead of asking
+    them to guess.
     """
     return getattr(client, "supports_web_search", False) is True
 
@@ -159,6 +268,9 @@ class OpenAiCompatibleLlmClient:
         disable_thinking: bool = False,
         retry_429_wait_seconds: float = 25.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        transient_retries: int = 2,
+        transient_backoff_seconds: float = 2.0,
+        jitter: Callable[[], float] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
@@ -168,6 +280,9 @@ class OpenAiCompatibleLlmClient:
         self._disable_thinking = disable_thinking
         self._retry_wait_seconds = retry_429_wait_seconds
         self._sleep = sleep if sleep is not None else asyncio.sleep
+        self._transient_retries = transient_retries
+        self._transient_backoff_seconds = transient_backoff_seconds
+        self._jitter = jitter if jitter is not None else _default_jitter
 
     @classmethod
     def from_settings(
@@ -196,6 +311,7 @@ class OpenAiCompatibleLlmClient:
             transport=transport,
             disable_thinking=settings.llm_disable_thinking,
             retry_429_wait_seconds=float(settings.llm_429_retry_wait_seconds),
+            transient_retries=settings.llm_transient_retries,
         )
 
     async def json_completion[ModelT: BaseModel](
@@ -221,17 +337,24 @@ class OpenAiCompatibleLlmClient:
             # GLM/OpenAI-compatible extension (no effect on endpoints that
             # ignore the extra body field).
             payload["thinking"] = {"type": "disabled"}
-        response = await self._send(payload)
-        if response.status_code == 429 and self._retry_wait_seconds > 0:
-            # ONE bounded retry for transient HTTP 429 only; the D3 no-retry
-            # rule covers LinkedIn walls, not the LLM endpoint.
-            await self._sleep(self._retry_wait_seconds)
-            response = await self._send(payload)
+        # ONE bounded retry for HTTP 429 plus a short backoff for transient
+        # 5xx/timeouts; the D3 no-retry rule covers LinkedIn walls, not the
+        # LLM endpoint.
+        response = await _send_with_retries(
+            lambda: self._send(payload),
+            retry_429_delay=(
+                (lambda _r: self._retry_wait_seconds)
+                if self._retry_wait_seconds > 0
+                else None
+            ),
+            transient_retries=self._transient_retries,
+            backoff_seconds=self._transient_backoff_seconds,
+            sleep=self._sleep,
+            jitter=self._jitter,
+            label="LLM endpoint",
+        )
         if response.status_code != 200:
-            raise LlmResponseError(
-                f"LLM endpoint returned HTTP {response.status_code}",
-                status=response.status_code,
-            )
+            raise _http_error("LLM endpoint returned", response)
         return _parse_completion(response, schema)
 
     async def _send(self, payload: dict[str, object]) -> httpx.Response:
@@ -292,7 +415,8 @@ class AnthropicLlmClient:
     Structured output uses ``output_config.format`` (``json_schema``). No
     sampling parameters are sent (newer models reject them). Failure mapping
     mirrors ``OpenAiCompatibleLlmClient``: one bounded retry on HTTP 429
-    (``retry-after`` honoured, capped), a clear message on 401, and
+    (``retry-after`` honoured, capped), the same transient backoff (5xx incl.
+    529 overloaded, timeouts), a clear message on 401, and
     ``LlmResponseError`` for refusals/truncation/malformed replies.
     """
 
@@ -309,6 +433,9 @@ class AnthropicLlmClient:
         transport: httpx.AsyncBaseTransport | None = None,
         retry_429_wait_seconds: float = 25.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        transient_retries: int = 2,
+        transient_backoff_seconds: float = 2.0,
+        jitter: Callable[[], float] | None = None,
     ) -> None:
         self._api_key = api_key
         self.model = model
@@ -318,6 +445,9 @@ class AnthropicLlmClient:
         self._transport = transport
         self._retry_wait_seconds = retry_429_wait_seconds
         self._sleep = sleep if sleep is not None else asyncio.sleep
+        self._transient_retries = transient_retries
+        self._transient_backoff_seconds = transient_backoff_seconds
+        self._jitter = jitter if jitter is not None else _default_jitter
 
     @classmethod
     def from_settings(
@@ -337,6 +467,7 @@ class AnthropicLlmClient:
             model=settings.anthropic_model or DEFAULT_ANTHROPIC_MODEL,
             transport=transport,
             retry_429_wait_seconds=float(settings.llm_429_retry_wait_seconds),
+            transient_retries=settings.llm_transient_retries,
         )
 
     async def json_completion[ModelT: BaseModel](
@@ -354,10 +485,15 @@ class AnthropicLlmClient:
                 }
             },
         }
-        response = await self._send(payload)
-        if response.status_code == 429 and self._retry_wait_seconds > 0:
-            await self._sleep(self._retry_delay(response))
-            response = await self._send(payload)
+        response = await _send_with_retries(
+            lambda: self._send(payload),
+            retry_429_delay=self._retry_delay if self._retry_wait_seconds > 0 else None,
+            transient_retries=self._transient_retries,
+            backoff_seconds=self._transient_backoff_seconds,
+            sleep=self._sleep,
+            jitter=self._jitter,
+            label="Anthropic API",
+        )
         if response.status_code == 401:
             raise LlmResponseError(
                 "Anthropic API rejected the credentials (HTTP 401): "
@@ -365,10 +501,7 @@ class AnthropicLlmClient:
                 status=401,
             )
         if response.status_code != 200:
-            raise LlmResponseError(
-                f"Anthropic API returned HTTP {response.status_code}",
-                status=response.status_code,
-            )
+            raise _http_error("Anthropic API returned", response)
         return _parse_anthropic(response, schema)
 
     def _retry_delay(self, response: httpx.Response) -> float:
@@ -710,9 +843,267 @@ def _parse_claude_output[CompletionT: BaseModel](
         ) from exc
 
 
+# --- Codex CLI provider ---------------------------------------------------
+
+# Schema keywords dropped from the --output-schema file: Codex sends the
+# schema as a strict structured-output format, which rejects defaults and
+# requires every property to be listed in "required". Pydantic validation of
+# the parsed reply still applies the real constraints and defaults.
+_CODEX_DROPPED_SCHEMA_KEYWORDS = frozenset({"default"})
+
+# Wording in a failed `codex exec` run's output that means "no usable login".
+_CODEX_AUTH_PATTERN = re.compile(
+    r"not logged in|codex login|unauthori[sz]ed|\b401\b|authentication"
+)
+
+
+def _codex_schema(node: object) -> object:
+    """Strict copy of a pydantic JSON schema for ``codex exec --output-schema``:
+    the Anthropic clean-up (no unsupported keywords, ``additionalProperties:
+    false``) plus no ``default`` and every property required."""
+    cleaned = _anthropic_schema(node)
+    return _strict_required(cleaned)
+
+
+def _strict_required(node: object) -> object:
+    if isinstance(node, list):
+        return [_strict_required(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    strict = {
+        key: _strict_required(value)
+        for key, value in node.items()
+        if key not in _CODEX_DROPPED_SCHEMA_KEYWORDS
+    }
+    properties = strict.get("properties")
+    if isinstance(properties, dict):
+        strict["required"] = list(properties)
+    return strict
+
+
+CodexRunner = Callable[
+    [list[str], bytes, float, str], Awaitable[tuple[int, bytes, bytes]]
+]
+
+
+async def _run_codex_subprocess(
+    argv: list[str],
+    stdin_data: bytes,
+    timeout_seconds: float,
+    cwd: str,
+    *,
+    pass_api_key: bool = False,
+) -> tuple[int, bytes, bytes]:
+    """Real `codex` CLI invocation: no shell, empty cwd, bounded wait, child
+    killed on timeout or cancellation, filtered environment (no ``CVA_*``
+    secrets, no OpenAI/Codex API keys unless ``pass_api_key``)."""
+    process = await asyncio.create_subprocess_exec(
+        *argv,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+        env=_child_env(pass_api_key, _CODEX_CREDENTIAL_VARS),
+    )
+    stdout, stderr = await _communicate_with_timeout(
+        process, stdin_data, timeout_seconds
+    )
+    return process.returncode or 0, stdout, stderr
+
+
+class CodexCliLlmClient:
+    """Non-interactive `codex exec` CLI provider, on the user's own login.
+
+    Every call runs in a fresh, empty temporary working directory with a
+    read-only sandbox, no approval prompts, no persisted session and no user
+    ``config.toml`` (so no user MCP servers or hooks), outside any git repo.
+    The prompt (system instructions + the ``user`` text) goes via stdin, never
+    argv. The response shape is enforced with ``--output-schema`` and the
+    final message is read from the ``--output-last-message`` file, then
+    parsed with the same balanced-JSON scanner the other providers use.
+
+    Web research (``web_json_completion``) passes the root ``--search`` flag
+    (Codex's native live ``web_search`` tool); every other call sets
+    ``-c web_search="disabled"`` so plain completions never browse.
+    """
+
+    model: str  # cache key, e.g. "codex-cli:gpt-5" / "codex-cli:default"
+    supports_web_search = True  # opt-in per call via web_json_completion
+
+    def __init__(
+        self,
+        *,
+        codex_cli_path: str = "codex",
+        model: str | None = None,
+        timeout_seconds: float = 180.0,
+        run: CodexRunner | None = None,
+        pass_api_key: bool = False,
+    ) -> None:
+        self.codex_cli_path = codex_cli_path
+        self.codex_cli_model = model
+        self.timeout_seconds = timeout_seconds
+        self.web_timeout_seconds = max(timeout_seconds, WEB_TIMEOUT_FLOOR_SECONDS)
+        self.pass_api_key = pass_api_key
+        self.model = f"codex-cli:{model or 'default'}"
+        self._run: CodexRunner = (
+            run
+            if run is not None
+            else functools.partial(_run_codex_subprocess, pass_api_key=pass_api_key)
+        )
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "CodexCliLlmClient":
+        """Wire the client from Settings (path/model/timeout/api-key opt-in)."""
+        return cls(
+            codex_cli_path=settings.codex_cli_path,
+            model=settings.codex_cli_model,
+            timeout_seconds=float(settings.codex_cli_timeout_seconds),
+            pass_api_key=settings.codex_cli_pass_api_key,
+        )
+
+    def _build_argv(
+        self,
+        *,
+        workdir: str,
+        schema_path: str,
+        output_path: str,
+        model: str | None,
+        web: bool,
+    ) -> list[str]:
+        argv = [self.codex_cli_path]
+        if web:
+            argv.append("--search")  # root-level flag; `exec --search` is rejected
+        argv += [
+            "-a",
+            "never",
+            "exec",
+            "--sandbox",
+            "read-only",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--ignore-user-config",
+            "--color",
+            "never",
+            "-C",
+            workdir,
+            "--output-schema",
+            schema_path,
+            "-o",
+            output_path,
+        ]
+        if not web:
+            argv += ["-c", 'web_search="disabled"']
+        if model:
+            argv += ["-m", model]
+        argv.append("-")  # read the prompt from stdin
+        return argv
+
+    async def web_json_completion[ModelT: BaseModel](
+        self, system: str, user: str, schema: type[ModelT], *, model: str | None = None
+    ) -> ModelT:
+        """Like :meth:`json_completion` with Codex live web search enabled
+        (salary / company-facts research only)."""
+        return await self._complete(system, user, schema, model=model, web=True)
+
+    async def json_completion[ModelT: BaseModel](
+        self, system: str, user: str, schema: type[ModelT], *, model: str | None = None
+    ) -> ModelT:
+        return await self._complete(system, user, schema, model=model, web=False)
+
+    async def _complete[ModelT: BaseModel](
+        self,
+        system: str,
+        user: str,
+        schema: type[ModelT],
+        *,
+        model: str | None,
+        web: bool,
+    ) -> ModelT:
+        resolved_model = _resolve_model_override(model, self.codex_cli_model)
+        timeout = self.web_timeout_seconds if web else self.timeout_seconds
+        prompt = (
+            f"{system}\n\nAnswer with only the JSON object the output schema "
+            f"describes. Input:\n\n{user}"
+        )
+        with tempfile.TemporaryDirectory(prefix="cva-codex-cli-") as scratch:
+            workdir = os.path.join(scratch, "work")
+            os.mkdir(workdir)
+            schema_path = os.path.join(scratch, "schema.json")
+            output_path = os.path.join(scratch, "last-message.txt")
+            _write_text(
+                schema_path, json.dumps(_codex_schema(schema.model_json_schema()))
+            )
+            argv = self._build_argv(
+                workdir=workdir,
+                schema_path=schema_path,
+                output_path=output_path,
+                model=resolved_model,
+                web=web,
+            )
+            try:
+                exit_code, stdout, stderr = await self._run(
+                    argv, prompt.encode("utf-8"), timeout, workdir
+                )
+            except FileNotFoundError as exc:
+                raise LlmResponseError(
+                    f"codex executable not found at {self.codex_cli_path!r} "
+                    "(check codex_cli_path in config.toml / CVA_CODEX_CLI_PATH)"
+                ) from exc
+            except TimeoutError as exc:
+                raise LlmResponseError(
+                    f"codex CLI timed out after {timeout}s "
+                    "(check codex_cli_timeout_seconds)"
+                ) from exc
+            if exit_code != 0:
+                raise LlmResponseError(_codex_exit_message(exit_code, stdout, stderr))
+            final_message = _read_text_or_empty(output_path)
+        if not final_message.strip():
+            raise LlmResponseError(
+                f"codex CLI wrote no final message: {_trim(stderr) or 'no output'}"
+            )
+        data = _extract_json_object(final_message, finish_reason=None)
+        try:
+            return schema.model_validate(_unwrap_double_encoded(data))
+        except ValidationError as exc:
+            raise LlmResponseError(
+                f"codex CLI output does not satisfy {schema.__name__}"
+            ) from exc
+
+
+def _write_text(path: str, text: str) -> None:
+    """Small local temp-file write (sync helper: a few KB, no event-loop risk)."""
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def _read_text_or_empty(path: str) -> str:
+    """The CLI's final-message file, or "" when it is missing/unreadable."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _codex_exit_message(exit_code: int, stdout: bytes, stderr: bytes) -> str:
+    """Failed run: a missing/expired login gets an actionable `codex login`
+    hint (and no raw output that could read like an API-key problem);
+    anything else names the exit status and the trimmed stderr."""
+    combined = (stderr + b"\n" + stdout).decode("utf-8", errors="replace").lower()
+    if _CODEX_AUTH_PATTERN.search(combined):
+        return (
+            f"codex CLI is not logged in (exit status {exit_code}): run "
+            "`codex login` with your ChatGPT account, then try again"
+        )
+    return f"codex CLI exited with status {exit_code}: {_trim(stderr or stdout)}"
+
+
 def build_llm_client(
     settings: Settings,
-) -> "OpenAiCompatibleLlmClient | ClaudeCodeLlmClient | AnthropicLlmClient":
+) -> (
+    "OpenAiCompatibleLlmClient | ClaudeCodeLlmClient | AnthropicLlmClient"
+    " | CodexCliLlmClient"
+):
     """Single factory used at every construction site (service/bot/cli).
 
     Selects the provider from ``settings.llm_provider`` (default
@@ -720,6 +1111,8 @@ def build_llm_client(
     """
     if settings.llm_provider == "claude_code":
         return ClaudeCodeLlmClient.from_settings(settings)
+    if settings.llm_provider == "codex_cli":
+        return CodexCliLlmClient.from_settings(settings)
     if settings.llm_provider == "anthropic":
         return AnthropicLlmClient.from_settings(settings)
     return OpenAiCompatibleLlmClient.from_settings(settings)

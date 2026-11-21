@@ -1,6 +1,5 @@
 """Gmail proposals on Telegram (M3): message, buttons, callbacks, heartbeat job."""
 
-import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +17,7 @@ from cva.notifier import (
 from cva.scheduler import GMAIL_KEY, heartbeat
 from cva.service import JobService
 from cva.tracker import OfferInput, OfferRepository
+from tests.helpers import run_coro
 from tests.test_bot import (
     FakeContext,
     FakeFetcher,
@@ -28,10 +28,6 @@ from tests.test_bot import (
 )
 
 MID = "18c0ffee12345678"
-
-
-def _run(coro: object) -> None:
-    asyncio.run(coro)  # type: ignore[arg-type]
 
 
 def _setup(
@@ -71,7 +67,7 @@ def _setup(
 
 def _press(context: FakeContext, action: str, mid: str = MID) -> FakeQuery:
     query = FakeQuery(f"{GM}:{action}:{mid}")
-    _run(bot.callback_router(FakeUpdate(query=query), context))
+    run_coro(bot.callback_router(FakeUpdate(query=query), context))
     return query
 
 
@@ -194,7 +190,7 @@ def _press_failing_edit(context: FakeContext, action: str) -> FakeQuery:
         raise RuntimeError("telegram: message is not modified")
 
     query.edit_message_reply_markup = boom  # type: ignore[method-assign]
-    _run(bot.callback_router(FakeUpdate(query=query), context))
+    run_coro(bot.callback_router(FakeUpdate(query=query), context))
     return query
 
 
@@ -274,7 +270,7 @@ def test_estado_landed_before_an_error_stays_accepted_and_clears_the_buttons(
     context = FakeContext(service)
     query = FakeQuery(f"{GM}:y:{MID}")
     with pytest.raises(RuntimeError, match="follow-up"):
-        _run(bot.callback_router(FakeUpdate(query=query), context))
+        run_coro(bot.callback_router(FakeUpdate(query=query), context))
     assert service.offer(offer_id).estado == "screening"
     row = repo.get_gmail_proposal(MID)
     assert row is not None and row.decision == "accepted"
@@ -342,7 +338,7 @@ def _beat(service: JobService, sync: object, tg: _Tg) -> None:
         ),
         bot=tg,
     )
-    _run(heartbeat(context))
+    run_coro(heartbeat(context))
 
 
 def test_heartbeat_delivers_proposals_and_warnings_to_the_owner(
@@ -375,7 +371,7 @@ def test_heartbeat_without_gmail_configured_is_unchanged(tmp_path: Path) -> None
         application=SimpleNamespace(bot_data={"service": service, "owner_id": 5}),
         bot=_Tg(),
     )
-    _run(heartbeat(context))
+    run_coro(heartbeat(context))
 
 
 # --- wiring ---------------------------------------------------------------------------

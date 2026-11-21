@@ -41,6 +41,7 @@ from cva.service import JobService, ServiceError
 from cva.star import ST, question_message
 from cva.tracker import OfferInput, OfferRepository
 from tests.demo import DEMO_MASTERS
+from tests.helpers import run_coro
 from tests.test_bot import (
     CLAIMS_PATH,
     JSONLD_BODY,
@@ -54,10 +55,6 @@ from tests.test_bot import (
     FakeUpdate,
     FetchResponse,
 )
-
-
-def _run(coro: object) -> None:
-    asyncio.run(coro)  # type: ignore[arg-type]
 
 
 def _service(tmp_path: Path, body: str = JSONLD_BODY) -> JobService:
@@ -87,13 +84,13 @@ def _command(
     handler: Callable[..., Any], context: FakeContext, text: str | None = None
 ) -> FakeMessage:
     message = FakeMessage(text)
-    _run(handler(FakeUpdate(message=message), context))
+    run_coro(handler(FakeUpdate(message=message), context))
     return message
 
 
 def _press(context: FakeContext, data: str) -> FakeQuery:
     query = FakeQuery(data)
-    _run(bot.callback_router(FakeUpdate(query=query), context))
+    run_coro(bot.callback_router(FakeUpdate(query=query), context))
     return query
 
 
@@ -337,7 +334,7 @@ def test_gmail_sync_and_client_get_the_ui_language(
     async def warning(text: str) -> None:
         warnings.append(text)
 
-    _run(sync.run(proposal, warning))
+    run_coro(sync.run(proposal, warning))
     assert warnings == [auth_warning("en")]
 
 

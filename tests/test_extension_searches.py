@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import read_extension
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
 HARNESS = Path(__file__).resolve().parent / "fixtures" / "extension_searches_harness.js"
@@ -40,15 +42,11 @@ def test_search_urls_and_expansion_via_node_harness() -> None:
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
 
-def _read(name: str) -> str:
-    return (EXTENSION / name).read_text(encoding="utf-8")
-
-
 def test_manifest_keeps_the_baseline_host_permissions() -> None:
     """Searches added no permission; new portals may append theirs (add-portal)."""
     import json
 
-    manifest = json.loads(_read("manifest.json"))
+    manifest = json.loads(read_extension("manifest.json"))
     # Portal hosts are optional permissions (safe-defaults S3); the loopback
     # bridge stays required; Telegram is gone (extension-rewrite S4).
     hosts = manifest["host_permissions"] + manifest["optional_host_permissions"]
@@ -63,9 +61,9 @@ def test_manifest_keeps_the_baseline_host_permissions() -> None:
 
 
 def test_search_slug_has_one_shared_helper() -> None:
-    searches = _read("searches.js")
+    searches = read_extension("searches.js")
     infojobs = (EXTENSION / "portals" / "infojobs.js").read_text(encoding="utf-8")
-    slug = _read("slug.js")
+    slug = read_extension("slug.js")
     assert "export function slugify" in slug
     assert "\\u0300-\\u036f" in slug
     assert "from './slug.js'" in searches

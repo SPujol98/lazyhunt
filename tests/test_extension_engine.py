@@ -9,10 +9,11 @@ surface only, over the same fake browser. Skipped without ``node``.
 """
 
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.helpers import run_node_harness
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = REPO_ROOT / "extension"
@@ -24,49 +25,36 @@ pytestmark = [
 ]
 
 
-def _run(area: str) -> None:
-    result = subprocess.run(
-        ["node", str(HARNESS), area],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-        encoding="utf-8",
-    )
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-
-
 def test_legacy_migration_never_moves_auto_searches() -> None:
     """D1: only legacy entries with a ``url`` move from ``searches`` to ``beacons``."""
-    _run("migrate")
+    run_node_harness(HARNESS, "migrate")
 
 
 def test_test_scrape_never_uses_the_round_tab() -> None:
     """D3: during a round it answers an error; otherwise it uses its own tab."""
-    _run("testscrape")
+    run_node_harness(HARNESS, "testscrape")
 
 
 def test_no_telegram_left() -> None:
     """S4: credentials dropped, no Telegram fetch, ``test-telegram`` unknown."""
-    _run("telegram")
+    run_node_harness(HARNESS, "telegram")
 
 
 def test_user_texts_name_the_portal() -> None:
     """D5 and spec 2.5: session-expired and no-permission texts."""
-    _run("texts")
+    run_node_harness(HARNESS, "texts")
 
 
 def test_linkedin_noise_lines_and_positional_fields() -> None:
     """Spec 5.2: badges, dates and hints dropped; title cut to 200 characters."""
-    _run("linkedin")
+    run_node_harness(HARNESS, "linkedin")
 
 
 def test_scan_report_failure_never_breaks_the_round() -> None:
     """Spec 4.6: the scan report is best effort (HTTP error or network error)."""
-    _run("report")
+    run_node_harness(HARNESS, "report")
 
 
 def test_no_scan_without_a_bridge() -> None:
     """S2 (public-release): no URL or secret -> no tab, no fetch, no seen state."""
-    _run("nobridge")
+    run_node_harness(HARNESS, "nobridge")

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.2] - 2026-11-21
+
+Second pre-release for testers: use the AI you already have.
+
+### Added
+
+- **Codex CLI provider** (`llm_provider = "codex_cli"`): lazyhunt runs your own logged-in OpenAI Codex CLI, like Claude Code, with no API key. It runs read-only in an empty folder, never sees your credentials, and can research company facts on the web. Tested with a simulated CLI; please report how it behaves with a real Codex login.
+- `uv run cli.py init` now lets you pick the AI provider: Claude Code, Codex CLI, the Anthropic API, or any OpenAI-compatible API with presets for OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama and LM Studio (local). It asks for the model and the API key (stored only in `.env`).
+- Gemini through its OpenAI-compatible endpoint is now tested against the real service with a free-tier AI Studio key.
+
+### Changed
+
+- AI calls retry temporary failures (HTTP 500/502/503/529, timeouts, dropped connections) twice with a short backoff, and errors now show the provider's own message (for example a retired model name).
+- CI runs the test suite on Linux, macOS and Windows; paths shown by the bot use `/` on every system and files are written with identical bytes everywhere.
+- Test suite tidy-up: duplicate tests removed, data-only copies parametrized, shared helpers.
+
+### Fixed
+
+- On Windows, generated CV paths and saved files no longer differ from Linux/macOS (backslashes, CRLF line endings).
+
 ## [2.0.0-beta.1] - 2026-11-20
 
 Pre-release for testers: the guided first run. Please report anything confusing or broken in an issue.
@@ -120,7 +140,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...HEAD
+[2.0.0-beta.2]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...v2.0.0-beta.2
 [2.0.0-beta.1]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...v2.0.0-beta.1
 [0.5.0]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/SPujol98/lazyhunt/compare/v0.4.1...v0.4.2

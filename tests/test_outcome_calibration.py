@@ -11,20 +11,10 @@ from cva.calibration import (
 )
 from cva.match.judge import OfferJudgment, Wall
 from cva.service import JobService, ServiceError
-from cva.tracker import OfferInput, OfferRepository
+from cva.tracker import OfferRepository
 from cva.tracker.repo import SCHEMA_VERSION
+from tests.helpers import numbered_offer
 from tests.test_bot import FakeFetcher, FetchResponse, make_service
-
-
-def _offer(n: int = 1) -> OfferInput:
-    return OfferInput(
-        job_id=str(n),
-        title=f"T{n}",
-        company=f"C{n}",
-        url=f"https://x/{n}",
-        text=f"text {n}",
-        source="link",
-    )
 
 
 def _service(tmp_path: Path) -> tuple[JobService, OfferRepository]:
@@ -49,7 +39,7 @@ def _sent(
     tmp_path: Path, *, judge_score: int | None = 52
 ) -> tuple[JobService, OfferRepository, int]:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.save_match_result(offer_id, score=40, threshold=65, breakdown_json="{}")
     if judge_score is not None:
         repo.save_judge_result(
@@ -182,7 +172,7 @@ def test_keyword_mode_stores_no_snapshot(tmp_path: Path) -> None:
 
 def test_repo_mark_sent_without_snapshot_is_unchanged(tmp_path: Path) -> None:
     _svc, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.mark_sent(offer_id, cv_path="cv.pdf", cambios="c", match=70)
     assert repo.get_sent_judgment(offer_id) is None
 
@@ -240,7 +230,7 @@ def test_unknown_reason_is_refused(tmp_path: Path) -> None:
 
 def test_unsent_offer_cannot_be_proposed(tmp_path: Path) -> None:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     with pytest.raises(ServiceError):
         service.propose_calibration(offer_id, "screening")
 
@@ -249,7 +239,7 @@ def test_snapshot_fallback_to_current_judge_row_for_legacy_sends(
     tmp_path: Path,
 ) -> None:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.save_judge_result(
         offer_id, score=61, verdict="apply_with_caveats", judgment_json=_judgment(61)
     )
@@ -260,14 +250,14 @@ def test_snapshot_fallback_to_current_judge_row_for_legacy_sends(
 
 def test_no_judge_score_proposes_nothing(tmp_path: Path) -> None:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.mark_sent(offer_id, cv_path="cv.pdf", cambios="c", match=70)
     assert service.propose_calibration(offer_id, "oferta") is None
 
 
 def test_corrupt_judgment_json_proposes_nothing(tmp_path: Path) -> None:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.save_judge_result(offer_id, score=61, verdict="apply", judgment_json="{bad")
     repo.mark_sent(offer_id, cv_path="cv.pdf", cambios="c", match=70)
     assert service.propose_calibration(offer_id, "oferta") is None
@@ -275,7 +265,7 @@ def test_corrupt_judgment_json_proposes_nothing(tmp_path: Path) -> None:
 
 def test_core_role_is_sanitized_when_stored(tmp_path: Path) -> None:
     service, repo = _service(tmp_path)
-    offer_id = repo.upsert_offer(_offer())
+    offer_id = repo.upsert_offer(numbered_offer())
     repo.save_match_result(offer_id, score=40, threshold=65, breakdown_json="{}")
     repo.save_judge_result(
         offer_id,

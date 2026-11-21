@@ -1,6 +1,5 @@
 """Outcome calibration (K2): post-outcome questions, Sí/No, /calibracion."""
 
-import asyncio
 from pathlib import Path
 
 import bot
@@ -16,6 +15,7 @@ from cva.commands import COMMANDS, menu_commands
 from cva.notifier import OE, help_message, outcome_note_prompt
 from cva.service import JobService
 from cva.tracker import OfferInput, OfferRepository
+from tests.helpers import run_coro
 from tests.test_bot import (
     FakeContext,
     FakeFetcher,
@@ -25,10 +25,6 @@ from tests.test_bot import (
     FetchResponse,
     make_service,
 )
-
-
-def _run(coro: object) -> None:
-    asyncio.run(coro)  # type: ignore[arg-type]
 
 
 def _sent_offer(
@@ -60,7 +56,7 @@ def _sent_offer(
 
 def _press(context: FakeContext, data: str) -> FakeQuery:
     query = FakeQuery(data)
-    _run(bot.callback_router(FakeUpdate(query=query), context))
+    run_coro(bot.callback_router(FakeUpdate(query=query), context))
     return query
 
 
@@ -102,7 +98,7 @@ def test_positive_outcome_asks_after_the_note_prompt_without_consuming_it(
     # the optional note capture is still armed and still works
     assert context.user_data[bot._NOTE_KEY] == offer_id
     note = FakeMessage("Pidieron disponibilidad")
-    _run(bot.paste_handler(FakeUpdate(message=note), context))
+    run_coro(bot.paste_handler(FakeUpdate(message=note), context))
     assert [e.note for e in service.outcome_events(offer_id) if e.kind == "note"] == [
         "Pidieron disponibilidad"
     ]
@@ -221,7 +217,7 @@ def test_unknown_example_button_is_polite(tmp_path: Path) -> None:
 def test_calibracion_empty(tmp_path: Path) -> None:
     service, _repo, _offer_id = _sent_offer(tmp_path)
     message = FakeMessage()
-    _run(bot.calibracion_command(FakeUpdate(message=message), FakeContext(service)))
+    run_coro(bot.calibracion_command(FakeUpdate(message=message), FakeContext(service)))
     assert "No hay" in message.replies[0]
 
 
@@ -234,7 +230,7 @@ def test_calibracion_lists_examples_summary_and_deactivates(tmp_path: Path) -> N
     _press(context, f"{CAL}:y:{example.id}")
 
     message = FakeMessage()
-    _run(bot.calibracion_command(FakeUpdate(message=message), context))
+    run_coro(bot.calibracion_command(FakeUpdate(message=message), context))
     text = message.replies[0]
     assert f"#{offer_id}" in text and "40" in text
     assert "1 con nota por debajo" in text  # positive below threshold

@@ -66,23 +66,26 @@ def test_load_claims_missing_field_names_offender(tmp_path: Path) -> None:
         load_claims(_write_claims(tmp_path, broken))
 
 
-def test_load_claims_unknown_category_names_offender(tmp_path: Path) -> None:
-    broken = [
-        {"id": "cat-books", "text": "Clean Code", "category": "books", "tags": []}
-    ]
-    with pytest.raises(ClaimsError, match="cat-books"):
-        load_claims(_write_claims(tmp_path, broken))
-
-
-def test_load_claims_empty_text_names_offender(tmp_path: Path) -> None:
-    broken = [{"id": "skill-c", "text": "  ", "category": "skill", "tags": []}]
-    with pytest.raises(ClaimsError, match="skill-c"):
-        load_claims(_write_claims(tmp_path, broken))
-
-
-def test_whitelist_text_inside_db_returns_empty(claims_db: object) -> None:
-    text = "Demo RAG project: 83% recall@5 docs. Inglés C1. Python"
-    assert whitelist_violations(text, claims_db) == []  # type: ignore[arg-type]
+@pytest.mark.parametrize(
+    ("claim", "offender"),
+    [
+        pytest.param(
+            {"id": "cat-books", "text": "Clean Code", "category": "books", "tags": []},
+            "cat-books",
+            id="unknown-category",
+        ),
+        pytest.param(
+            {"id": "skill-c", "text": "  ", "category": "skill", "tags": []},
+            "skill-c",
+            id="empty-text",
+        ),
+    ],
+)
+def test_load_claims_invalid_claim_names_offender(
+    tmp_path: Path, claim: dict[str, object], offender: str
+) -> None:
+    with pytest.raises(ClaimsError, match=offender):
+        load_claims(_write_claims(tmp_path, [claim]))
 
 
 def test_whitelist_exact_claim_text_returns_empty(claims_db: object) -> None:

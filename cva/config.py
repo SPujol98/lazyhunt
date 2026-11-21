@@ -134,10 +134,11 @@ class Settings(BaseSettings):
     # the user's own installed `claude` CLI in headless mode, billed against
     # their Claude subscription; "anthropic" calls the Anthropic Messages API
     # directly (ANTHROPIC_API_KEY); "openai_compatible" uses the generic HTTP
-    # client for any OpenAI-style endpoint (CVA_LLM_API_KEY).
-    llm_provider: Literal["openai_compatible", "claude_code", "anthropic"] = (
-        "claude_code"
-    )
+    # client for any OpenAI-style endpoint (CVA_LLM_API_KEY); "codex_cli"
+    # runs the user's own installed `codex exec` CLI with its own login.
+    llm_provider: Literal[
+        "openai_compatible", "claude_code", "anthropic", "codex_cli"
+    ] = "claude_code"
     # Anthropic provider default model (see DEFAULT_ANTHROPIC_MODEL).
     anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
 
@@ -150,6 +151,10 @@ class Settings(BaseSettings):
     # One bounded retry for transient LLM HTTP 429 (the D3 no-retry rule
     # covers LinkedIn walls, not the LLM endpoint). 0 disables the retry.
     llm_429_retry_wait_seconds: int = 25
+    # Extra attempts for transient LLM failures (HTTP 500/502/503/529,
+    # timeouts, connection errors) with a short exponential backoff plus
+    # jitter (~2 s, ~5 s). Other 4xx are never retried. 0 disables it.
+    llm_transient_retries: int = Field(default=2, ge=0, le=5)
 
     # Claude Code CLI provider settings (used only when llm_provider ==
     # "claude_code"). claude_code_path may be a full path (e.g. on Windows,
@@ -164,6 +169,16 @@ class Settings(BaseSettings):
     # (they would silently switch the CLI from the subscription to API
     # billing). Set true only to deliberately let the CLI use them.
     claude_code_pass_api_key: bool = False
+
+    # Codex CLI provider settings (used only when llm_provider == "codex_cli").
+    # codex_cli_path may be a full path; codex_cli_model None keeps the CLI's
+    # own default model. The `codex` child never inherits OPENAI_API_KEY /
+    # CODEX_API_KEY / CODEX_ACCESS_TOKEN (they would switch it from the
+    # user's ChatGPT login to API billing) unless codex_cli_pass_api_key.
+    codex_cli_path: str = "codex"
+    codex_cli_model: str | None = None
+    codex_cli_timeout_seconds: int = Field(default=180, ge=10, le=1800)
+    codex_cli_pass_api_key: bool = False
 
     # Global kill switch default. The persistent Telegram toggle (/pausa,
     # /reanudar, stored in app_state) is the source of truth at runtime: this
