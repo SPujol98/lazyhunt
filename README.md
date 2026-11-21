@@ -364,7 +364,7 @@ Everything that describes you or your search is yours to change, and none of it 
 | AI provider and model | `llm_provider` in `config.local.toml`; the API key in `.env` | Your own Claude Code or Codex CLI login (no key), an Anthropic API key, or any OpenAI-compatible endpoint (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio): run `cli.py init` again or see [docs/providers.md](docs/providers.md) |
 | Role families: your own kinds of job (CV variants, filters, thresholds) | `<profile>/preferences.toml` `[families.<id>]`, `<profile>/cv_base_pdfs/manifest.json` | Frontend, marketing, nursing... with no code: [docs/role-families.md](docs/role-families.md) |
 | Score threshold, match mode, accepted portals | `config.local.toml` | See [Configuration](#configuration) |
-| A portal that is not supported yet | Ask a coding agent | Open `claude` in the repository and say "add portal &lt;name&gt;" with a saved results page: the [`add-portal`](.claude/skills/add-portal/SKILL.md) skill scaffolds the adapter and its tests with `scripts/new_portal.py`. By hand: [docs/portals.md](docs/portals.md) |
+| A portal that is not supported yet | Ask a coding agent | Give a coding agent (Claude Code, Codex, …) a saved results page and ask it to follow [docs/adding-a-portal.md](docs/adding-a-portal.md): it scaffolds the adapter and its tests with `scripts/new_portal.py`. Reference: [docs/portals.md](docs/portals.md) |
 
 ## Tips for better results
 

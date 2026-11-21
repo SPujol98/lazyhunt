@@ -1,13 +1,6 @@
----
-name: add-portal
-description: >
-  Add a new job portal (Tecnoempleo, Manfred, JobFluent, Indeed, ...) to the
-  browser extension and the bot from a search URL and a saved results page.
-  Trigger: "add portal", "añade portal", "nuevo portal", "new portal", "support
-  <portal name>", "soporte para <portal>".
----
+# Adding a job portal
 
-# add-portal
+A step-by-step recipe for adding a portal, written so that you or any coding agent (Claude Code, Codex, …) can follow it: point the agent at this file with a search URL and a saved results page.
 
 Add one job portal as a pluggable adapter, tests first. The contract and the
 background are in `docs/portals.md`; the adapter contract is documented at the
@@ -81,7 +74,7 @@ top of `extension/portals/registry.js`.
    (`feat(portals): add <id> adapter`), fixtures and tests in the same commit.
 9. **Close.** Report the owner actions: reload the extension, accept the
    permission, add a search for the portal in Options, open the generated
-   search URL once to confirm the params work (the skill could not verify them
+   search URL once to confirm the params work (the recipe could not verify them
    live), and that the first scan of a new beacon is analysed without cards
    until the bot's gate passes.
 
