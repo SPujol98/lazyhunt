@@ -145,7 +145,8 @@ def test_invocation_is_non_interactive_read_only_and_isolated(
     # Runs in an empty temporary directory, never the repository.
     assert log["cwd_entries"] == []
     assert Path(str(log["cwd"])).resolve() != Path.cwd().resolve()
-    assert argv[argv.index("-C") + 1] == log["cwd"]
+    # macOS resolves /var to /private/var: compare the folders, not the text.
+    assert Path(argv[argv.index("-C") + 1]).resolve() == Path(str(log["cwd"])).resolve()
     # Temporary files are cleaned up after the call.
     assert not Path(str(log["cwd"])).exists()
 
