@@ -147,6 +147,8 @@ def test_uploaded_pdfs_are_stored_with_their_sha256_only_on_confirm(
         "AI_ES.pdf",
     ]
     d.press("skip_all")
+    if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
+        d.press("skip_all_yes")
     assert d.step == "summary"
     summary = d.last
     assert t("onboarding.edit.cv_pdfs", lang) in summary
@@ -326,6 +328,8 @@ def test_questionnaire_without_uploads_writes_no_manifest(tmp_path: Path) -> Non
     d, profile, _ = _setup_mode(tmp_path)
     _to_cv_step(d)
     d.press("skip_all")
+    if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
+        d.press("skip_all_yes")
     d.press("confirm")
     assert d.replies[-1].startswith(t("onboarding.saved", "en"))
     assert t("onboarding.cv.saved", "en", count=0) not in d.replies[-1]
@@ -523,6 +527,8 @@ def test_rerun_reports_only_the_slots_really_without_a_base_cv(
     d, _, _, _ = _full_app(tmp_path, clean_settings, monkeypatch, "en")
     _to_cv_step(d)  # AI + Data Analyst (no CV yet) in es + en
     d.press("skip_all")
+    if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
+        d.press("skip_all_yes")
     d.press("confirm")
     assert (
         t(

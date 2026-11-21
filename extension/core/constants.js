@@ -23,6 +23,10 @@ export const MAX_DETAIL_ATTEMPTS = 3;
 
 export const PAGE_LOAD_TIMEOUT_MS = 25000;
 export const BOT_REQUEST_TIMEOUT_MS = 5000;
+// beta3-ux: no browser call of a round may wait forever.
+export const OFFERS_POST_TIMEOUT_MS = 20000;
+export const SCRIPT_TIMEOUT_MS = 20000;
+export const TAB_CALL_TIMEOUT_MS = 10000;
 export const DETAIL_SETTLE_MS = 2000;
 export const BETWEEN_BEACONS_MS = [2500, 6000];
 export const BEFORE_DETAIL_MS = [1500, 3000];

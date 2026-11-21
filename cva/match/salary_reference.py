@@ -144,6 +144,45 @@ def lookup(
     return None
 
 
+_SPAIN_NAMES: Final[frozenset[str]] = frozenset(
+    {"spain", "espana", "es", "esp", "reino de espana", "kingdom of spain"}
+)
+
+
+def profile_city(
+    work_city: str | None, country: str | None, work_modes: list[str]
+) -> City | None:
+    """The table city for a ``/setup`` profile (onboarding salary hint):
+    Barcelona or Madrid by name; another Spanish city counts as
+    ``spain_remote`` only when remote work is accepted. ``None`` (no
+    reference at all) outside Spain or when nothing honest maps: the table
+    only holds Spanish EUR ranges."""
+    if _fold((country or "").strip()) not in _SPAIN_NAMES:
+        return None
+    city = _fold((work_city or "").strip())
+    if city in ("barcelona", "bcn"):
+        return "barcelona"
+    if city == "madrid":
+        return "madrid"
+    return "spain_remote" if "remote" in work_modes else None
+
+
+def profile_reference(
+    table: list[ReferenceRange], branches: list[str], level: str, city: City | None
+) -> ReferenceRange | None:
+    """The first of ``branches`` (CV roles, in the profile's order) with a
+    reference row for ``level``/``city`` (:func:`lookup`); ``None`` for a
+    senior level, an unknown city or no row: never an invented range."""
+    if city is None or level not in ("junior", "mid"):
+        return None
+    wanted: Level = "junior" if level == "junior" else "mid"
+    for branch in branches:
+        row = lookup(table, branch, wanted, city)
+        if row is not None:
+            return row
+    return None
+
+
 def eur_text(amount: int) -> str:
     """Spanish thousands separator: 28000 -> ``28.000``."""
     return f"{amount:,}".replace(",", ".")

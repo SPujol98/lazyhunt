@@ -43,7 +43,39 @@ EN: Final[dict[str, str]] = {
     "bot.setup.help": (
         "Setup mode: your profile is not set up yet.\n"
         "{setup} — set up your profile\n"
+        "{connect} — connect the browser extension\n"
         "/help — this message"
+    ),
+    # --- owner claim (beta3-ux T1): no owner_telegram_id yet ------------------
+    "bot.claim.terminal": (
+        "lazyhunt has no owner yet. To become its owner, send this message to "
+        "your bot in Telegram:\n\n    /start {code}\n\n"
+        "The code works once, for 30 minutes (restart the bot for a new one). "
+        "Only you can see it here: do not share it."
+    ),
+    "bot.claim.link": "Or open this link on your phone: {link}",
+    "bot.claim.done": "✅ You are now the owner of this bot. {next}",
+    "bot.claim.next_setup": "Send {setup} to set up your profile.",
+    "bot.claim.next_help": "Send /help to see what it can do.",
+    "bot.claim.save_failed": (
+        "⚠️ The code was right, but config.local.toml could not be saved "
+        "({error}). Fix it and restart the bot to get a new code."
+    ),
+    # --- extension pairing (beta3-ux T1): /connect ----------------------------
+    "bot.connect.code": (
+        "🔌 Extension pairing code: {code}\n\n"
+        "In the browser extension open Options › Schedule and bot, type the "
+        "code under “Pair with code” and press Pair. It works once, for 10 "
+        "minutes; send {connect} again for a new one."
+    ),
+    # The /setup Confirm reply's last line (cva/onboarding, beta3-ux T1).
+    "bot.connect.offer": (
+        "🔌 Next, connect the browser extension: send {connect} and type the "
+        "code in its Options."
+    ),
+    "bot.connect.disabled": (
+        "The extension bridge is off: CVA_BRIDGE_SECRET is not set in .env. "
+        "Run `uv run cli.py init` again and restart the bot."
     ),
     "bot.setup.not_ready": "Your profile is not set up yet: send /setup first.",
     "bot.setup.ready": "✅ Your profile is complete. Switching to normal mode…",
@@ -263,7 +295,39 @@ ES: Final[dict[str, str]] = {
     "bot.setup.help": (
         "Modo configuración: tu perfil aún no está configurado.\n"
         "{setup} — configura tu perfil\n"
+        "{connect} — conecta la extensión del navegador\n"
         "/help — este mensaje"
+    ),
+    # --- owner claim (beta3-ux T1): no owner_telegram_id yet ------------------
+    "bot.claim.terminal": (
+        "lazyhunt aún no tiene dueño. Para ser su dueño, envía este mensaje a "
+        "tu bot en Telegram:\n\n    /start {code}\n\n"
+        "El código sirve una sola vez, durante 30 minutos (reinicia el bot "
+        "para obtener otro). Solo tú lo ves aquí: no lo compartas."
+    ),
+    "bot.claim.link": "O abre este enlace en el móvil: {link}",
+    "bot.claim.done": "✅ Ya eres el dueño de este bot. {next}",
+    "bot.claim.next_setup": "Envía {setup} para configurar tu perfil.",
+    "bot.claim.next_help": "Envía /help para ver lo que puede hacer.",
+    "bot.claim.save_failed": (
+        "⚠️ El código era correcto, pero no se pudo guardar config.local.toml "
+        "({error}). Corrígelo y reinicia el bot para obtener un código nuevo."
+    ),
+    # --- extension pairing (beta3-ux T1): /conectar ---------------------------
+    "bot.connect.code": (
+        "🔌 Código para emparejar la extensión: {code}\n\n"
+        "En la extensión del navegador abre Opciones › Frecuencia y bot, "
+        "escribe el código en «Emparejar con código» y pulsa Emparejar. Sirve "
+        "una sola vez, durante 10 minutos; envía {connect} otra vez para "
+        "obtener otro."
+    ),
+    "bot.connect.offer": (
+        "🔌 Después, conecta la extensión del navegador: envía {connect} y "
+        "escribe el código en sus Opciones."
+    ),
+    "bot.connect.disabled": (
+        "El puente de la extensión está apagado: CVA_BRIDGE_SECRET no está en "
+        ".env. Vuelve a ejecutar `uv run cli.py init` y reinicia el bot."
     ),
     "bot.setup.not_ready": "Tu perfil aún no está configurado: envía /configurar primero.",
     "bot.setup.ready": "✅ Tu perfil está completo. Paso al modo normal…",

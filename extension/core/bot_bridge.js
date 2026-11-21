@@ -5,7 +5,7 @@
 import { FAMILY_ID_RE, adoptProfileFamilies, normalizeProfile } from '../filter.js';
 import { configUrl, parseBotConfig } from '../searches.js';
 import { buildScanReport, scanReportUrl } from '../scan_report.js';
-import { BOT_REQUEST_TIMEOUT_MS } from './constants.js';
+import { BOT_REQUEST_TIMEOUT_MS, OFFERS_POST_TIMEOUT_MS } from './constants.js';
 import { writeKeys, bridgeSecret, bridgeConfigured } from './storage.js';
 import { warn } from './util.js';
 
@@ -13,9 +13,9 @@ const SECRET_HEADER = 'X-CVA-Bridge-Secret';
 
 // A request abandoned after BOT_REQUEST_TIMEOUT_MS: a bot that never answers
 // cannot hold the round up.
-async function fetchBounded(url, init) {
+async function fetchBounded(url, init, ms = BOT_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), BOT_REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -23,28 +23,40 @@ async function fetchBounded(url, init) {
   }
 }
 
-// The bot's {paused, enabledPortals} when it answers, stored as `botConfig`
-// for the pages; null (local rules apply) for any other outcome. The profile's
-// role families on the same answer are adopted as `profileFamilies`.
+export const BOT_UNREACHABLE = 'botUnreachable';
+export const BOT_UNAUTHORIZED = 'botUnauthorized';
+
+// The bot's answer to GET /config: `config` is its {paused, enabledPortals,
+// setup?}, stored as `botConfig` for the pages, or null (local rules apply)
+// for an answer that is not one; `problem` is BOT_UNREACHABLE (no answer:
+// the bot is not running, or a wrong URL) or BOT_UNAUTHORIZED (401/403: the
+// secret is wrong), else null. The profile's role families on the same
+// answer are adopted as `profileFamilies`.
 export async function fetchBotConfig(settings) {
   const url = configUrl(settings.bridgeUrl);
   const secret = bridgeSecret(settings);
-  if (!url || !secret) return null;
+  if (!url || !secret) return { config: null, problem: null };
+  let response;
   try {
-    const response = await fetchBounded(url, { method: 'GET', headers: { [SECRET_HEADER]: secret } });
-    if (!response.ok) return null;
+    response = await fetchBounded(url, { method: 'GET', headers: { [SECRET_HEADER]: secret } });
+  } catch {
+    return { config: null, problem: BOT_UNREACHABLE };
+  }
+  if (response.status === 401 || response.status === 403) return { config: null, problem: BOT_UNAUTHORIZED };
+  if (!response.ok) return { config: null, problem: null };
+  try {
     const payload = await response.json();
     const config = parseBotConfig(payload);
-    if (!config) return null;
+    if (!config) return { config: null, problem: null };
     await writeKeys({ botConfig: { ...config, at: Date.now() } });
     try {
       await adoptProfileFamilies(chrome.storage.local, payload);
     } catch (error) {
       warn('could not store the bot\'s role families:', String(error));
     }
-    return config;
+    return { config, problem: null };
   } catch {
-    return null;
+    return { config: null, problem: null };
   }
 }
 
@@ -95,11 +107,11 @@ export async function postOffers(settings, beacon, offers) {
   });
   let response;
   try {
-    response = await fetch(settings.bridgeUrl, {
+    response = await fetchBounded(settings.bridgeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', [SECRET_HEADER]: bridgeSecret(settings) },
       body,
-    });
+    }, OFFERS_POST_TIMEOUT_MS);
   } catch (error) {
     warn(`bridge unreachable for "${beacon.name}":`, String(error));
     return BRIDGE_OUTAGE;

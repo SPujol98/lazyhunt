@@ -35,12 +35,14 @@
       </div>
       <ul id="watchList" class="watch-list"></ul>
       <div id="emptyState" class="empty" hidden>
-        <p data-i18n="popupEmpty">Nothing to watch yet. Add a search or a beacon in the options.</p>
+        <p id="emptyText" data-i18n="popupEmpty">Nothing to watch yet. Add a search or a beacon in the options.</p>
         <button id="emptyOptionsBtn" type="button" class="btn btn-sm" data-i18n="popupOpenOptionsShort">Open options</button>
+        <button id="openSearchesBtn" type="button" class="btn btn-sm btn-primary" data-i18n="popupOpenSearches" hidden>Open Searches</button>
       </div>
     </section>
 
     <p id="resultLine" class="result" role="status" aria-live="polite"></p>
+    <p id="lastOutcome" class="result muted" hidden></p>
   </main>
 
   <footer class="popup-actions">

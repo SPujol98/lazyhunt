@@ -11,7 +11,7 @@ import { PORTALS, portalFor, portalById } from './portals/registry.js';
 import { expandSearches, resolveEnabledPortals } from './searches.js';
 
 const ALARM_NAME = 'check-jobs';
-const STATE_KEYS = ['settings', 'beacons', 'searches', 'enabledPortals', 'lastCheck', 'stats', 'botConfig'];
+const STATE_KEYS = ['settings', 'beacons', 'searches', 'enabledPortals', 'lastCheck', 'stats', 'botConfig', 'lastRound'];
 
 const $ = (id) => document.getElementById(id);
 
@@ -79,8 +79,16 @@ function buildView(data) {
     return entry && (entry.status === 'error' || entry.status === 'session_expired');
   });
 
+  // beta3-ux: "no searches at all" (the owner must add some) differs from
+  // "nothing scannable" (a portal switch or permission leaves them out).
+  const searches = Array.isArray(data.searches) ? data.searches.filter((s) => s && typeof s === 'object') : [];
+  const hasSearches = manual.length > 0 || searches.length > 0;
+
   return {
     settings,
+    hasSearches,
+    lastRound: data.lastRound && typeof data.lastRound === 'object' ? data.lastRound : null,
+    botSetup: Boolean(data.botConfig && data.botConfig.setup === true),
     paused: settings.paused === true,
     botPaused: Boolean(data.botConfig && data.botConfig.paused === true),
     configured: bridgeConfigured(settings),
@@ -98,6 +106,8 @@ function buildView(data) {
 function overallStatus(view) {
   if (view.paused) return { kind: 'warn', label: tr('statusPaused', null, 'Paused'), detail: tr('statusPausedDetail', null, 'Paused here. Resume to scan again.') };
   if (!view.configured) return { kind: 'warn', label: tr('statusNoBridge', null, 'Bot not connected'), detail: tr('statusNoBridgeDetail', null, 'Connect the extension to the bot first: Options › Schedule and bot.'), connect: true };
+  if (view.botSetup) return { kind: 'warn', label: tr('statusBotSetup', null, 'Finish setup first'), detail: tr('statusBotSetupDetail', null, 'Finish /setup in the bot chat first.') };
+  if (!view.hasSearches) return { kind: 'muted', label: tr('statusIdle', null, 'Idle'), detail: tr('popupNoSearches', null, 'No searches yet — open Options › Searches and press Suggest from my profile.') };
   if (view.botPaused) return { kind: 'warn', label: tr('statusBotPaused', null, 'Paused by the bot'), detail: tr('statusBotPausedDetail', null, 'The bot is paused. Resume it from the bot.') };
   if (!view.scannable.length) return { kind: 'muted', label: tr('statusIdle', null, 'Idle'), detail: tr('statusIdleNothing', null, 'Nothing to scan: enable a portal and add a search or a beacon.') };
   if (view.hasError) return { kind: 'error', label: tr('statusError', null, 'Needs attention'), detail: tr('statusErrorDetail', null, 'The last scan of some searches failed.') };
@@ -188,11 +198,48 @@ async function render() {
   list.replaceChildren(...view.beacons.map((b) => drawWatchItem(b, view.lastCheck)));
   $('watchCount').textContent = String(view.beacons.length);
   $('emptyState').hidden = view.beacons.length > 0;
+  // No search at all: point at Options › Searches › Suggest from my profile.
+  $('emptyText').textContent = view.hasSearches
+    ? tr('popupEmpty', null, 'Nothing to watch yet. Add a search or a beacon in the options.')
+    : tr('popupNoSearches', null, 'No searches yet — open Options › Searches and press Suggest from my profile.');
+  $('openSearchesBtn').hidden = view.hasSearches;
+  $('emptyOptionsBtn').hidden = !view.hasSearches;
+  renderLastOutcome(view.lastRound);
 
   const pauseBtn = $('pauseBtn');
   pauseBtn.textContent = view.paused ? tr('popupResume', null, 'Resume') : tr('popupPause', null, 'Pause');
   pauseBtn.setAttribute('aria-pressed', view.paused ? 'true' : 'false');
   if (!busy) pauseBtn.disabled = false;
+}
+
+// The text of a round that stopped early (summary.reason, beta3-ux); '' when
+// it ran.
+function reasonText(reason) {
+  switch (reason) {
+    case 'paused': return tr('resultPaused', null, 'Paused here: nothing was scanned.');
+    case 'botPaused': return tr('resultBotPaused', null, 'The bot is paused: nothing was scanned.');
+    case 'botSetup': return tr('resultBotSetup', null, 'Finish /setup in the bot chat first: nothing was scanned.');
+    case 'bridgeMissing': return tr('statusNoBridgeDetail', null, 'Connect the extension to the bot first: Options › Schedule and bot.');
+    case 'botUnreachable': return tr('resultBotUnreachable', null, 'The bot is not reachable: is it running? Check the bridge URL in Options › Schedule and bot.');
+    case 'botUnauthorized': return tr('resultBotUnauthorized', null, 'The bot rejected the secret: pair again with /connect in Options › Schedule and bot.');
+    case 'noSearches': return tr('popupNoSearches', null, 'No searches yet — open Options › Searches and press Suggest from my profile.');
+    case 'noPortal': return tr('resultNoPortal', null, 'Nothing to scan: enable a portal (and allow its permission) in Options › Portals.');
+    case 'cancelled': return tr('resultCancelled', null, 'Stopped: paused.');
+    default: return '';
+  }
+}
+
+// The stored outcome of the last round (manual or scheduled), under the result line.
+function renderLastOutcome(last) {
+  const el = $('lastOutcome');
+  if (!last || !last.at) {
+    el.hidden = true;
+    return;
+  }
+  const what = reasonText(last.reason)
+    || tr('resultCounts', [Number(last.beaconsScanned) || 0, Number(last.totalNew) || 0], '$1 scanned · $2 new');
+  el.textContent = tr('popupLastOutcome', [relativeTime(last.at), what], 'Last round $1: $2');
+  el.hidden = false;
 }
 
 function showResult(text, isError = false) {
@@ -204,6 +251,8 @@ function showResult(text, isError = false) {
 function summaryText(summary) {
   const s = summary || {};
   if (s.skipped) return tr('resultSkipped', null, 'Another round is already running.');
+  const reason = reasonText(s.reason);
+  if (reason) return reason;
   if (s.paused) return tr('resultPaused', null, 'Paused here: nothing was scanned.');
   if (s.botPaused) return tr('resultBotPaused', null, 'The bot is paused: nothing was scanned.');
   const scanned = Number(s.beaconsScanned) || 0;
@@ -230,7 +279,9 @@ async function checkNow() {
     } else if (!answer || answer.ok === false) {
       showResult(tr('resultFailed', (answer && answer.error) || '?', 'Failed: $1'), true);
     } else {
-      showResult(summaryText(answer.summary));
+      const s = answer.summary || {};
+      // A round that stopped early is a problem to fix, shown as such.
+      showResult(summaryText(s), Boolean(s.reason && s.reason !== 'paused'));
     }
   } catch (e) {
     showResult(tr('resultFailed', (e && e.message) || String(e), 'Failed: $1'), true);
@@ -267,6 +318,11 @@ function openOptions() {
   chrome.runtime.openOptionsPage();
 }
 
+// Options at its Searches section (where "Suggest from my profile" is).
+function openSearches() {
+  chrome.tabs.create({ url: chrome.runtime.getURL('options.html#searches') });
+}
+
 async function init() {
   await loadUiLanguage();
   localizeStatic();
@@ -274,6 +330,7 @@ async function init() {
   $('pauseBtn').addEventListener('click', togglePause);
   $('optionsBtn').addEventListener('click', openOptions);
   $('emptyOptionsBtn').addEventListener('click', openOptions);
+  $('openSearchesBtn').addEventListener('click', openSearches);
   $('connectBotBtn').addEventListener('click', openOptions);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local') render();

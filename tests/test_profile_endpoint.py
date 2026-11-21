@@ -184,7 +184,7 @@ def test_get_profile_returns_the_current_values_and_claims(
     options = body["options"]
     assert options["levels"] == ["junior", "mid", "senior"]
     assert [f["id"] for f in options["families"]] == ["ai", "backend"]
-    assert body["limits"]["skills"] == 20
+    assert body["limits"]["skills"] == 30
 
 
 # --- rule: POST writes through the /setup <section> path and reloads ---------------
@@ -281,7 +281,7 @@ def test_post_background_replaces_setup_claims_and_keeps_hand_written_bytes(
         "setup-skill-sql",
         "setup-skill-cplusplus",
         "setup-experience",
-        "setup-education",
+        "setup-education-bsc-computer-science",
     ]
     view = resp.json()["profile"]
     assert [c["id"] for c in view["claims"]["setup"]] == setup
@@ -300,7 +300,7 @@ def test_post_background_replaces_setup_claims_and_keeps_hand_written_bytes(
         "setup-lang-en",
         "setup-skill-python",
         "setup-experience",
-        "setup-education",
+        "setup-education-bsc-computer-science",
     ]
     # A preferences section never touches claims.json.
     assert (
@@ -443,7 +443,7 @@ def test_a_typed_common_language_name_becomes_its_code(live: SimpleNamespace) ->
         (
             {
                 "section": "background",
-                "values": {**BACKGROUND, "skills": [f"s{i}" for i in range(21)]},
+                "values": {**BACKGROUND, "skills": [f"s{i}" for i in range(31)]},
             },
             {"skills": "skills"},
         ),

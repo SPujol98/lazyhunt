@@ -12,6 +12,8 @@ section         fields (``values`` of a POST)                            written
 ``level``       ``level``                                                ``[search]``
 ``background``  ``spoken_languages`` ``[{language, level}]``, ``skills``, the ``setup-*``
                 ``experience`` ``{years, role, company}``, ``education``  claims
+                (``null``, a list of entries, or one string: entries one per
+                line, ``;`` or commas; ``GET`` shows them joined with ``; ``)
 ``location``    ``work_modes``, ``work_city``, ``country``               ``[search]``,
                                                                          ``[location]``
 ``salary``      ``min_salary`` (``null``: none), ``currency``            ``[search]``
@@ -149,6 +151,32 @@ def _titles(value: Any) -> list[str]:
     return titles
 
 
+def _education(value: Any) -> list[str] | None:
+    """``null`` (none), the list of entries, or one string typed like the
+    questionnaire answer (one per line, ``;`` or commas): the single line an
+    older Options page sends is accepted too."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if not value.strip():
+            raise _Bad("text")
+        entries = A.clean_education(value)
+    else:
+        items = _strings(value)
+        if not items:
+            return None
+        if any(sep in item for item in items for sep in "\n;"):
+            raise _Bad("text")
+        entries = A.clean_education("\n".join(items))
+        if entries is not None and len(entries) != len(
+            {" ".join(i.split()).casefold() for i in items}
+        ):
+            entries = None  # an empty item
+    if entries is None:
+        raise _Bad("text")
+    return entries
+
+
 def _level(value: Any) -> str:
     if not isinstance(value, str):
         raise _Bad("type")
@@ -273,7 +301,7 @@ def _section_answers(
         field("spoken_languages", _spoken)
         field("skills", lambda v: _list_text(_strings(v), A.clean_skills, "skills"))
         field("experience", _experience)
-        field("education", lambda v: _text(v, optional=True))
+        field("education", _education)
     elif section == "location":
         field("work_modes", lambda v: _choices(v, A.WORK_MODES))
         field("work_city", _text)
@@ -360,8 +388,12 @@ def profile_view(profile_dir: Path) -> dict[str, Any]:
             },
             "level": {"level": answers.get("level")},
             "background": {
-                key: bg[key]
-                for key in ("spoken_languages", "skills", "experience", "education")
+                **{
+                    key: bg[key] for key in ("spoken_languages", "skills", "experience")
+                },
+                # One string, entries joined with "; " (what the Options
+                # page's single text field shows and posts back unchanged).
+                "education": "; ".join(bg["education"]) or None,
             },
             "location": {
                 "work_modes": list(answers.get("work_modes") or []),
@@ -393,6 +425,7 @@ def profile_view(profile_dir: Path) -> dict[str, Any]:
             "titles": A.MAX_TITLES,
             "skills": A.MAX_SKILLS,
             "skill_length": A.MAX_SKILL_LEN,
+            "education": A.MAX_EDUCATION,
             "typed_languages": A.MAX_OTHER_LANGUAGES,
             "language_length": A.MAX_LANGUAGE_LEN,
         },

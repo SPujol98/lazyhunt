@@ -234,6 +234,8 @@ def _answer_everything(
     d.press("done")
     if d.step == "cv_pdfs":  # step 9 (T5): no base CV here; an unreadable
         d.press("skip_all")  # preferences.toml has no slots to ask for
+        if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
+            d.press("skip_all_yes")
     assert d.step == "summary"
     # Edit one answer from the summary: back to the summary right after it.
     d.press("edit")
@@ -739,7 +741,7 @@ def test_skills_are_comma_separated_normalized_and_capped(tmp_path: Path) -> Non
     assert d.step == "skills"
     for bad in (
         "Python, SQL\x00",
-        ", ".join(f"skill{i}" for i in range(21)),  # more than 20
+        ", ".join(f"skill{i}" for i in range(31)),  # more than 30
         "x" * 51,  # one longer than 50 characters
         " , ;",
     ):
@@ -833,7 +835,7 @@ def test_confirm_adds_setup_claims_and_keeps_hand_written_ones_byte_identical(
         "setup-skill-python",
         "setup-skill-sql",
         "setup-experience",
-        "setup-education",
+        "setup-education-bsc-computer-science",
     ]
     record = json.loads((profile / "onboarding_answers.json").read_text("utf-8"))
     assert record["schema"] == 2
@@ -844,7 +846,7 @@ def test_confirm_adds_setup_claims_and_keeps_hand_written_ones_byte_identical(
         ],
         "skills": ["Python", "SQL"],
         "experience": {"years": "3-5", "role": "Backend Developer", "company": "Acme"},
-        "education": "BSc Computer Science",
+        "education": ["BSc Computer Science"],
     }
 
 
@@ -882,6 +884,8 @@ def test_rerun_replaces_only_the_setup_claims(
     d.press("done")
     if d.step == "cv_pdfs":
         d.press("skip_all")
+        if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
+            d.press("skip_all_yes")
     d.press("confirm")
     assert d.replies[-1].startswith(t("onboarding.saved", "en"))
 

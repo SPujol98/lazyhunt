@@ -85,3 +85,8 @@ def test_options_export_config_format() -> None:
 def test_options_import_config_round_trip_and_validation() -> None:
     """Importing an export restores it; cleaning, clamping and rejections."""
     _run(PAGES_HARNESS, "import")
+
+
+def test_round_stops_with_a_reason_bounded_waits_and_pause() -> None:
+    # beta3-ux: "Check now" spun ~5 minutes in the owner's beta.2 test.
+    _run(WORKER_HARNESS, "stops")

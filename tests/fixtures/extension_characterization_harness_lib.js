@@ -55,8 +55,16 @@ const realSetImmediate = globalThis.setImmediate;
 // --- virtual timers -------------------------------------------------------------------
 let virtualNow = 0;
 let timerSeq = 0;
-const timers = new Map(); // id -> {due, seq, fn, interval}
+const timers = new Map(); // id -> {due, seq, fn, interval, delay}
 let pumpScheduled = false;
+// While a page script is held by a test (scenario.holdScript), long timers
+// (the extension's safety timeouts, >= FROZEN_MS) do not elapse: the held
+// script models a page that is busy for a moment, not one that hangs (a
+// hanging page is scenario.stuckScript, whose timeouts do fire).
+const FROZEN_MS = 10000;
+let heldScripts = 0;
+const runnable = (t) => !(heldScripts > 0 && t.delay >= FROZEN_MS);
+const runnableCount = () => [...timers.values()].filter(runnable).length;
 
 function kick() {
   if (pumpScheduled) return;
@@ -66,9 +74,10 @@ function kick() {
 
 function pump() {
   pumpScheduled = false;
-  if (!timers.size) return;
+  if (!runnableCount()) return;
   let next = null;
   for (const [id, t] of timers) {
+    if (!runnable(t)) continue;
     if (!next || t.due < next.t.due || (t.due === next.t.due && t.seq < next.t.seq)) next = { id, t };
   }
   virtualNow = Math.max(virtualNow, next.t.due);
@@ -94,6 +103,7 @@ function addTimer(fn, ms, args, interval) {
     seq: ++timerSeq,
     fn: () => fn(...args),
     interval: interval ? Math.max(1, delay) : 0,
+    delay,
   });
   kick();
   return id;
@@ -116,7 +126,7 @@ async function idle() {
   let quiet = 0;
   for (let i = 0; i < 200000 && quiet < 8; i += 1) {
     await new Promise((resolve) => realSetImmediate(resolve));
-    quiet = timers.size === 0 && !pumpScheduled ? quiet + 1 : 0;
+    quiet = runnableCount() === 0 && !pumpScheduled ? quiet + 1 : 0;
   }
 }
 
@@ -322,8 +332,15 @@ function makeBrowser() {
         if (!tab) throw new Error('No tab with id');
         calls.executeScript.push({ tabId: tab.id, url: tab.url, args: clone(args || []) });
         if (scenario.onScript) scenario.onScript(tab);
+        if (scenario.stuckScript) await new Promise(() => {}); // a page that never answers
         if (scenario.holdScript && !scenario.holdScript.released) {
-          await scenario.holdScript.promise;
+          heldScripts += 1;
+          try {
+            await scenario.holdScript.promise;
+          } finally {
+            heldScripts -= 1;
+            kick();
+          }
         }
         const result = await runPageFunction(tab, func, args);
         return [{ frameId: 0, result }];

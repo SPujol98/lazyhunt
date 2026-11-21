@@ -6,6 +6,7 @@ import { t, applyUiLanguage } from '../i18n.js';
 import { normalizeProfile, resolveFamilies, resolveTitleFilters } from '../filter.js';
 import { autoBeaconId, normalizeSearches } from '../searches.js';
 import { reportScan, fetchBotConfig } from './bot_bridge.js';
+import { RoundCancelled, beginRound, bounded, endRound, throwIfCancelled } from './cancel.js';
 import { planBeacons, portalOfBeacon, noPermissionEntry } from './beacon_plan.js';
 import { scanPage, SessionExpiredError } from './page_scan.js';
 import { deliver } from './delivery.js';
@@ -145,6 +146,7 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
   const at = () => Date.now();
   let reported = false;
   try {
+    throwIfCancelled();
     const { cards, noResults } = await scanPage(tab, beacon.url, portal);
     await reportScan(settings, beacon, { jobs: cards, noResults });
     reported = true;
@@ -169,6 +171,7 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
     if (!seenList.length) summary.firstScans += 1;
     return true;
   } catch (error) {
+    if (error instanceof RoundCancelled) throw error; // Pause: not a scan error
     if (!reported) await reportScan(settings, beacon, { error });
     summary.errors += 1;
     if (error instanceof SessionExpiredError) {
@@ -183,30 +186,52 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
   }
 }
 
+// A Pause (cancelRound) stops between and inside beacons; what the finished
+// beacons recorded is kept (summary.cancelled).
 async function scanAll(beacons, settings, state, summary) {
   const tab = new ScrapeTab();
   try {
     for (let i = 0; i < beacons.length; i += 1) {
       const goOn = await scanBeacon({ tab, beacon: beacons[i], settings, state, summary });
       if (!goOn) break;
-      if (i < beacons.length - 1) await sleep(randomBetween(BETWEEN_BEACONS_MS));
+      if (i < beacons.length - 1) await bounded(sleep(randomBetween(BETWEEN_BEACONS_MS)));
     }
+  } catch (error) {
+    if (!(error instanceof RoundCancelled)) throw error;
+    log('round cancelled (paused)');
+    summary.cancelled = true;
+    summary.reason = 'cancelled';
   } finally {
     await tab.dispose();
   }
 }
 
+// Why a round scanned nothing, for the popup (beta3-ux): the beacons the
+// owner has at all versus the ones a portal switch or grant leaves out.
+function hasAnyBeacon(state) {
+  const manual = (Array.isArray(state.beacons) ? state.beacons : []).filter((b) => b && b.enabled !== false && b.url);
+  const searches = normalizeSearches(state.searches, state.families);
+  return manual.length > 0 || searches.length > 0;
+}
+
+// Every gate answers at once with a `reason` the popup explains (beta3-ux):
+// a round that cannot deliver anything never opens a tab.
 async function runGatedRound() {
   const settings = await readSettings();
-  if (settings.paused) return emptySummary({ paused: true });
+  if (settings.paused) return emptySummary({ paused: true, reason: 'paused' });
   // Without the bridge nothing could be delivered: scan nothing, so no offer
   // is marked seen before the bot can receive it (spec 4.2).
   if (!bridgeConfigured(settings)) {
     warn('bridge not configured: round skipped, connect the extension to the bot in Options');
-    return emptySummary({ bridgeMissing: true });
+    return emptySummary({ bridgeMissing: true, reason: 'bridgeMissing' });
   }
-  const botConfig = await fetchBotConfig(settings);
-  if (botConfig && botConfig.paused) return emptySummary({ botPaused: true });
+  const { config: botConfig, problem } = await fetchBotConfig(settings);
+  if (problem) {
+    warn(`round skipped: ${problem}`);
+    return emptySummary({ [problem]: true, reason: problem });
+  }
+  if (botConfig && botConfig.setup) return emptySummary({ botPaused: true, botSetup: true, reason: 'botSetup' });
+  if (botConfig && botConfig.paused) return emptySummary({ botPaused: true, reason: 'botPaused' });
 
   await recoverPortalSeenStateOnce();
   const state = await loadRoundState();
@@ -215,6 +240,7 @@ async function runGatedRound() {
   const summary = emptySummary();
   if (!toScan.length) {
     if (missingGrant.length) await writeKeys({ lastCheck: state.lastCheck });
+    summary.reason = hasAnyBeacon(state) ? 'noPortal' : 'noSearches';
     return summary;
   }
 
@@ -232,17 +258,40 @@ async function runGatedRound() {
   return summary;
 }
 
+// The outcome the popup shows after the round (beta3-ux): when, why it
+// stopped (null: it ran) and its counts.
+async function recordOutcome(summary) {
+  try {
+    await writeKeys({
+      lastRound: {
+        at: Date.now(),
+        reason: summary.reason || null,
+        beaconsScanned: summary.beaconsScanned,
+        totalNew: summary.totalNew,
+        errors: summary.errors,
+      },
+    });
+  } catch (error) {
+    warn('could not store the round outcome:', String(error));
+  }
+}
+
 // Never rejects: a failure outside the per-beacon handling is logged and
 // counted as an error.
 export async function runRound() {
   if (roundRunning) return emptySummary({ skipped: true });
   roundRunning = true;
+  beginRound();
+  let summary;
   try {
-    return await runGatedRound();
+    summary = await runGatedRound();
   } catch (error) {
     warn('round failed:', errorMessage(error));
-    return emptySummary({ errors: 1 });
+    summary = emptySummary({ errors: 1 });
   } finally {
+    endRound();
     roundRunning = false;
   }
+  await recordOutcome(summary);
+  return summary;
 }

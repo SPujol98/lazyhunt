@@ -10,12 +10,13 @@ catalog is ``cva/i18n/bot.py``); code and comments are English.
 import asyncio
 import io
 import logging
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from pydantic import ValidationError
 from telegram import BotCommand, Update
@@ -65,6 +66,7 @@ from cva.commands import (
     cv_usage,
     help_text,
     menu_commands,
+    split_message,
 )
 from cva.config import Settings
 from cva.families import BUILTIN_REGISTRY, FamilyRegistry
@@ -138,6 +140,12 @@ from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
 from cva.service import JobService, OfferClosedError, ServiceError, display_result
+from cva.setup.pairing import (
+    CLAIM_CODE_TTL_SECONDS,
+    OneTimeCode,
+    display,
+    save_owner_id,
+)
 from cva.setup.wizard import LOCAL_TOML
 from cva.setup_mode import describe_load_error, missing_profile_files, needs_setup
 from cva.star import ST, star_fields
@@ -182,6 +190,14 @@ _SETUP_REPLAY_KEY = "setup_replay"
 # config.local.toml the guided setup saves ui_language to (cwd-relative, as
 # Settings reads it); absent in test doubles, which then never write it.
 _CONFIG_PATH_KEY = "config_local_toml"
+# Owner claim (beta3-ux T1): while owner_telegram_id is unset the bot runs a
+# claim app first. Its one-time code, the id that claimed it, the owner updates
+# that arrived after the claim (replayed in the next app) and whether the
+# profile still needs /setup (the claim reply's next step).
+_CLAIM_CODE_KEY = "claim_code"
+_CLAIMED_KEY = "claimed_owner"
+_CLAIM_REPLAY_KEY = "claim_replay"
+_CLAIM_NEEDS_SETUP_KEY = "claim_needs_setup"
 
 
 def is_owner(user_id: int | None, owner_id: int) -> bool:
@@ -204,10 +220,39 @@ def _hidden_commands(context: ContextTypes.DEFAULT_TYPE | None) -> tuple[str, ..
     return LEGACY_HIDDEN if context.bot_data[_PROFILE_DIR_KEY] is None else ()
 
 
+async def reply_long(message: Any, text: str) -> None:
+    """Reply ``text`` in as many messages as Telegram's 4096-character limit
+    needs, cut at line boundaries (:func:`cva.commands.split_message`): text
+    that grows with the profile (role families, labels) must never fail with
+    "Message is too long"."""
+    for piece in split_message(text):
+        await message.reply_text(piece)
+
+
 async def start_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    await reply_long(
+        update.message,
         help_text(
             _families(context), lang=_lang(context), hidden=_hidden_commands(context)
+        ),
+    )
+
+
+async def connect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/connect`` (``/conectar``): a one-time code the extension's Options
+    trades for the bridge secret (``POST /pair``), so the owner never opens
+    ``.env``. Owner-only like every command (the group -1 gate)."""
+    lang = _lang(context)
+    pairing = context.bot_data.get(bridge.PAIRING_KEY)
+    if not isinstance(pairing, OneTimeCode):
+        await update.message.reply_text(t("bot.connect.disabled", lang))
+        return
+    await update.message.reply_text(
+        t(
+            "bot.connect.code",
+            lang,
+            code=display(pairing.issue()),
+            connect=command_name("conectar", lang),
         )
     )
 
@@ -1750,7 +1795,12 @@ async def setup_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """``/help`` in setup mode: only the commands that work right now."""
     lang = _lang(context)
     await update.message.reply_text(
-        t("bot.setup.help", lang, setup=command_name("configurar", lang))
+        t(
+            "bot.setup.help",
+            lang,
+            setup=command_name("configurar", lang),
+            connect=command_name("conectar", lang),
+        )
     )
 
 
@@ -1814,12 +1864,15 @@ def build_setup_app(settings: Settings) -> Application:
     app.bot_data[_PROFILE_DIR_KEY] = settings.profile_dir
     app.bot_data[_SETUP_SETTINGS_KEY] = settings
     app.bot_data[_CONFIG_PATH_KEY] = Path(LOCAL_TOML)
+    app.add_error_handler(on_error)  # same backstop as the full app
     app.add_handler(TypeHandler(Update, gate), group=-1)
     app.add_handler(TypeHandler(Update, setup_reload_check), group=0)
     setup_names = next(c for c in COMMANDS if c.name == "configurar")
+    connect_names = next(c for c in COMMANDS if c.name == "conectar")
     app.add_handler(CommandHandler("start", setup_start), group=1)
     app.add_handler(CommandHandler("help", setup_help), group=1)
     app.add_handler(CommandHandler(list(setup_names.names), setup_command), group=1)
+    app.add_handler(CommandHandler(list(connect_names.names), connect_command), group=1)
     app.add_handler(
         CallbackQueryHandler(
             setup_onboarding_callback, pattern=f"^{onboarding.PREFIX}:"
@@ -1833,6 +1886,150 @@ def build_setup_app(settings: Settings) -> Application:
     app.add_handler(MessageHandler(filters.ALL, setup_not_ready), group=1)
     app.add_handler(CallbackQueryHandler(setup_not_ready), group=1)
     return app
+
+
+# --- owner claim (beta3-ux T1) -----------------------------------------------
+# While owner_telegram_id is unset the bot runs this app first: every update is
+# ignored with no reply (exactly like the owner gate) except a private
+# ``/start <code>`` with the one-time code printed in the bot's terminal; its
+# sender becomes the owner, written to config.local.toml.
+
+
+def _claim_candidate(update: Any) -> str | None:
+    """The code of a private-chat ``/start <code>`` message, else ``None``."""
+    message = update.message
+    text = getattr(message, "text", None)
+    chat = getattr(message, "chat", None)
+    if not isinstance(text, str) or getattr(chat, "type", None) != "private":
+        return None
+    parts = text.split()
+    if len(parts) != 2:
+        return None
+    command = parts[0].split("@", 1)[0]
+    return parts[1] if command == "/start" else None
+
+
+async def claim_gate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Group -1 of the claim app; always stops the update (nothing else runs).
+
+    A wrong, expired or locked code gets no reply (no oracle); after too many
+    wrong tries the code is dropped and only a restart prints a new one. The
+    right code claims the bot once: the id is saved, the gate's owner is set
+    at once, the claimer is told the next step and polling stops so ``main``
+    starts the setup or full app. Owner updates of the same batch are kept for
+    that app."""
+    user = update.effective_user
+    claimed = context.bot_data.get(_CLAIMED_KEY)
+    if claimed is not None:
+        if user is not None and user.id == claimed:
+            context.bot_data[_CLAIM_REPLAY_KEY].append(update)
+        raise ApplicationHandlerStop
+    candidate = _claim_candidate(update)
+    if candidate is None or user is None or getattr(user, "is_bot", False):
+        raise ApplicationHandlerStop
+    code: OneTimeCode = context.bot_data[_CLAIM_CODE_KEY]
+    was_locked = code.locked
+    if not code.verify(candidate):
+        if code.locked and not was_locked:
+            _LOG.warning(
+                "too many wrong owner pairing codes: the code is disabled; "
+                "restart the bot for a new one"
+            )
+        raise ApplicationHandlerStop
+    lang = _lang(context)
+    try:
+        save_owner_id(context.bot_data[_CONFIG_PATH_KEY], int(user.id))
+    except (OSError, ValueError) as exc:
+        _LOG.error("could not save owner_telegram_id: %s", type(exc).__name__)
+        await update.message.reply_text(
+            t("bot.claim.save_failed", lang, error=type(exc).__name__)
+        )
+        raise ApplicationHandlerStop from None
+    context.bot_data[_CLAIMED_KEY] = int(user.id)
+    context.bot_data[_OWNER_KEY] = int(user.id)
+    context.bot_data[_CLAIM_REPLAY_KEY] = []
+    _LOG.info("owner claimed with the pairing code; owner_telegram_id saved")
+    next_step = (
+        t("bot.claim.next_setup", lang, setup=command_name("configurar", lang))
+        if context.bot_data.get(_CLAIM_NEEDS_SETUP_KEY)
+        else t("bot.claim.next_help", lang)
+    )
+    await update.message.reply_text(t("bot.claim.done", lang, next=next_step))
+    context.application.stop_running()
+    raise ApplicationHandlerStop
+
+
+def build_claim_app(
+    settings: Settings, code: OneTimeCode, config_path: Path | None = None
+) -> Application:
+    """The claim app: only :func:`claim_gate` (no command, no bridge)."""
+    app = (
+        Application.builder().token(settings.telegram_token.get_secret_value()).build()
+    )
+    app.bot_data[_OWNER_KEY] = 0
+    app.bot_data[_LANG_KEY] = settings.ui_language
+    app.bot_data[_CLAIM_CODE_KEY] = code
+    app.bot_data[_CONFIG_PATH_KEY] = config_path or Path(LOCAL_TOML)
+    app.bot_data[_CLAIM_NEEDS_SETUP_KEY] = needs_setup(settings)
+    app.add_error_handler(on_error)
+    app.add_handler(TypeHandler(Update, claim_gate), group=-1)
+    return app
+
+
+def announce_claim_code(code: str, lang: Lang, stream: TextIO | None = None) -> bool:
+    """Show the claim code to the person at the terminal; True when shown.
+
+    Written to the terminal only, never to the log: when ``stream`` (stderr
+    by default) is not a terminal (a service whose output goes to a log
+    file), the code is not printed at all and a warning says how to get it.
+    """
+    out = stream if stream is not None else sys.stderr
+    if not out.isatty():
+        _LOG.warning(
+            "owner_telegram_id is not set: start the bot once in a terminal "
+            "(`uv run bot.py`) to see the one-time owner pairing code, or set "
+            "owner_telegram_id in config.local.toml"
+        )
+        return False
+    out.write("\n" + t("bot.claim.terminal", lang, code=display(code)) + "\n\n")
+    out.flush()
+    return True
+
+
+def register_claim_link(
+    app: Application, code: str, lang: Lang, stream: TextIO | None = None
+) -> None:
+    """Once the bot knows its username, print the ``t.me`` deep link that
+    sends ``/start <code>`` with one tap (terminal only, like the code)."""
+    out = stream if stream is not None else sys.stderr
+
+    async def _post_init(application: Application) -> None:
+        try:
+            username = application.bot.username
+        except Exception:  # noqa: BLE001 — the link is a convenience
+            return
+        if username:
+            link = f"https://t.me/{username}?start={code}"
+            out.write(t("bot.claim.link", lang, link=link) + "\n\n")
+            out.flush()
+
+    app.post_init = _post_init
+
+
+def run_claim(settings: Settings) -> tuple[int, list[Update]] | None:
+    """Run the claim app until someone claims the bot: ``(owner id, owner
+    updates to replay)``, or ``None`` when stopped first (Ctrl-C)."""
+    code = OneTimeCode(ttl_seconds=CLAIM_CODE_TTL_SECONDS)
+    secret = code.issue()
+    app = build_claim_app(settings, code)
+    if announce_claim_code(secret, settings.ui_language):
+        register_claim_link(app, secret, settings.ui_language)
+    # close_loop=False: the next app runs on the same event loop.
+    app.run_polling(close_loop=False)
+    owner = app.bot_data.get(_CLAIMED_KEY)
+    if owner is None:
+        return None
+    return int(owner), list(app.bot_data.get(_CLAIM_REPLAY_KEY, []))
 
 
 def register_menu(
@@ -1910,6 +2107,7 @@ _COMMAND_HANDLERS: dict[
     "beacon": beacon_command,
     "cartabase": cartabase_command,
     "configurar": setup_command,
+    "conectar": connect_command,
 }
 
 
@@ -1974,10 +2172,16 @@ def main() -> None:
     configure_logging()
     settings = Settings()
     _LOG.info(describe_llm_setup(settings))
-    if settings.owner_telegram_id == 0:
-        _LOG.warning("owner_telegram_id is 0 (unset): every update will be ignored")
     service: JobService | None = None
     replay: list[Update] = []
+    if settings.owner_telegram_id == 0:
+        # No owner yet (beta3-ux T1): claim first, then setup mode / full app.
+        _LOG.warning("owner_telegram_id is 0 (unset): waiting for the owner claim")
+        claimed = run_claim(settings)
+        if claimed is None:
+            return  # stopped (Ctrl-C) before anyone claimed the bot
+        owner, replay = claimed
+        settings = settings.model_copy(update={"owner_telegram_id": owner})
     while needs_setup(settings):
         _LOG.warning(
             "profile not set up (missing: %s): starting in setup mode",
@@ -1986,6 +2190,7 @@ def main() -> None:
         setup_app = build_setup_app(settings)
         bridge.register_setup(setup_app, settings)
         register_menu(setup_app, settings.ui_language, only=SETUP_COMMANDS)
+        register_replay(setup_app, replay)  # the claim batch, after the menu
         # close_loop=False: the full app below runs on the same event loop.
         setup_app.run_polling(close_loop=False)
         if not setup_app.bot_data.get(_SETUP_DONE_KEY):

@@ -744,7 +744,7 @@
     "message": "Apply the title filter"
   },
   "searchesEmpty": {
-    "message": "No searches yet."
+    "message": "No searches yet: press Suggest from my profile to get searches from your profile, or Add search."
   },
   "searchesHeading": {
     "message": "Searches"
@@ -981,5 +981,67 @@
   },
   "timeUnderMinute": {
     "message": "<1m"
+  },
+  "popupNoSearches": {
+    "message": "No searches yet — open Options › Searches and press Suggest from my profile."
+  },
+  "popupOpenSearches": {
+    "message": "Open Searches"
+  },
+  "statusBotSetup": {
+    "message": "Finish setup first"
+  },
+  "statusBotSetupDetail": {
+    "message": "Finish /setup in the bot chat first."
+  },
+  "resultBotSetup": {
+    "message": "Finish /setup in the bot chat first: nothing was scanned."
+  },
+  "resultNoPortal": {
+    "message": "Nothing to scan: enable a portal (and allow its permission) in Options › Portals."
+  },
+  "resultBotUnreachable": {
+    "message": "The bot is not reachable: is it running? Check the bridge URL in Options › Schedule and bot."
+  },
+  "resultBotUnauthorized": {
+    "message": "The bot rejected the secret: pair again with /connect in Options › Schedule and bot."
+  },
+  "resultCancelled": {
+    "message": "Stopped: paused."
+  },
+  "popupLastOutcome": {
+    "message": "Last round $WHEN$: $WHAT$",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "what": {
+        "content": "$2"
+      }
+    }
+  },
+  "pairLabel": {
+    "message": "Pair with code"
+  },
+  "pairPlaceholder": {
+    "message": "ABCD-EFGH"
+  },
+  "pairButton": {
+    "message": "Pair"
+  },
+  "pairHint": {
+    "message": "Send /connect to the bot and type the code it answers: the bridge URL and secret are filled in for you. Typing the secret by hand still works."
+  },
+  "pairDone": {
+    "message": "Paired: the bridge secret is saved."
+  },
+  "pairRejected": {
+    "message": "The code is wrong, used or expired: send /connect to the bot for a new one."
+  },
+  "pairNeedsCode": {
+    "message": "Type the code the bot sent for /connect first."
+  },
+  "pairNeedsUrl": {
+    "message": "Type a valid bridge URL first, for example http://127.0.0.1:8765/bridge."
   }
 }

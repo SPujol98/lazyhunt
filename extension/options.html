@@ -68,7 +68,7 @@
         </div>
 
         <div id="searchList" class="rows"></div>
-        <p id="searchEmpty" class="empty-row muted" data-i18n="searchesEmpty">No searches yet.</p>
+        <p id="searchEmpty" class="empty-row muted" data-i18n="searchesEmpty">No searches yet: press Suggest from my profile to get searches from your profile, or Add search.</p>
 
         <details class="preview">
           <summary><span data-i18n="previewHeading">What the next round will open</span> <span id="previewCount" class="chip chip-plain">0</span></summary>
@@ -144,6 +144,14 @@
             </span>
             <span class="hint" data-i18n="bridgeSecretHint">Never included in exported files.</span>
           </label>
+        </div>
+        <div class="field pair-field">
+          <span class="field-label" data-i18n="pairLabel">Pair with code</span>
+          <span class="input-group">
+            <input id="pairCodeInput" class="input" type="text" placeholder="ABCD-EFGH" spellcheck="false" autocomplete="off" maxlength="16" aria-labelledby="pairHint" data-i18n-placeholder="pairPlaceholder">
+            <button id="pairBtn" type="button" class="btn btn-sm btn-primary" data-i18n="pairButton">Pair</button>
+          </span>
+          <span id="pairHint" class="hint" data-i18n="pairHint">Send /connect to the bot and type the code it answers: the bridge URL and secret are filled in for you. Typing the secret by hand still works.</span>
         </div>
         <p id="bridgeMissingHint" class="hint hint-warn" data-i18n="bridgeMissingHint" hidden>Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost.</p>
         <p id="botInfo" class="hint" hidden></p>

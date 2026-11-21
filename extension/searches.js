@@ -217,6 +217,17 @@ export function configUrl(bridgeUrl) {
   }
 }
 
+// POST /pair of the bot behind `bridgeUrl` (beta3-ux: one-time pairing code).
+export function pairUrl(bridgeUrl) {
+  try {
+    const u = new URL(String(bridgeUrl || '').trim());
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return `${u.origin}/pair`;
+  } catch (_) {
+    return null;
+  }
+}
+
 // {paused, enabledPortals|null} from the bot's body; null when it is not an object.
 export function parseBotConfig(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -225,5 +236,7 @@ export function parseBotConfig(payload) {
     enabledPortals: Array.isArray(payload.enabledPortals)
       ? payload.enabledPortals.filter((id) => typeof id === 'string' && id)
       : null,
+    // beta3-ux: the bot is still in setup mode (its /setup is not finished).
+    ...(payload.setup === true ? { setup: true } : {}),
   };
 }

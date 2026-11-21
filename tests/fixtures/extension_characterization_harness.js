@@ -561,7 +561,7 @@ async function areaFamilies() {
   const builtinStore = roundStore([], { profileTitleFilters: served });
   await boot('families: a built-in /config leaves storage unchanged', builtinStore, { config: { paused: false, enabledPortals: ['linkedin'] } });
   await send({ type: 'run-now' });
-  const keep = (st) => Object.fromEntries(Object.entries(st).filter(([k]) => !['botConfig', 'stats', 'lastCheck', 'seenJobs', 'detailAttempts', 'recoveringBeacons', 'portalSeenRecovery'].includes(k)));
+  const keep = (st) => Object.fromEntries(Object.entries(st).filter(([k]) => !['botConfig', 'stats', 'lastCheck', 'seenJobs', 'detailAttempts', 'recoveringBeacons', 'portalSeenRecovery', 'lastRound'].includes(k)));
   check('/config without families: storage unchanged', keep(b.store), keep(clone(builtinStore)));
 
   await boot('families: /config without families removes a stale list', roundStore([], { profileFamilies: FAMILIES }), { config: { paused: false, enabledPortals: ['linkedin'] } });
@@ -576,7 +576,97 @@ async function areaFamilies() {
   check('built-ins: payload profile is ai', bridged()[0] && bridged()[0].body.profile, 'ai');
 }
 
+// ------------------------------------------------------------------------------------------
+// beta3-ux (owner's beta.2 test: "Check now" spun for ~5 minutes, Pause did nothing):
+// a round that cannot deliver ends at once with a reason; every per-tab wait is
+// bounded; Pause cancels the round in flight; the outcome is stored for the popup.
+async function areaStops() {
+  const page = { [LI_A]: liPage([{ id: '201', title: 'AI Engineer' }]) };
+  const noTab = () => b.calls.tabsCreate.length === 0;
+  const lastRound = () => b.store.lastRound || {};
+
+  await boot('stops: no searches and no beacons', roundStore([], { searches: [] }), { pages: page });
+  let r = await send({ type: 'run-now' });
+  check('reason noSearches, nothing opened', [r.ok, r.summary.reason, noTab()], [true, 'noSearches', true]);
+  check('outcome stored for the popup', [lastRound().reason, typeof lastRound().at], ['noSearches', 'number']);
+
+  await boot('stops: searches but no granted portal', roundStore([beacon('b1', LI_A)]), { pages: page, granted: [] });
+  r = await send({ type: 'run-now' });
+  check('reason noPortal', [r.summary.reason, noTab(), b.store.lastCheck.b1.status], ['noPortal', true, 'no_permission']);
+
+  await boot('stops: the bot is not reachable', roundStore([beacon('b1', LI_A)]), { pages: page });
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/config')) throw new TypeError('Failed to fetch');
+    return b.fetch(url, init);
+  };
+  r = await send({ type: 'run-now' });
+  check('reason botUnreachable, no scan', [r.summary.reason, noTab(), b.store.seenJobs], ['botUnreachable', true, undefined]);
+  check('stored', lastRound().reason, 'botUnreachable');
+
+  await boot('stops: the secret is rejected', roundStore([beacon('b1', LI_A)]), { pages: page });
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/config')) return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
+    return b.fetch(url, init);
+  };
+  r = await send({ type: 'run-now' });
+  check('reason botUnauthorized', [r.summary.reason, noTab()], ['botUnauthorized', true]);
+
+  await boot('stops: the bot is in setup mode', roundStore([beacon('b1', LI_A)]), {
+    pages: page, config: { paused: true, enabledPortals: [], setup: true },
+  });
+  r = await send({ type: 'run-now' });
+  check('reason botSetup', [r.summary.reason, r.summary.botPaused, noTab()], ['botSetup', true, true]);
+  check('botConfig keeps the setup flag', b.store.botConfig && b.store.botConfig.setup, true);
+
+  await boot('stops: the bot is paused', roundStore([beacon('b1', LI_A)]), {
+    pages: page, config: { paused: true, enabledPortals: null },
+  });
+  r = await send({ type: 'run-now' });
+  check('reason botPaused', [r.summary.reason, noTab()], ['botPaused', true]);
+
+  await boot('stops: a page script that never answers is bounded', roundStore([beacon('b1', LI_A), beacon('b2', LI_B)]), {
+    pages: { ...page, [LI_B]: liPage([{ id: '202', title: 'ML Engineer' }]) },
+  });
+  b.scenario.onScript = (tab) => {
+    b.scenario.stuckScript = tab.url === LI_A; // that page never answers
+  };
+  r = await send({ type: 'run-now' });
+  check('the stuck beacon is an error, the next one still runs', [b.store.lastCheck.b1 && b.store.lastCheck.b1.status, b.store.lastCheck.b2 && b.store.lastCheck.b2.status], ['error', 'ok']);
+  ok('the error says the page did not answer', /did not answer/.test((b.store.lastCheck.b1 || {}).error || ''), b.store.lastCheck.b1);
+  check('round finished, tab closed', [r.ok, b.tabs.size], [true, 0]);
+
+  await boot('stops: a bot that never answers the offers is bounded', roundStore([beacon('b1', LI_A)]), { pages: page });
+  globalThis.fetch = (url, init = {}) => {
+    if (new URL(String(url)).pathname !== '/bridge') return b.fetch(url, init);
+    return new Promise((_resolve, reject) => {
+      if (init.signal) init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+  };
+  r = await send({ type: 'run-now' });
+  check('round finished, offers kept for later (not seen)', [r.ok, r.summary.beaconsScanned, (b.store.seenJobs || {}).b1], [true, 1, []]);
+
+  await boot('stops: Pause cancels the round in flight', roundStore([beacon('b1', LI_A), beacon('b2', LI_B)]), {
+    pages: { ...page, [LI_B]: liPage([{ id: '202', title: 'ML Engineer' }]) },
+  });
+  let paused = null;
+  const busy = hold();
+  b.scenario.onScript = () => {
+    if (paused) return;
+    b.scenario.holdScript = busy; // the page is busy ...
+    paused = sendMessage(b.chrome.runtime.onMessage, { type: 'set-paused', paused: true }); // ... and the owner presses Pause
+  };
+  r = await send({ type: 'run-now' });
+  check('the pause answered', await paused, { ok: true, paused: true });
+  check('the round says it was cancelled', [r.ok, r.summary.cancelled, r.summary.reason], [true, true, 'cancelled']);
+  check('no beacon was recorded as failed, the next not scanned', [b.store.lastCheck && b.store.lastCheck.b1, visited()], [undefined, [LI_A]]);
+  check('tab closed, outcome stored', [b.tabs.size, lastRound().reason], [0, 'cancelled']);
+  check('the next run-now is refused as paused', (await send({ type: 'run-now' })).summary.reason, 'paused');
+  busy.release(); // let the abandoned page script end (harness bookkeeping)
+  await idle();
+}
+
 const AREAS = {
+  stops: areaStops,
   alarm: areaAlarm, tab: areaTab, migrate: areaMigrate, seen: areaSeen, msg: areaMsg, round: areaRound,
   families: areaFamilies,
 };

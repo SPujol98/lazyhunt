@@ -79,6 +79,7 @@ from cva.service import (
     BridgeZone,
     display_reason,
 )
+from cva.setup.pairing import PAIR_CODE_TTL_SECONDS, OneTimeCode
 from cva.setup_mode import describe_load_error
 from cva.suggest import suggested_searches_payload
 from cva.title_filter import TitleFilter
@@ -107,6 +108,12 @@ CONFIG_PATH: Final[str] = "/config"
 # The profile the extension's Options page views and edits (onboarding-v2
 # T10): GET answers its values, POST writes one section (cva.onboarding.profile_edit).
 PROFILE_PATH: Final[str] = "/profile"
+# Extension pairing (beta3-ux T1): a one-time code from the bot's /connect,
+# traded once for the bridge secret (POST only, no secret header needed).
+PAIR_PATH: Final[str] = "/pair"
+# bot_data key of the running bridge's pairing code (full and setup mode).
+PAIRING_KEY: Final[str] = "bridge_pairing"
+PAIR_REJECTED: Final[str] = "invalid or expired code"
 SECRET_HEADER: Final[str] = "X-CVA-Bridge-Secret"
 MAX_BODY_BYTES: Final[int] = 256 * 1024
 MAX_DRAIN_BYTES: Final[int] = 16 * 1024 * 1024
@@ -701,6 +708,83 @@ def families_payload(
     ]
 
 
+def _pair_answer(
+    origin: str | None,
+    content_type: str,
+    body: bytes,
+    pairing: OneTimeCode | None,
+    secret: str,
+) -> tuple[int, dict[str, Any]]:
+    """Status and JSON body of a ``POST /pair`` (the body already read).
+
+    Only the extension's own pages may pair (an ``Origin`` header from an
+    extension origin is required: a web page cannot fake it, and its JSON
+    POST needs a CORS preflight the bridge never answers). A wrong, expired,
+    reused or locked code all answer the same 401 (no oracle); the right one
+    answers the secret once. Neither the code nor the secret is logged."""
+    if origin is None or not origin.startswith(_EXTENSION_ORIGINS):
+        return 403, {"error": "forbidden origin"}
+    if content_type != "application/json":
+        return 415, {"error": "content type must be application/json"}
+    try:
+        payload = json.loads(body)
+    except (ValueError, RecursionError):
+        return 400, {"error": "invalid json"}
+    code = payload.get("code") if isinstance(payload, dict) else None
+    if not isinstance(code, str) or not code.strip() or len(code) > 64:
+        return 400, {"error": "code required"}
+    if pairing is None or not pairing.verify(code):
+        if pairing is not None and pairing.locked:
+            _LOG.warning("extension pairing locked after too many wrong codes")
+        return 401, {"error": PAIR_REJECTED}
+    _LOG.info("extension paired with a one-time code")
+    return 200, {"secret": secret}
+
+
+def _read_body(handler: BaseHTTPRequestHandler) -> bytes | None:
+    """The request body, or ``None`` after answering it (bad length, too
+    large: drained first, see :func:`_drain`)."""
+    try:
+        length = int(handler.headers.get("Content-Length") or 0)
+    except ValueError:
+        length = -1
+    if length < 0:
+        _send(handler, 400, {"error": "invalid content length"})
+        return None
+    if length > MAX_BODY_BYTES:
+        if _drain(handler.rfile, length):
+            _send(handler, 413, {"error": "payload too large"})
+        return None
+    return handler.rfile.read(length)
+
+
+def _send(
+    handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]
+) -> None:
+    body = json.dumps(payload).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _handle_pair(
+    handler: BaseHTTPRequestHandler, pairing: OneTimeCode | None, secret: str
+) -> None:
+    body = _read_body(handler)
+    if body is None:
+        return
+    status, payload = _pair_answer(
+        handler.headers.get("Origin"),
+        handler.headers.get_content_type(),
+        body,
+        pairing,
+        secret,
+    )
+    _send(handler, status, payload)
+
+
 def _make_handler(
     *,
     secret: str,
@@ -719,8 +803,12 @@ def _make_handler(
     lang: Lang = LEGACY_LANG,
     profile_dir: Path | None = None,
     reload_preferences: Callable[[], object] | None = None,
+    pairing: OneTimeCode | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     """Handler class closed over the bridge collaborators (no globals).
+
+    ``POST /pair`` trades ``pairing``'s one-time code for ``secret``
+    (:func:`_pair_answer`); without ``pairing`` every code is refused.
 
     ``preferences`` returns the service's live ``ProfilePrefs``; it is called on
     every request so a reloaded ``preferences.toml`` is served at once
@@ -864,7 +952,7 @@ def _make_handler(
                 except Exception:  # noqa: BLE001 — the 500 IS the surface
                     _LOG.exception("bridge handler error")
                     self._send_json(500, {"error": "internal error"})
-            elif self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH):
+            elif self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH, PAIR_PATH):
                 self._send_json(404, {"error": "not found"})
             else:
                 self._send_json(405, {"error": "method not allowed"})
@@ -873,6 +961,9 @@ def _make_handler(
             # Per-request guard: any exception answers 500 and the server
             # (daemon, threading) keeps serving (spec: bot never dies).
             try:
+                if self.path == PAIR_PATH:
+                    _handle_pair(self, pairing, secret)
+                    return
                 self._handle_post()
             except Exception:  # noqa: BLE001 — the 500 IS the surface
                 _LOG.exception("bridge handler error")
@@ -1057,6 +1148,8 @@ class _Bridge:
         self._in_flight: int | None = None
         # Set by shutdown(): puts that land afterwards defer instead of queueing.
         self._closing = False
+        # The one-time code /connect issues for POST /pair (beta3-ux T1).
+        self.pairing = OneTimeCode(ttl_seconds=PAIR_CODE_TTL_SECONDS)
 
     def set_enabled_portals(self, portals: Iterable[str] | None) -> None:
         """Serve ``portals`` from now on (``None``: every registered portal);
@@ -1088,6 +1181,7 @@ class _Bridge:
             lang=self._lang,
             profile_dir=self._profile_dir,
             reload_preferences=self._reload_preferences,
+            pairing=self.pairing,
         )
         self._httpd = ThreadingHTTPServer(("127.0.0.1", self._port), handler)
         thread = threading.Thread(
@@ -1495,6 +1589,7 @@ def register(app: Any, settings: Settings, service: "JobService") -> _Bridge | N
     app.post_init = bridge.post_init
     app.post_shutdown = _post_shutdown
     app.bot_data[BOT_DATA_KEY] = bridge
+    app.bot_data[PAIRING_KEY] = bridge.pairing
     atexit.register(bridge.stop)
     return bridge
 
@@ -1506,11 +1601,15 @@ SETUP_ERROR: Final[str] = (
 )
 
 
-def _make_setup_handler(secret: str) -> type[BaseHTTPRequestHandler]:
+def _make_setup_handler(
+    secret: str, pairing: OneTimeCode | None = None
+) -> type[BaseHTTPRequestHandler]:
     """The bridge while the profile is not set up: same paths, auth and drain
     order as ``_make_handler``, but nothing is read, stored or analyzed —
-    ``/config`` reports paused with no portals, ``/searches/suggested`` is empty
-    and ``GET /profile`` and every POST answer 503 with :data:`SETUP_ERROR`."""
+    ``/config`` reports paused with no portals and ``"setup": true`` (the
+    popup then says to finish /setup), ``/searches/suggested`` is empty
+    and ``GET /profile`` and every POST answer 503 with :data:`SETUP_ERROR`,
+    except ``POST /pair``, which pairs the extension as in full mode."""
 
     class _SetupHandler(BaseHTTPRequestHandler):
         def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -1531,7 +1630,7 @@ def _make_setup_handler(secret: str) -> type[BaseHTTPRequestHandler]:
             )
 
         def do_GET(self) -> None:
-            if self.path in (BRIDGE_PATH, SCAN_REPORT_PATH):
+            if self.path in (BRIDGE_PATH, SCAN_REPORT_PATH, PAIR_PATH):
                 self._send_json(405, {"error": "method not allowed"})
             elif self.path not in (SUGGESTED_SEARCHES_PATH, CONFIG_PATH, PROFILE_PATH):
                 self._send_json(404, {"error": "not found"})
@@ -1540,11 +1639,20 @@ def _make_setup_handler(secret: str) -> type[BaseHTTPRequestHandler]:
             elif self.path == PROFILE_PATH:
                 self._send_json(503, {"error": SETUP_ERROR})
             elif self.path == CONFIG_PATH:
-                self._send_json(200, {"paused": True, "enabledPortals": []})
+                self._send_json(
+                    200, {"paused": True, "enabledPortals": [], "setup": True}
+                )
             else:
                 self._send_json(200, {"searches": []})
 
         def do_POST(self) -> None:
+            if self.path == PAIR_PATH:
+                try:
+                    _handle_pair(self, pairing, secret)
+                except Exception:  # noqa: BLE001 — the 500 IS the surface
+                    _LOG.exception("bridge handler error")
+                    self._send_json(500, {"error": "internal error"})
+                return
             if self.path not in (BRIDGE_PATH, SCAN_REPORT_PATH, PROFILE_PATH):
                 self._send_json(404, {"error": "not found"})
                 return
@@ -1574,6 +1682,7 @@ class _SetupBridge:
         self._secret = secret
         self._port = port
         self._httpd: ThreadingHTTPServer | None = None
+        self.pairing = OneTimeCode(ttl_seconds=PAIR_CODE_TTL_SECONDS)
 
     @property
     def port(self) -> int:
@@ -1583,7 +1692,7 @@ class _SetupBridge:
 
     def start(self) -> None:
         self._httpd = ThreadingHTTPServer(
-            ("127.0.0.1", self._port), _make_setup_handler(self._secret)
+            ("127.0.0.1", self._port), _make_setup_handler(self._secret, self.pairing)
         )
         thread = threading.Thread(
             target=self._httpd.serve_forever,
@@ -1622,5 +1731,6 @@ def register_setup(app: Any, settings: Settings) -> _SetupBridge | None:
         )
         return None
     app.post_shutdown = handle.shutdown
+    app.bot_data[PAIRING_KEY] = handle.pairing
     atexit.register(handle.stop)
     return handle

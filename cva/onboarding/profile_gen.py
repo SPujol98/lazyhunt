@@ -43,7 +43,8 @@ id                       category        text (tags)
 ``setup-experience``     ``experience``  the years answer, then ``Last role:
                                          <role> at <company>`` with only what
                                          was typed (role, company)
-``setup-education``      ``education``   the line as typed (none)
+``setup-education-<slug>``  ``education``  one claim per education entry, as
+                                         typed (none)
 =======================  ==============  ======================================
 
 The slug is the ASCII lowercase text (``+`` -> ``plus``, ``#`` -> ``sharp``,
@@ -247,8 +248,8 @@ def setup_claims(answers: Mapping[str, Any], lang: Lang) -> list[dict[str, Any]]
             parts.append(Template(words["role"]).substitute(role=role))
         tags = [v for v in (role, company) if v]
         add("experience", "experience", " · ".join(parts), tags)
-    if bg["education"] is not None:
-        add("education", "education", bg["education"], [])
+    for i, entry in enumerate(bg["education"], 1):
+        add(f"education-{_slug(entry) or i}", "education", entry, [])
     return claims
 
 
@@ -264,7 +265,7 @@ def _gaps(answers: Mapping[str, Any]) -> tuple[str, ...]:
         "spoken_languages": bool(bg["spoken_languages"]),
         "skills": bool(bg["skills"]),
         "experience": bg["experience"] is not None,
-        "education": bg["education"] is not None,
+        "education": bool(bg["education"]),
     }
     return tuple(gap for gap in GAPS if not have.get(gap, False))
 

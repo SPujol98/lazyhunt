@@ -348,7 +348,11 @@ def test_confirm_hook_uses_the_language_of_the_saved_answers(tmp_path: Path) -> 
                         "Last role: Backend Developer at Acme"
                     ),
                 ),
-                ("setup-education", "education", "BSc Computer Science, UPV"),
+                (
+                    "setup-education-bsc-computer-science-upv",
+                    "education",
+                    "BSc Computer Science, UPV",
+                ),
             ],
         ),
         (
@@ -368,7 +372,11 @@ def test_confirm_hook_uses_the_language_of_the_saved_answers(tmp_path: Path) -> 
                         "Último puesto: Backend Developer en Acme"
                     ),
                 ),
-                ("setup-education", "education", "BSc Computer Science, UPV"),
+                (
+                    "setup-education-bsc-computer-science-upv",
+                    "education",
+                    "BSc Computer Science, UPV",
+                ),
             ],
         ),
     ],
@@ -410,7 +418,7 @@ def test_experience_claim_holds_only_what_was_given(
     generate_minimal_profile(profile, answers, "en")
     claims = load_claims(profile / "claims.json").by_id
     assert claims["setup-experience"].text == text
-    assert "setup-education" in claims
+    assert "setup-education-bsc-computer-science-upv" in claims
 
 
 def test_skipped_education_and_no_experience_answer_give_no_claim(
@@ -421,7 +429,10 @@ def test_skipped_education_and_no_experience_answer_give_no_claim(
     )
     result = generate_minimal_profile(profile, answers, "en")
     ids = set(load_claims(profile / "claims.json").by_id)
-    assert "setup-education" not in ids and "setup-experience" not in ids
+    assert (
+        not any(i.startswith("setup-education") for i in ids)
+        and "setup-experience" not in ids
+    )
     assert {"education", "experience"} <= set(result.gaps)
 
 

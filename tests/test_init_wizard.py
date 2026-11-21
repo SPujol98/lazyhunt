@@ -84,6 +84,7 @@ def wizard(
     scripted: ScriptedIO,
     *,
     which: object = claude_on_path,
+    owner_id: int | None = None,
 ) -> int:
     return run_init(
         base,
@@ -91,14 +92,15 @@ def wizard(
         runner=logged_in_runner,
         which=which,  # type: ignore[arg-type]
         demo_profile=DEMO_PROFILE,
+        owner_id=owner_id,
     )
 
 
 # Fresh-install answers, in prompt order: bot language (default), provider
-# (default), owner id,
-# profile dir (default), profile kind (skeleton), final confirmation, show the
-# bridge secret (no). The bot token goes through getpass.
-FRESH_ANSWERS = ["", "", OWNER_ID, "", "1", "y", "n"]
+# (default), profile dir (default), profile kind (skeleton), final
+# confirmation, show the bridge secret (no). The bot token goes through
+# getpass. The owner id is no longer asked (beta3-ux T1: pairing code).
+FRESH_ANSWERS = ["", "", "", "1", "y", "n"]
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -123,7 +125,7 @@ def test_fresh_directory_writes_secrets_only_to_env(tmp_path: Path) -> None:
 
     local_text = (tmp_path / "config.local.toml").read_text(encoding="utf-8")
     local = tomllib.loads(local_text)
-    assert local["owner_telegram_id"] == int(OWNER_ID)
+    assert "owner_telegram_id" not in local  # paired by the bot (/start <code>)
     assert local["profile_dir"] == "profiles/me"
     assert local["llm_provider"] == "claude_code"
     assert TOKEN not in local_text
@@ -143,7 +145,7 @@ def test_secrets_never_appear_in_printed_output(tmp_path: Path) -> None:
 
 
 def test_bridge_secret_is_printed_once_only_on_request(tmp_path: Path) -> None:
-    scripted = ScriptedIO(["", "", OWNER_ID, "", "1", "y", "y"], [TOKEN])
+    scripted = ScriptedIO(["", "", "", "1", "y", "y"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -153,7 +155,7 @@ def test_bridge_secret_is_printed_once_only_on_request(tmp_path: Path) -> None:
 
 
 def test_declining_the_final_confirmation_writes_nothing(tmp_path: Path) -> None:
-    scripted = ScriptedIO(["", "", OWNER_ID, "", "1", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "", "1", "n"], [TOKEN])
 
     assert wizard(tmp_path, scripted) == 0
 
@@ -169,11 +171,12 @@ def test_existing_keys_are_not_overwritten_without_confirmation(tmp_path: Path) 
     (tmp_path / "config.local.toml").write_text(
         "owner_telegram_id = 111\ncv_mirror_dir = 'x'\n", encoding="utf-8"
     )
-    # provider, keep the existing token (n), owner id, keep the existing owner
-    # id (n), keep the existing secret (n), profile dir, kind, confirm, no show.
-    scripted = ScriptedIO(["", "", "n", OWNER_ID, "n", "n", "", "1", "y", "n"], [TOKEN])
+    # language, provider, keep the existing token (n), keep the existing owner
+    # id (n, with --owner-id), keep the existing secret (n), profile dir, kind,
+    # confirm, no show.
+    scripted = ScriptedIO(["", "", "n", "n", "n", "", "1", "y", "n"], [TOKEN])
 
-    wizard(tmp_path, scripted)
+    wizard(tmp_path, scripted, owner_id=int(OWNER_ID))
 
     env = read_env(tmp_path / ".env")
     assert env == {
@@ -196,11 +199,12 @@ def test_existing_keys_are_replaced_when_confirmed(tmp_path: Path) -> None:
     (tmp_path / "config.local.toml").write_text(
         "owner_telegram_id = 111\n", encoding="utf-8"
     )
-    # provider, replace the token (y), owner id, replace the owner id (y),
-    # profile dir, kind, confirm, no show (no secret yet: one is generated).
-    scripted = ScriptedIO(["", "", "y", OWNER_ID, "y", "", "1", "y", "n"], [TOKEN])
+    # language, provider, replace the token (y), replace the owner id passed
+    # with --owner-id (y), profile dir, kind, confirm, no show (no secret yet:
+    # one is generated).
+    scripted = ScriptedIO(["", "", "y", "y", "", "1", "y", "n"], [TOKEN])
 
-    wizard(tmp_path, scripted)
+    wizard(tmp_path, scripted, owner_id=int(OWNER_ID))
 
     env = read_env(tmp_path / ".env")
     assert env["CVA_TELEGRAM_TOKEN"] == TOKEN
@@ -215,9 +219,9 @@ def test_rerun_with_the_same_answers_changes_nothing(tmp_path: Path) -> None:
     env_before = (tmp_path / ".env").read_text(encoding="utf-8")
     local_before = (tmp_path / "config.local.toml").read_text(encoding="utf-8")
 
-    # provider, same owner id, keep the bridge secret (n), profile dir (exists:
-    # no kind question), no secret show.
-    second = ScriptedIO(["", "", OWNER_ID, "n", "", "n"], [TOKEN])
+    # language, provider, keep the bridge secret (n), profile dir (exists: no
+    # kind question), no secret show.
+    second = ScriptedIO(["", "", "n", "", "n"], [TOKEN])
     assert wizard(tmp_path, second) == 0
 
     assert (tmp_path / ".env").read_text(encoding="utf-8") == env_before
@@ -248,7 +252,7 @@ def test_skeleton_profile_copies_the_demo_structure_with_placeholders(
 
 
 def test_demo_profile_option_copies_the_demo_verbatim(tmp_path: Path) -> None:
-    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "2", "y", "n"], [TOKEN]))
+    wizard(tmp_path, ScriptedIO(["", "", "", "2", "y", "n"], [TOKEN]))
 
     profile = tmp_path / "profiles" / "me"
     assert (profile / "voice.md").read_bytes() == (
@@ -262,7 +266,7 @@ def test_existing_profile_is_never_overwritten(tmp_path: Path) -> None:
     profile.mkdir(parents=True)
     (profile / "voice.md").write_text("mine", encoding="utf-8")
     # No profile-kind question: the existing directory is reused as is.
-    scripted = ScriptedIO(["", "", OWNER_ID, "", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "", "y", "n"], [TOKEN])
 
     wizard(tmp_path, scripted)
 
@@ -300,15 +304,94 @@ def test_claude_logged_out_is_reported(tmp_path: Path) -> None:
     assert "claude auth login" in scripted.transcript
 
 
-def test_invalid_telegram_id_is_asked_again(tmp_path: Path) -> None:
-    scripted = ScriptedIO(
-        ["", "", "not-a-number", OWNER_ID, "", "1", "y", "n"], [TOKEN]
+def test_owner_id_passed_on_the_command_line_is_written(tmp_path: Path) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+
+    wizard(tmp_path, scripted, owner_id=int(OWNER_ID))
+
+    local = tomllib.loads((tmp_path / "config.local.toml").read_text(encoding="utf-8"))
+    assert local["owner_telegram_id"] == int(OWNER_ID)
+    assert "uv run bot.py` and send /help" in scripted.transcript
+
+
+def test_the_owner_id_is_not_asked_and_the_pairing_code_is_explained(
+    tmp_path: Path,
+) -> None:
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
+
+    wizard(tmp_path, scripted)
+
+    assert not any("user id" in p.lower() for p in scripted.prompts)
+    assert "@userinfobot" not in scripted.transcript
+    assert "/start <code>" in scripted.transcript  # Telegram step + next steps
+    assert "/connect" in scripted.transcript  # extension pairing, no .env
+    assert "@BotFather" in scripted.transcript and "/newbot" in scripted.transcript
+    assert 'ends in "bot"' in scripted.transcript
+
+
+def test_rerun_keeps_an_owner_already_in_the_config(tmp_path: Path) -> None:
+    (tmp_path / "config.local.toml").write_text(
+        "owner_telegram_id = 111\n", encoding="utf-8"
     )
+    scripted = ScriptedIO(FRESH_ANSWERS, [TOKEN])
 
     wizard(tmp_path, scripted)
 
     local = tomllib.loads((tmp_path / "config.local.toml").read_text(encoding="utf-8"))
-    assert local["owner_telegram_id"] == int(OWNER_ID)
+    assert local["owner_telegram_id"] == 111
+    assert "already set in config.local.toml (111)" in scripted.transcript
+
+
+def test_spanish_wizard_speaks_spanish_after_the_language_question(
+    tmp_path: Path,
+) -> None:
+    scripted = ScriptedIO(["es", "", "", "1", "s", "n"], [TOKEN])
+
+    assert wizard(tmp_path, scripted) == 0
+
+    after = scripted.transcript.split("Idioma (auto, en, es)", 1)[1]
+    for spanish in (
+        "Paso 1/7 - Idioma del bot",
+        "Paso 2/7 - Requisitos",
+        "Proveedor [claude_code]",
+        "En Telegram, busca @BotFather",
+        "Token del bot (oculto",
+        "Carpeta del perfil [profiles/me]",
+        "Cambios previstos:",
+        "¿Escribir estos cambios? [s/N]",
+        "Guardado.",
+        "Siguientes pasos:",
+        "/conectar",
+        "Emparejar con código",
+    ):
+        assert spanish in after, spanish
+    for english in ("Step ", "Planned changes", "Next steps", "Write these changes"):
+        assert english not in after, english
+    # "s" confirmed the write in Spanish.
+    assert local_settings(tmp_path)["ui_language"] == "es"
+
+
+def test_auto_language_follows_a_spanish_system(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import cva.setup.wizard as wizard_module
+
+    monkeypatch.setattr(wizard_module, "system_ui_language", lambda: "es")
+    scripted = ScriptedIO(["", "", "", "1", "y", "n"], [TOKEN])
+
+    assert wizard(tmp_path, scripted) == 0
+
+    assert "Paso 3/7 - Proveedor de IA" in scripted.transcript
+    assert local_settings(tmp_path)["ui_language"] == "auto"
+
+
+def test_cli_owner_id_flag_is_validated(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = cli.build_parser()
+    assert parser.parse_args(["init", "--owner-id", "42"]).owner_id == 42
+    assert parser.parse_args(["init"]).owner_id is None
+    for bad in ("0", "abc", "-3"):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["init", "--owner-id", bad])
 
 
 def test_cli_help_lists_init(capsys: pytest.CaptureFixture[str]) -> None:
@@ -380,7 +463,7 @@ def test_profile_outside_the_base_or_inside_the_demo_is_asked_again(
     base.mkdir()
     outside = tmp_path / "outside"
     answer = answer.replace("{abs}", str(outside))
-    scripted = ScriptedIO(["", "", OWNER_ID, answer, "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", answer, "", "1", "y", "n"], [TOKEN])
     assert wizard(base, scripted) == 0
     assert not (tmp_path / "x").exists()
     assert not outside.exists()
@@ -398,7 +481,7 @@ def test_duplicate_env_keys_are_all_replaced(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
         "CVA_TELEGRAM_TOKEN=old1\nOTHER=1\nCVA_TELEGRAM_TOKEN=old2\n", encoding="utf-8"
     )
-    scripted = ScriptedIO(["", "", "y", OWNER_ID, "", "1", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "y", "", "1", "y", "n"], [TOKEN])
     assert wizard(tmp_path, scripted) == 0
     text = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "old1" not in text and "old2" not in text
@@ -412,9 +495,11 @@ def test_an_unreadable_config_writes_nothing_at_all(tmp_path: Path) -> None:
     (tmp_path / "config.local.toml").write_text(
         '"owner_telegram_id" = 3\n', encoding="utf-8"
     )
-    scripted = ScriptedIO(["", "", OWNER_ID, "y", "", "1", "y"], [TOKEN])
+    # language, provider, replace the owner id (--owner-id), profile dir,
+    # kind, confirm.
+    scripted = ScriptedIO(["", "", "y", "", "1", "y"], [TOKEN])
     with pytest.raises(tomllib.TOMLDecodeError):
-        wizard(tmp_path, scripted)
+        wizard(tmp_path, scripted, owner_id=int(OWNER_ID))
     assert not (tmp_path / ".env").exists()
     assert not (tmp_path / "profiles").exists()
     assert (tmp_path / "config.local.toml").read_text(
@@ -456,11 +541,12 @@ def test_rerun_keeps_the_previous_bot_language_as_default(tmp_path: Path) -> Non
     wizard(tmp_path, ScriptedIO(["es", *FRESH_ANSWERS[1:]], [TOKEN]))
     before = (tmp_path / "config.local.toml").read_text(encoding="utf-8")
 
-    second = ScriptedIO(["", "", OWNER_ID, "n", "", "n"], [TOKEN])
+    second = ScriptedIO(["", "", "n", "", "n"], [TOKEN])
     assert wizard(tmp_path, second) == 0
 
     assert (tmp_path / "config.local.toml").read_text(encoding="utf-8") == before
-    assert "Nothing to change" in second.transcript
+    # beta3-ux T1: the kept language is the one the wizard speaks.
+    assert "Nada que cambiar" in second.transcript
 
 
 # --- onboarding-v2 T1: the empty profile, set up later in Telegram -------------
@@ -468,7 +554,7 @@ def test_rerun_keeps_the_previous_bot_language_as_default(tmp_path: Path) -> Non
 
 def test_empty_profile_is_the_recommended_default(tmp_path: Path) -> None:
     # Enter at the profile-kind prompt picks the empty profile.
-    scripted = ScriptedIO(["", "", OWNER_ID, "", "", "y", "n"], [TOKEN])
+    scripted = ScriptedIO(["", "", "", "", "y", "n"], [TOKEN])
 
     assert wizard(tmp_path, scripted) == 0
 
@@ -483,14 +569,14 @@ def test_empty_profile_is_the_recommended_default(tmp_path: Path) -> None:
 
 
 def test_skeleton_option_still_creates_the_skeleton(tmp_path: Path) -> None:
-    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "1", "y", "n"], [TOKEN]))
+    wizard(tmp_path, ScriptedIO(["", "", "", "1", "y", "n"], [TOKEN]))
     assert (tmp_path / "profiles" / "me" / "claims.json").is_file()
 
 
 def test_empty_profile_leads_the_bot_into_setup_mode(tmp_path: Path) -> None:
     from cva.setup_mode import missing_profile_files
 
-    wizard(tmp_path, ScriptedIO(["", "", OWNER_ID, "", "3", "y", "n"], [TOKEN]))
+    wizard(tmp_path, ScriptedIO(["", "", "", "3", "y", "n"], [TOKEN]))
     assert "claims.json" in missing_profile_files(tmp_path / "profiles" / "me")
 
 
@@ -551,7 +637,7 @@ API_KEY = "sk-test-FakeKeyForTestsOnly-0123456789"
 
 def provider_answers(*provider_part: str) -> list[str]:
     """Fresh-install answers with ``provider_part`` answering step 3."""
-    return ["", *provider_part, OWNER_ID, "", "3", "y", "n"]
+    return ["", *provider_part, "", "3", "y", "n"]
 
 
 def local_settings(base: Path) -> dict[str, object]:
@@ -723,9 +809,9 @@ def test_empty_answers_keep_the_existing_provider_settings(tmp_path: Path) -> No
     )
     env_before = (tmp_path / ".env").read_text(encoding="utf-8")
     # language, provider (Enter: current), preset (Enter: current = Groq),
-    # model (Enter: current), owner id skipped, keep the bridge secret, profile
-    # dir, profile kind, confirm, no secret show. Key and token: Enter.
-    scripted = ScriptedIO(["", "", "", "", "", "n", "", "3", "y", "n"], ["", ""])
+    # model (Enter: current), keep the bridge secret, profile dir, profile
+    # kind, confirm, no secret show. Key and token: Enter.
+    scripted = ScriptedIO(["", "", "", "", "n", "", "3", "y", "n"], ["", ""])
     assert wizard(tmp_path, scripted) == 0
     local = local_settings(tmp_path)
     assert local["llm_provider"] == "openai_compatible"

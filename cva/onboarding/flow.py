@@ -29,6 +29,12 @@ Step 9 (T5, S5) asks for the base CV PDFs, one per family and CV language
 (:mod:`cva.onboarding.cv_upload`); the PDF itself arrives as a Telegram
 document through :func:`on_document`. Uploads wait in a pending area of the
 profile directory until Confirm; Cancel, expiry and a new ``/setup`` drop them.
+Per slot it offers "Upload my PDF", "Create one with lazyhunt" (a starter
+CV from the answers in one of three templates, :mod:`cva.onboarding.starter`,
+kept in the same pending area like an upload) or "Not now"; "Skip all" warns
+first, "Create another version" adds a position type or language, and a
+profile without ``cover_letter_base.toml`` can get one on Confirm.
+:data:`CONFIRM_REPLY_EXTRAS` adds lines/buttons to the Confirm reply.
 
 Extension points (later units): :data:`STEP_HOOKS` are extra :class:`Step`
 objects asked after the base CVs and before the summary; :data:`CONFIRM_HOOKS`
@@ -60,15 +66,27 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import TelegramError
+from telegram.error import BadRequest, TelegramError
 
-from cva.families import BUILTIN_REGISTRY
+from cva.cvgen.base_pdfs import variant_key
+from cva.cvgen.master import CvgenError
+from cva.cvgen.starter import TEMPLATES, Template
+from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES
 from cva.i18n import Lang, join_list, t
+from cva.match.salary_reference import (
+    ReferenceRange,
+    city_label,
+    eur_text,
+    load_reference_table,
+    profile_city,
+    profile_reference,
+)
 from cva.onboarding import answers as A
 from cva.onboarding import cv_upload as U
+from cva.onboarding import starter
 from cva.onboarding.commit import Committed, ConfirmFailed, commit_all
 from cva.onboarding.portals import (
     enabled_portals_line,
@@ -80,6 +98,7 @@ from cva.onboarding.portals import (
 from cva.onboarding.prefill import current_answers
 from cva.onboarding.profile_gen import confirm_hook
 from cva.profile_identity import ProfileError
+from cva.profile_paths import resolve_profile_paths
 from cva.setup_mode import describe_load_error, missing_profile_files
 
 PREFIX: Final[str] = "ob"
@@ -392,6 +411,12 @@ def _salary_text(state: State, text: str) -> Outcome:
 def _salary_action(state: State, action: str, arg: str) -> Outcome:
     if action == "keep":
         return _keep(state, "min_salary")
+    if action == "use":  # the reference's low end, recomputed (never stale)
+        hint = _salary_hint(state)
+        if hint is None:
+            return Outcome()
+        _answers(state)["min_salary"] = hint[0].low
+        return Outcome(advance=True)
     if action == "skip":
         answers = _answers(state)
         answers["min_salary"] = None
@@ -400,28 +425,105 @@ def _salary_action(state: State, action: str, arg: str) -> Outcome:
     return Outcome()
 
 
-def _salary_render(state: State, lang: Lang) -> Screen:
-    return Screen(
-        _q("salary", lang),
-        [
-            _keep_row(state, "min_salary", lang),
-            [(t("onboarding.btn.skip", lang), "skip")],
-        ],
+def _salary_hint(state: State) -> tuple[ReferenceRange, str] | None:
+    """The profile's ``salary_reference.toml`` range for the chosen
+    positions, level and work city, with the label of its position; ``None``
+    when the table has none (or is missing or unreadable): never invented."""
+    folder = state.get("dir")
+    if not folder:
+        return None
+    answers = _answers(state)
+    labels: dict[str, str] = {}
+    for family in BUILTIN_REGISTRY.families:
+        if family.id in (answers.get("families") or []):
+            labels.setdefault(family.role, family.label)
+    kept = answers.get("kept_families") or []
+    for fid, label in _declared(state):
+        if fid in kept:
+            labels.setdefault(fid.upper(), label)
+    titles = answers.get("custom_titles") or []
+    if titles:
+        labels.setdefault(A.custom_family_id(titles).upper(), titles[0])
+    try:
+        table = load_reference_table(resolve_profile_paths(Path(folder)).salary_table)
+    except (OSError, ValueError):  # unreadable or invalid table: no hint
+        return None
+    city = profile_city(
+        answers.get("work_city"),
+        answers.get("country"),
+        answers.get("work_modes") or [],
     )
+    row = profile_reference(table, list(labels), str(answers.get("level") or ""), city)
+    return None if row is None else (row, labels[row.branch])
+
+
+def _amount(value: int, lang: Lang) -> str:
+    return eur_text(value) if lang == "es" else f"{value:,}"
+
+
+def _salary_render(state: State, lang: Lang) -> Screen:
+    rows = [_keep_row(state, "min_salary", lang)]
+    hint = _salary_hint(state)
+    if hint is None:
+        note = t("onboarding.salary.no_reference", lang)
+    else:
+        row, role = hint
+        note = t(
+            "onboarding.salary.reference",
+            lang,
+            role=role,
+            level=t(f"onboarding.level.{row.level}", lang),
+            city=city_label(row.city, lang),
+            low=_amount(row.low, lang),
+            high=_amount(row.high, lang),
+            source=row.sources[0] if row.sources else "—",
+        )
+        rows.append(
+            [
+                (
+                    t("onboarding.btn.use_salary", lang, amount=_amount(row.low, lang)),
+                    "use",
+                )
+            ]
+        )
+    rows.append([(t("onboarding.btn.skip", lang), "skip")])
+    return Screen(f"{_q('salary', lang)}\n\n{note}", rows)
+
+
+def _currency_current(state: State) -> str:
+    """The ticked currency: the answer, else the country's default."""
+    answers = _answers(state)
+    current = answers.get("currency")
+    return str(current) if current else A.default_currency(answers.get("country"))
 
 
 def _currency_render(state: State, lang: Lang) -> Screen:
-    current = _answers(state).get("currency") or "EUR"
-    return Screen(
-        _q("currency", lang),
-        [[(_mark(True, c) if c == current else c, f"go:{c}") for c in A.CURRENCIES]],
+    if state.get("currency_other"):
+        return Screen(
+            _q("currency_other", lang), [[(t("onboarding.btn.list", lang), "list")]]
+        )
+    current = _currency_current(state)
+    rows = [[(_mark(True, c) if c == current else c, f"go:{c}") for c in A.CURRENCIES]]
+    other = (
+        _mark(True, current)
+        if current not in A.CURRENCIES
+        else t("onboarding.btn.other_currency", lang)
     )
+    rows.append([(other, "other")])
+    return Screen(_q("currency", lang), rows)
 
 
 def _currency_action(state: State, action: str, arg: str) -> Outcome:
     if action == "go" and arg in A.CURRENCIES:
         _answers(state)["currency"] = arg
+        state.pop("currency_other", None)
         return Outcome(advance=True)
+    if action == "other":
+        state["currency_other"] = True
+        return Outcome()
+    if action == "list":
+        state.pop("currency_other", None)
+        return Outcome()
     return Outcome()
 
 
@@ -430,6 +532,7 @@ def _currency_text(state: State, text: str) -> Outcome:
     if code is None:
         return Outcome(error="onboarding.err.currency")
     _answers(state)["currency"] = code
+    state.pop("currency_other", None)
     return Outcome(advance=True)
 
 
@@ -616,7 +719,7 @@ _COMPANY_STEP: Final[Step] = _text_step(
 )
 
 
-# --- step 9: base CV PDFs (T5) ----------------------------------------------------
+# --- step 9: base CVs (T5; beta3-ux T4: upload, create from a template, later) -----
 
 CV_STEP: Final[str] = "cv_pdfs"
 
@@ -630,9 +733,14 @@ def _cv_slots(state: State) -> list[U.Slot]:
 
 
 def _cv(state: State) -> dict[str, Any]:
-    """Upload progress: ``got`` (key -> sha256), ``skip`` (keys) and the
-    ``target`` slot the next PDF is for (``None``: the first open one)."""
+    """CV step progress: ``got`` (key -> sha256 of the pending PDF), ``skip``
+    (keys), the ``target`` slot the next PDF is for (``None``: the first open
+    one), ``created`` (key -> template of a PDF lazyhunt made), the ``view``
+    shown (``None``: the slot list; ``templates``, ``skip_warn``, ``more``),
+    ``letter`` (create a base cover letter on Confirm) and a one-shot
+    ``notice`` (i18n key and its values)."""
     cv: dict[str, Any] = state.setdefault("cv", {"got": {}, "skip": [], "target": None})
+    cv.setdefault("created", {})
     return cv
 
 
@@ -655,7 +763,63 @@ def _slot_name(slot: U.Slot) -> str:
     return f"{slot.label} · {slot.lang.upper()}"
 
 
+def _template_name(template: str, lang: Lang) -> str:
+    return t(f"onboarding.cv.tpl.{template}", lang)
+
+
+def _letter_offered(state: State) -> bool:
+    """A base cover letter can be created: the profile has none yet."""
+    folder = state.get("dir")
+    return isinstance(folder, str) and not starter.has_cover_letter(Path(folder))
+
+
+def _more_options(state: State, slots: list[U.Slot]) -> list[tuple[str, str, str]]:
+    """``(family id, CV language, label)`` of the base CVs "Create another
+    version" can add (full questionnaire only: a section keeps the
+    positions and offer languages as they are)."""
+    if state.get("section") is not None:
+        return []
+    have = {slot.key for slot in slots}
+    answers = _answers(state)
+    options: list[tuple[str, str, str]] = []
+    for family in BUILTIN_REGISTRY.families:
+        for lang in family.languages:
+            if variant_key(family.role, lang) not in have:
+                options.append((family.id, lang, family.label))
+    kept = answers.get("kept_families") or []
+    others = [(fid, label) for fid, label in _declared(state) if fid in kept]
+    titles = answers.get("custom_titles") or []
+    if titles:
+        others.append((A.custom_family_id(titles), str(titles[0])))
+    for fid, label in others:
+        for lang in CV_LANGUAGES:
+            if variant_key(fid.upper(), lang) not in have:
+                options.append((fid, lang, label))
+    return options
+
+
+def _cv_notice(state: State, lang: Lang) -> str | None:
+    notice = _cv(state).pop("notice", None)
+    if not isinstance(notice, dict):
+        return None
+    return t(str(notice["key"]), lang, **dict(notice.get("fmt") or {}))
+
+
 def _cv_render(state: State, lang: Lang) -> Screen:
+    view = _cv(state).get("view")
+    notice = _cv_notice(state, lang)
+    if view == "templates":
+        screen = _cv_templates_render(state, lang)
+    elif view == "skip_warn":
+        screen = _cv_skip_warn_render(state, lang)
+    elif view == "more":
+        screen = _cv_more_render(state, lang)
+    else:
+        screen = _cv_list_render(state, lang)
+    return Screen(f"{notice}\n\n{screen.text}", screen.rows) if notice else screen
+
+
+def _cv_list_render(state: State, lang: Lang) -> Screen:
     slots = _cv_slots(state)
     cv = _cv(state)
     existing = _cv_existing(state, slots)
@@ -666,6 +830,9 @@ def _cv_render(state: State, lang: Lang) -> Screen:
         note = ""
         if slot.key in cv["got"]:
             mark = "✅"
+            if slot.key in cv["created"]:
+                tpl = _template_name(str(cv["created"][slot.key]), lang)
+                note = " " + t("onboarding.cv.created_mark", lang, template=tpl)
         elif slot.key in existing:  # can still be replaced (tap its line)
             mark, note = "✅", f" {kept}"
         elif slot.key in cv["skip"]:
@@ -680,37 +847,188 @@ def _cv_render(state: State, lang: Lang) -> Screen:
         else t("onboarding.cv.all_set", lang)
     )
     text = _q(CV_STEP, lang, mb=U.MAX_BYTES // (1024 * 1024), pages=U.MAX_PAGES)
-    buttons = [(f"📄 {_slot_name(s)}", f"pick:{s.key}") for s in slots]
-    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    skips = [(t("onboarding.btn.skip_all", lang), "skip_all")]
+    rows: list[list[tuple[str, str]]] = []
     if target is not None:
-        skips.insert(0, (t("onboarding.btn.skip_one", lang), "skip"))
-    rows.extend([skips, [(t("onboarding.btn.done", lang), "done")]])
+        rows.extend(
+            [
+                [(t("onboarding.btn.cv_upload", lang), "upload")],
+                [(t("onboarding.btn.cv_create", lang), "create")],
+                [(t("onboarding.btn.cv_later", lang), "skip")],
+            ]
+        )
+    buttons = [(f"📄 {_slot_name(s)}", f"pick:{s.key}") for s in slots]
+    rows.extend(buttons[i : i + 2] for i in range(0, len(buttons), 2))
+    if _more_options(state, slots):
+        rows.append([(t("onboarding.btn.cv_more", lang), "more")])
+    if _letter_offered(state):
+        label = (
+            _mark(True, t("onboarding.btn.letter_on", lang))
+            if cv.get("letter")
+            else t("onboarding.btn.letter", lang)
+        )
+        rows.append([(label, "letter")])
+    rows.append(
+        [
+            (t("onboarding.btn.skip_all", lang), "skip_all"),
+            (t("onboarding.btn.done", lang), "done"),
+        ]
+    )
     return Screen(f"{text}\n\n" + "\n".join(lines) + f"\n\n{ask}", rows)
+
+
+def _cv_templates_render(state: State, lang: Lang) -> Screen:
+    slots = _cv_slots(state)
+    target = _cv_target(state, slots, _cv_existing(state, slots))
+    slot = _slot_name(target) if target is not None else ""
+    lines = [
+        f"• {_template_name(tpl, lang)}: {t(f'onboarding.cv.tpl_about.{tpl}', lang)}"
+        for tpl in TEMPLATES
+    ]
+    text = t("onboarding.cv.templates", lang, slot=slot, templates="\n".join(lines))
+    return Screen(
+        text,
+        [
+            [(_template_name(tpl, lang), f"tpl:{tpl}") for tpl in TEMPLATES],
+            [(t("onboarding.btn.list", lang), "list")],
+        ],
+    )
+
+
+def _cv_skip_warn_render(state: State, lang: Lang) -> Screen:
+    missing = ", ".join(_slot_name(s) for s in _cv_missing(state, _cv_slots(state)))
+    return Screen(
+        t("onboarding.cv.skip_warning", lang, slots=missing),
+        [
+            [(t("onboarding.btn.cv_create_now", lang), "create")],
+            [(t("onboarding.btn.cv_skip_anyway", lang), "skip_all_yes")],
+            [(t("onboarding.btn.list", lang), "list")],
+        ],
+    )
+
+
+def _cv_more_render(state: State, lang: Lang) -> Screen:
+    options = _more_options(state, _cv_slots(state))
+    buttons = [
+        (f"➕ {label} · {code.upper()}", f"add:{fid}:{code}")
+        for fid, code, label in options
+    ]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([(t("onboarding.btn.list", lang), "list")])
+    return Screen(t("onboarding.cv.more", lang), rows)
+
+
+def _cv_create(state: State, slot: U.Slot, template: str) -> None:
+    """Render the starter CV of ``slot`` as its pending upload (a notice
+    says what happened)."""
+    cv = _cv(state)
+    folder = Path(str(state["dir"]))
+    try:
+        sha, pages = starter.create_pending_cv(
+            folder, _answers(state), slot, cast(Template, template)
+        )
+    except (U.UploadError, CvgenError, OSError):
+        cv["notice"] = {"key": "onboarding.err.cv_create", "fmt": {}}
+        return
+    cv["got"][slot.key] = sha
+    cv["created"][slot.key] = template
+    cv["skip"] = [k for k in cv["skip"] if k != slot.key]
+    cv["target"] = None
+    cv["notice"] = {
+        "key": "onboarding.cv.created",
+        "fmt": {"slot": _slot_name(slot), "pages": pages},
+    }
 
 
 def _cv_action(state: State, action: str, arg: str) -> Outcome:
     slots = _cv_slots(state)
     cv = _cv(state)
     keys = [slot.key for slot in slots]
+    existing = _cv_existing(state, slots)
+    if action == "list":
+        cv["view"] = None
+        return Outcome()
     if action == "pick" and arg in keys:
         cv["target"] = arg
         cv["skip"] = [k for k in cv["skip"] if k != arg]
+        cv["view"] = None
+        return Outcome()
+    if action == "upload":
+        cv["view"] = None
+        cv["notice"] = {"key": "onboarding.cv.upload_hint", "fmt": {}}
+        return Outcome()
+    if action == "create":
+        if cv.get("view") == "skip_warn":  # the first slot still without a CV
+            missing = _cv_missing(state, slots)
+            cv["target"] = missing[0].key if missing else None
+        if _cv_target(state, slots, existing) is not None:
+            cv["view"] = "templates"
+        return Outcome()
+    if action == "tpl" and arg in TEMPLATES:
+        target = _cv_target(state, slots, existing)
+        cv["view"] = None
+        if target is not None:
+            _cv_create(state, target, arg)
         return Outcome()
     if action == "skip":
-        target = _cv_target(state, slots, _cv_existing(state, slots))
+        target = _cv_target(state, slots, existing)
         if target is not None:
             cv["got"].pop(target.key, None)
+            cv["created"].pop(target.key, None)
             cv["skip"] = [*cv["skip"], target.key]
             cv["target"] = None
         return Outcome()
+    if action == "more":
+        cv["view"] = "more" if _more_options(state, slots) else None
+        return Outcome()
+    if action == "add":
+        return _cv_add(state, arg)
+    if action == "letter" and _letter_offered(state):
+        cv["letter"] = not cv.get("letter")
+        return Outcome()
     if action == "skip_all":
+        if _cv_missing(state, slots) and cv.get("view") != "skip_warn":
+            cv["view"] = "skip_warn"  # warn first: no CV, nothing to send
+            return Outcome()
+        action = "skip_all_yes"
+    if action == "skip_all_yes":
         cv["skip"] = [k for k in keys if k not in cv["got"]]
         cv["target"] = None
+        cv["view"] = None
         return Outcome(advance=True)
     if action == "done":
         cv["target"] = None
+        cv["view"] = None
         return Outcome(advance=True)
+    return Outcome()
+
+
+def _cv_add(state: State, arg: str) -> Outcome:
+    """ "Create another version": add the family and/or the offer language
+    the new base CV needs, then point the step at it."""
+    fid, _, code = arg.partition(":")
+    options = {(f, c) for f, c, _ in _more_options(state, _cv_slots(state))}
+    cv = _cv(state)
+    cv["view"] = None
+    if (fid, code) not in options:
+        return Outcome()
+    answers = _answers(state)
+    if fid in _BUILTIN_IDS:
+        answers["families"] = _toggle(
+            [f for f in answers.get("families") or [] if f != fid], fid, _BUILTIN_IDS
+        )
+    if code not in (answers.get("offer_langs") or []):
+        answers["offer_langs"] = _toggle(
+            answers.get("offer_langs") or [], code, A.OFFER_LANGUAGES
+        )
+    key = variant_key(fid.upper(), code)
+    added = next((s for s in _cv_slots(state) if s.key == key), None)
+    if added is not None:
+        cv["target"] = key
+        cv["skip"] = [k for k in cv["skip"] if k != key]
+        cv["notice"] = {
+            "key": "onboarding.cv.added",
+            "fmt": {"slot": _slot_name(added)},
+        }
     return Outcome()
 
 
@@ -722,9 +1040,24 @@ def _cv_missing(state: State, slots: list[U.Slot]) -> list[U.Slot]:
 
 def _cv_summary(state: State, lang: Lang) -> str:
     slots = _cv_slots(state)
-    got = _cv(state)["got"]
+    cv = _cv(state)
+    got = cv["got"]
     existing = _cv_existing(state, slots) - set(got)
-    uploaded = [_slot_name(s) for s in slots if s.key in got]
+    uploaded = [
+        _slot_name(s)
+        + (
+            " "
+            + t(
+                "onboarding.cv.created_mark",
+                lang,
+                template=_template_name(str(cv["created"][s.key]), lang),
+            )
+            if s.key in cv["created"]
+            else ""
+        )
+        for s in slots
+        if s.key in got
+    ]
     kept = [_slot_name(s) for s in slots if s.key in existing]
     missing = [_slot_name(s) for s in _cv_missing(state, slots)]
     parts = [", ".join(uploaded)] if uploaded else []
@@ -795,7 +1128,9 @@ CORE_STEPS: Final[tuple[Step, ...]] = (
         applies=lambda state: bool(_answers(state).get("last_role")),
         follows="last_role",
     ),
-    _text_step("education", A.clean_text, "onboarding.err.text", skippable=True),
+    _text_step(
+        "education", A.clean_education, "onboarding.err.education", skippable=True
+    ),
     _multi_step("work_modes", A.WORK_MODES, "onboarding.mode"),
     Step(
         "work_city",
@@ -975,7 +1310,7 @@ def summary_text(state: State, lang: Lang) -> str:
             str(v) for v in (a.get("last_role"), a.get("last_company")) if v
         )
         or none,
-        "education": a.get("education") or none,
+        "education": "; ".join(A.education_entries(a.get("education"))) or none,
         "work_modes": _labels(a.get("work_modes") or [], "onboarding.mode", lang),
         "work_city": a.get("work_city") or none,
         "country": a.get("country") or none,
@@ -988,6 +1323,8 @@ def summary_text(state: State, lang: Lang) -> str:
     if state.get("section") in SECTION_STEPS:  # a section: its lines only
         shown = _editable(state)
         values = {k: v for k, v in values.items() if k in shown}
+    if _cv(state).get("letter") and _letter_offered(state):
+        values["cover_letter"] = t("onboarding.letter.summary", lang)
     return "\n".join(
         f"{t(f'onboarding.edit.{k}', lang)}: {v}" for k, v in values.items()
     )
@@ -1242,6 +1579,17 @@ async def on_document(message: Any, user_data: dict[Any, Any], env: Env) -> bool
     return True
 
 
+async def _edit(query: Any, text: str, reply_markup: Any = None) -> None:
+    """Edit the button's message; Telegram's "message is not modified"
+    (the same button pressed again: nothing to change) is not an error.
+    Any other :class:`BadRequest` propagates."""
+    try:
+        await query.edit_message_text(text, reply_markup=reply_markup)
+    except BadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+
+
 async def on_callback(
     query: Any, user_data: dict[Any, Any], env: Env, parts: list[str]
 ) -> None:
@@ -1256,9 +1604,7 @@ async def on_callback(
     arg = ":".join(parts[2:])
     if action == "cancel":
         clear(user_data)
-        await query.edit_message_text(
-            t("onboarding.cancelled", lang), reply_markup=None
-        )
+        await _edit(query, t("onboarding.cancelled", lang), reply_markup=None)
         return
     if sid != state["step"]:
         _store(user_data, state)
@@ -1279,7 +1625,7 @@ async def on_callback(
     _store(user_data, state)
     lang = _lang_of(state, env)
     text, markup = render(state, lang, outcome.error)
-    await query.edit_message_text(text, reply_markup=markup)
+    await _edit(query, text, reply_markup=markup)
 
 
 # The write itself lives in :mod:`cva.onboarding.commit`, shared with the
@@ -1295,11 +1641,65 @@ def _commit_all(
     lang: Lang,
     section: str | None = None,
     config_path: Path | None = None,
+    *,
+    cover_letter: bool = False,
+    declared: list[tuple[str, str]] | None = None,
 ) -> Committed:
     """:func:`cva.onboarding.commit.commit_all` with :data:`CONFIRM_HOOKS`."""
     return commit_all(
-        profile_dir, answers, slots, got, lang, section, CONFIRM_HOOKS, config_path
+        profile_dir,
+        answers,
+        slots,
+        got,
+        lang,
+        section,
+        CONFIRM_HOOKS,
+        config_path,
+        cover_letter=cover_letter,
+        declared=declared or [],
     )
+
+
+def _refresh_created(state: State, profile_dir: Path, slots: list[U.Slot]) -> None:
+    """Re-render the CVs lazyhunt created from the final answers (an answer
+    edited after creating one shows in it); a failure keeps the earlier PDF."""
+    cv = _cv(state)
+    by_key = {slot.key: slot for slot in slots}
+    for key, template in list(cv["created"].items()):
+        if key not in by_key or key not in cv["got"] or template not in TEMPLATES:
+            continue
+        try:
+            sha, _ = starter.create_pending_cv(
+                profile_dir, _answers(state), by_key[key], cast(Template, template)
+            )
+        except (U.UploadError, CvgenError, OSError):
+            continue
+        cv["got"][key] = sha
+
+
+@dataclass(frozen=True)
+class ConfirmExtra:
+    """One more line (and optional buttons) in the Confirm reply."""
+
+    line: str
+    markup: InlineKeyboardMarkup | None = None
+
+
+# Extension point of the Confirm reply: each callable may add one line and a
+# keyboard after the summary of what was saved (e.g. "pair the extension now",
+# beta3-ux T1 wires it from bot.py). ``None`` adds nothing.
+def _offer_extension_pairing(_env: Env, lang: Lang) -> ConfirmExtra:
+    """After Confirm: point to the one-time code that pairs the extension."""
+    from cva.commands import command_name  # local: commands imports i18n only
+
+    return ConfirmExtra(
+        line=t("bot.connect.offer", lang, connect=command_name("conectar", lang))
+    )
+
+
+CONFIRM_REPLY_EXTRAS: list[Callable[[Env, Lang], ConfirmExtra | None]] = [
+    _offer_extension_pairing
+]
 
 
 async def _confirm(
@@ -1313,15 +1713,19 @@ async def _confirm(
     answers = _answers(state)
     slots = _cv_slots(state)  # before the new preferences.toml replaces the old
     no_cv = [_slot_name(s) for s in _cv_missing(state, slots)]
+    cv = _cv(state)
+    _refresh_created(state, profile_dir, slots)
     try:
         committed = _commit_all(
             profile_dir,
             answers,
             slots,
-            _cv(state)["got"],
+            cv["got"],
             lang,
             state.get("section"),
             env.config_path,
+            cover_letter=bool(cv.get("letter")),
+            declared=_declared(state),
         )
     except _ConfirmFailed as failed:
         _store(user_data, state)  # uploads kept: Confirm can simply be retried
@@ -1338,6 +1742,17 @@ async def _confirm(
     lines = [t("onboarding.saved", lang)]
     if committed.stored:
         lines.append(t("onboarding.cv.saved", lang, count=len(committed.stored)))
+    created = [s for s in slots if s.key in cv["created"] and s.key in committed.stored]
+    if created:
+        lines.append(
+            t(
+                "onboarding.cv.created_saved",
+                lang,
+                slots=", ".join(_slot_name(s) for s in created),
+            )
+        )
+    if committed.cover_letter:
+        lines.append(t("onboarding.letter.saved", lang))
     if committed.identity in ("kept", "kept_unrecorded"):
         key = (
             "onboarding.identity.kept"
@@ -1387,9 +1802,22 @@ async def _confirm(
     missing = missing_profile_files(profile_dir)
     if missing:
         lines.append(t("onboarding.missing", lang, missing=", ".join(missing)))
-    if state.get("section") is None:
+    markup: InlineKeyboardMarkup | None = None
+    full_run = state.get("section") is None
+    # Extras (e.g. "connect the extension") come before the next step: the
+    # extension must be paired before it can suggest searches. Section
+    # re-runs keep the reply short.
+    for extra in CONFIRM_REPLY_EXTRAS if full_run else ():
+        added = extra(env, lang)
+        if added is not None:
+            lines.append(added.line)
+            markup = added.markup or markup
+    if full_run:
         lines.append(t("onboarding.next_step", lang))
-    await query.edit_message_text(
-        _q("summary", lang, summary=summary_text(state, lang)), reply_markup=None
+    await _edit(
+        query, _q("summary", lang, summary=summary_text(state, lang)), reply_markup=None
     )
-    await query.message.reply_text("\n\n".join(lines))
+    if markup is None:
+        await query.message.reply_text("\n\n".join(lines))
+    else:
+        await query.message.reply_text("\n\n".join(lines), reply_markup=markup)

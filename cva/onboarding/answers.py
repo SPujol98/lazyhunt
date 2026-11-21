@@ -93,7 +93,8 @@ MAX_TITLES: Final[int] = 10  # own job titles (positions)
 SPOKEN_LANGUAGES: Final[tuple[str, ...]] = OFFER_LANGUAGES  # same names
 LANGUAGE_LEVELS: Final[tuple[str, ...]] = ("native", "C2", "C1", "B2", "B1", "A2")
 EXPERIENCE_YEARS: Final[tuple[str, ...]] = ("0", "lt1", "1-2", "3-5", "6-10", "10plus")
-MAX_SKILLS: Final[int] = 20
+MAX_SKILLS: Final[int] = 30
+MAX_EDUCATION: Final[int] = 5  # education entries (one ``setup-education-*`` each)
 MAX_SKILL_LEN: Final[int] = 50
 MAX_OTHER_LANGUAGES: Final[int] = 5
 MAX_LANGUAGE_LEN: Final[int] = 40
@@ -183,8 +184,34 @@ def _clean_list(text: str, max_items: int, max_len: int) -> list[str] | None:
 
 
 def clean_skills(text: str) -> list[str] | None:
-    """Main skills/stack: 1-20 items of at most 50 characters each."""
+    """Main skills/stack: 1-30 items of at most 50 characters each."""
     return _clean_list(text, MAX_SKILLS, MAX_SKILL_LEN)
+
+
+def clean_education(text: str) -> list[str] | None:
+    """Education entries: one per line or separated by semicolons; without
+    either, separated by commas. 1-5 entries of 1-100 characters each
+    (deduplicated ignoring case, order kept); ``None`` otherwise."""
+    separators = r"[\n;]" if re.search(r"[\n;]", text) else r","
+    entries = [" ".join(p.split()) for p in re.split(separators, text)]
+    if any(_has_control(entry) or len(entry) > MAX_TEXT for entry in entries):
+        return None
+    kept: dict[str, str] = {}
+    for entry in entries:
+        if entry:
+            kept.setdefault(entry.casefold(), entry)
+    values = list(kept.values())
+    return values if 0 < len(values) <= MAX_EDUCATION else None
+
+
+def education_entries(value: Any) -> list[str]:
+    """The education answer as a list: the current shape (a list of entries)
+    or the single line older answers files hold (kept whole, never split)."""
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
 
 
 def clean_languages(text: str) -> list[str] | None:
@@ -205,6 +232,67 @@ def clean_salary(text: str) -> int | None:
 def clean_currency(text: str) -> str | None:
     value = text.strip()
     return value.upper() if _CURRENCY_RE.fullmatch(value) else None
+
+
+# Country answer (folded: lowercase, no accents) -> default currency. Anything
+# else, an empty answer included, defaults to EUR (one currency by design).
+_COUNTRY_CURRENCY: Final[dict[str, str]] = {
+    **dict.fromkeys(
+        (
+            "uk",
+            "u.k.",
+            "gb",
+            "united kingdom",
+            "great britain",
+            "britain",
+            "england",
+            "scotland",
+            "wales",
+            "northern ireland",
+            "reino unido",
+            "gran bretana",
+            "inglaterra",
+            "escocia",
+            "gales",
+        ),
+        "GBP",
+    ),
+    **dict.fromkeys(
+        (
+            "us",
+            "usa",
+            "u.s.",
+            "u.s.a.",
+            "united states",
+            "united states of america",
+            "america",
+            "estados unidos",
+            "eeuu",
+            "ee.uu.",
+            "ee. uu.",
+        ),
+        "USD",
+    ),
+    **dict.fromkeys(
+        ("ch", "switzerland", "suiza", "schweiz", "suisse", "svizzera"), "CHF"
+    ),
+}
+
+
+def _fold(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text.strip().casefold())
+    return " ".join(
+        "".join(c for c in decomposed if not unicodedata.combining(c)).split()
+    )
+
+
+def default_currency(country: Any) -> str:
+    """The currency the currency step preselects for a country answer: GBP
+    for the UK, USD for the US, CHF for Switzerland, EUR otherwise (Spain
+    and the euro area included)."""
+    if not isinstance(country, str):
+        return "EUR"
+    return _COUNTRY_CURRENCY.get(_fold(country), "EUR")
 
 
 def common_language(name: str) -> str | None:
@@ -431,7 +519,8 @@ def background(answers: Mapping[str, Any]) -> dict[str, Any]:
     """The background answers (T8) as stored in ``onboarding_answers.json``
     and turned into the ``setup-*`` claims: ``spoken_languages``,
     ``skills``, ``experience`` (``None`` without a years answer; the company
-    only with a role) and ``education``."""
+    only with a role) and ``education`` (a list of entries; an older
+    answers file's single line is one entry)."""
     years = answers.get("exp_years")
     role = _text_answer(answers, "last_role")
     experience = (
@@ -450,7 +539,7 @@ def background(answers: Mapping[str, Any]) -> dict[str, Any]:
         ],
         "skills": [str(s) for s in answers.get("skills") or [] if str(s).strip()],
         "experience": experience,
-        "education": _text_answer(answers, "education"),
+        "education": education_entries(answers.get("education")),
     }
 
 

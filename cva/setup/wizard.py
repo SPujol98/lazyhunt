@@ -10,13 +10,22 @@ prompt) leaves the installation untouched. It writes:
 * the AI provider's API key, when the chosen provider needs one
   (``ANTHROPIC_API_KEY`` or ``CVA_LLM_API_KEY``), asked with hidden input and
   handled like the other secrets;
-* non-secret settings (``llm_provider``, ``llm_base_url``, ``llm_model``,
-  ``owner_telegram_id``, ``profile_dir``) to ``config.local.toml``;
+* non-secret settings (``ui_language``, ``llm_provider``, ``llm_base_url``,
+  ``llm_model``, ``profile_dir``) to ``config.local.toml``. The Telegram
+  owner id is NOT asked (beta3-ux T1): the bot pairs with its owner through a
+  one-time code (``/start <code>``, :mod:`cva.setup.pairing`); an id passed
+  with ``--owner-id`` is planned like any other key, and one already in the
+  config is kept;
 * a new profile directory: empty (recommended; the bot starts in setup mode
   and the guided ``/setup`` in Telegram fills it in), a skeleton with clearly
   marked placeholders, or a verbatim copy of the fictional demo profile. An
   existing profile directory is never modified. ``profile_dir`` is always
   written explicitly, so the bot never falls back to the legacy layout.
+
+The language is asked first (in English and Spanish) and every later line
+speaks it (catalog :mod:`cva.i18n.wizard`; ``auto`` follows the system
+language). Answers stay the same in both languages (numbers, names, ``y``;
+Spanish also accepts ``s``).
 
 A key that already has a different value is replaced only after an explicit
 "yes". Re-running with the same answers changes nothing.
@@ -46,7 +55,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+from cva.config import system_ui_language
 from cva.fsutil import atomic_write
+from cva.i18n import Lang, t
 from cva.setup.prereq import check_codex
 
 Runner = Callable[[Sequence[str]], tuple[int, str]]
@@ -65,14 +76,6 @@ PROVIDERS: Final[tuple[str, ...]] = (
     "anthropic",
     "openai_compatible",
 )
-_PROVIDER_HELP: Final[dict[str, str]] = {
-    "claude_code": "your own installed and logged-in Claude Code CLI; no API key "
-    "(default)",
-    "codex_cli": "your own installed and logged-in OpenAI Codex CLI; no API key",
-    "anthropic": "the Anthropic API with your API key",
-    "openai_compatible": "any OpenAI-compatible API: OpenAI, Gemini, OpenRouter, "
-    "Groq, Mistral, or a local model with Ollama or LM Studio",
-}
 _PROVIDER_KEY: Final[dict[str, str]] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai_compatible": "CVA_LLM_API_KEY",
@@ -101,7 +104,7 @@ _PRESETS: Final[dict[str, _Preset]] = {
     "5": _Preset("Mistral", "https://api.mistral.ai/v1", "mistral-small-latest"),
     "6": _Preset("Ollama (local)", "http://localhost:11434/v1", "", local=True),
     "7": _Preset("LM Studio (local)", "http://localhost:1234/v1", "", local=True),
-    "8": _Preset("Other (type the base URL)", "", ""),
+    "8": _Preset("Other", "", ""),  # label: wizard.preset_other
 }
 _OTHER_PRESET: Final[str] = "8"
 # Local servers ignore the key, but the client always sends one.
@@ -113,6 +116,7 @@ _TOKEN_SHAPE: Final[re.Pattern[str]] = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
 _UNSET: Final[tuple[object, ...]] = (None, "", 0)
 # Answer of the profile-kind question -> what ``_create_profile`` makes.
 _PROFILE_KINDS: Final[dict[str, str]] = {"1": "skeleton", "2": "demo", "3": "empty"}
+_TOTAL_STEPS: Final[int] = 7
 
 
 @dataclass(frozen=True)
@@ -175,6 +179,9 @@ class _Cancelled(Exception):
 
 # --- small prompt helpers -------------------------------------------------
 
+# Accepted as "yes" in both languages (the machine tokens work everywhere).
+_YES_WORDS: Final[frozenset[str]] = frozenset({"y", "yes", "s", "si", "sí"})
+
 
 def _ask(io: WizardIO, prompt: str, default: str = "") -> str:
     try:
@@ -184,8 +191,8 @@ def _ask(io: WizardIO, prompt: str, default: str = "") -> str:
     return answer or default
 
 
-def _yes(io: WizardIO, prompt: str) -> bool:
-    return _ask(io, f"{prompt} [y/N]: ").lower() in ("y", "yes")
+def _yes(io: WizardIO, prompt: str, lang: Lang = "en") -> bool:
+    return _ask(io, f"{prompt} {t('wizard.yes_no', lang)}: ").lower() in _YES_WORDS
 
 
 def _ask_secret(io: WizardIO, prompt: str) -> str:
@@ -193,6 +200,19 @@ def _ask_secret(io: WizardIO, prompt: str) -> str:
         return io.getpass(prompt).strip()
     except (EOFError, KeyboardInterrupt) as exc:
         raise _Cancelled from exc
+
+
+def _step(io: WizardIO, lang: Lang, n: int, title: str) -> None:
+    io.print("")
+    io.print(
+        t(
+            "wizard.step",
+            lang,
+            n=n,
+            total=_TOTAL_STEPS,
+            title=t(f"wizard.title.{title}", lang),
+        )
+    )
 
 
 # --- reading the current configuration ------------------------------------
@@ -231,53 +251,42 @@ def _read_toml(path: Path) -> dict[str, object]:
 # --- steps ----------------------------------------------------------------
 
 
-def _check_prerequisites(io: WizardIO, runner: Runner, which: Which) -> None:
-    io.print("Step 1/7 - Prerequisites")
+def _check_prerequisites(
+    io: WizardIO, runner: Runner, which: Which, lang: Lang
+) -> None:
+    _step(io, lang, 2, "prereq")
     found = sys.version_info[:2]
     version = ".".join(str(part) for part in sys.version_info[:3])
     if found >= _MIN_PYTHON:
-        io.print(f"  Python {version}: OK")
+        io.print(t("wizard.python_ok", lang, version=version))
     else:
-        io.print(f"  Python {version}: lazyhunt needs Python 3.12 or newer.")
+        io.print(t("wizard.python_old", lang, version=version))
     if which("uv") is None:
-        io.print(
-            "  uv was not found on PATH: install it from https://docs.astral.sh/uv/"
-        )
+        io.print(t("wizard.uv_missing", lang))
     # Codex is optional: when installed, only its version and a yes/no
     # "logged in" are read (``check_codex`` discards the status output).
     if which("codex") is None:
-        io.print("  Codex CLI: not installed (optional provider codex_cli).")
+        io.print(t("wizard.codex_not_installed", lang))
     else:
-        for line in check_codex(runner, which):
+        for line in check_codex(runner, which, lang=lang):
             io.print(line)
     claude = which("claude")
     if claude is None:
-        io.print(
-            "  `claude` was not found on PATH. The default AI provider is your own "
-            "Claude Code CLI: install it from "
-            "https://docs.anthropic.com/en/docs/claude-code and log in, or choose "
-            "another provider in the next step. Continuing."
-        )
+        io.print(t("wizard.claude_missing", lang))
         return
     code, out = runner([claude, "--version"])
     first_line = out.strip().splitlines()[0][:80] if code == 0 and out.strip() else ""
     if first_line:
-        io.print(f"  Claude Code: {first_line}")
+        io.print(t("wizard.claude_version", lang, line=first_line))
     else:
-        io.print("  Claude Code: found, but `claude --version` did not answer.")
+        io.print(t("wizard.claude_no_version", lang))
     logged_in = _parse_logged_in(*runner([claude, "auth", "status", "--json"]))
     if logged_in is True:
-        io.print("  Claude Code: logged in.")
+        io.print(t("wizard.claude_logged_in", lang))
     elif logged_in is False:
-        io.print(
-            "  Claude Code is installed but not logged in: run `claude auth login` "
-            "(or start `claude` and use /login), then re-run this wizard if you like."
-        )
+        io.print(t("wizard.claude_logged_out", lang))
     else:
-        io.print(
-            "  Could not tell whether Claude Code is logged in; check it with "
-            "`claude auth status`."
-        )
+        io.print(t("wizard.claude_unknown", lang))
 
 
 def _parse_logged_in(code: int, out: str) -> bool | None:
@@ -301,6 +310,7 @@ def _propose(
     *,
     where: str,
     secret: bool,
+    lang: Lang = "en",
 ) -> bool:
     """Plan ``key = value``; an existing different value needs a "yes".
 
@@ -312,33 +322,45 @@ def _propose(
     if current in _UNSET:
         plan_values[key] = value  # type: ignore[assignment]
         return False
-    shown = "" if secret else f" (current value: {current})"
-    if _yes(io, f"  {key} is already set in {where}{shown}. Replace it?"):
+    shown = "" if secret else t("wizard.current_value", lang, value=current)
+    if _yes(io, t("wizard.replace", lang, key=key, where=where, shown=shown), lang):
         plan_values[key] = value  # type: ignore[assignment]
         return True
-    io.print(f"  Keeping the existing {key}.")
+    io.print(t("wizard.keeping", lang, key=key))
     return False
 
 
-def _step_language(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> str:
-    io.print("")
-    io.print("Step 2/7 - Bot language")
+def _resolve_lang(language: str) -> Lang:
+    """The language the wizard speaks for a ``ui_language`` answer."""
+    if language == "es":
+        return "es"
+    if language == "en":
+        return "en"
+    return system_ui_language()
+
+
+def _step_language(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> Lang:
+    """Step 1, asked in both languages; the wizard speaks the answer after it."""
     current = existing_toml.get("ui_language")
     default = (
         current if isinstance(current, str) and current in UI_LANGUAGES else "auto"
     )
-    io.print(
-        "  The language of the Telegram bot, the command line and the dashboard. "
-        "CVs and cover letters keep following each offer's language. "
-        "auto = your system language; choose en or es to force one."
-    )
+    choices = ", ".join(UI_LANGUAGES)
+    io.print(t("wizard.lang_intro", "en"))
+    io.print("")
     while True:
         language = _ask(
-            io, f"  Language ({', '.join(UI_LANGUAGES)}) [{default}]: ", default
+            io, t("wizard.lang_prompt", "en", choices=choices, default=default), default
         ).lower()
         if language in UI_LANGUAGES:
             break
-        io.print(f"  Please choose one of: {', '.join(UI_LANGUAGES)}.")
+        io.print(t("wizard.lang_retry", "en", choices=choices))
+    lang = _resolve_lang(language)
+    io.print("")
+    io.print(t("wizard.intro1", lang))
+    io.print(t("wizard.intro2", lang))
+    _step(io, lang, 1, "language")
+    io.print(t("wizard.lang_explain", lang))
     _propose(
         io,
         plan.toml,
@@ -347,8 +369,9 @@ def _step_language(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) 
         language,
         where=LOCAL_TOML,
         secret=False,
+        lang=lang,
     )
-    return language
+    return lang
 
 
 def _step_provider(
@@ -356,27 +379,24 @@ def _step_provider(
     plan: _Plan,
     existing_env: dict[str, str],
     existing_toml: dict[str, object],
+    lang: Lang,
 ) -> str:
-    io.print("")
-    io.print("Step 3/7 - AI provider")
+    _step(io, lang, 3, "provider")
     current = existing_toml.get("llm_provider")
     default = (
         current if isinstance(current, str) and current in PROVIDERS else PROVIDERS[0]
     )
-    io.print("  Which AI writes and judges for you (details: docs/providers.md):")
+    io.print(t("wizard.provider_intro", lang))
     for number, name in enumerate(PROVIDERS, start=1):
-        io.print(f"  [{number}] {name}: {_PROVIDER_HELP[name]}")
-    io.print(
-        "  Web research of company facts works only with claude_code and codex_cli: "
-        "API models have no browsing tool."
-    )
+        io.print(f"  [{number}] {name}: {t(f'wizard.provider.{name}', lang)}")
+    io.print(t("wizard.provider_web", lang))
     by_number = {str(n): name for n, name in enumerate(PROVIDERS, start=1)}
     while True:
-        answer = _ask(io, f"  Provider [{default}]: ", default)
+        answer = _ask(io, t("wizard.provider_prompt", lang, default=default), default)
         provider = by_number.get(answer, answer)
         if provider in PROVIDERS:
             break
-        io.print(f"  Please choose one of: {', '.join(PROVIDERS)} (or 1-4).")
+        io.print(t("wizard.provider_retry", lang, choices=", ".join(PROVIDERS)))
     _propose(
         io,
         plan.toml,
@@ -385,23 +405,25 @@ def _step_provider(
         provider,
         where=LOCAL_TOML,
         secret=False,
+        lang=lang,
     )
     if provider == "claude_code":
-        io.print("  Uses your Claude Code login (`claude auth login`); no key needed.")
+        io.print(t("wizard.claude_code_note", lang))
     elif provider == "codex_cli":
-        io.print(
-            "  Uses your Codex CLI login (run `codex login` once); no key needed. "
-            "Set codex_cli_path in config.local.toml if `codex` is not on PATH."
-        )
+        io.print(t("wizard.codex_note", lang))
     elif provider == "anthropic":
-        _ask_api_key(io, plan, existing_env, "ANTHROPIC_API_KEY", local=False)
+        _ask_api_key(
+            io, plan, existing_env, "ANTHROPIC_API_KEY", local=False, lang=lang
+        )
     else:
-        local = _ask_endpoint(io, plan, existing_toml)
-        _ask_api_key(io, plan, existing_env, "CVA_LLM_API_KEY", local=local)
+        local = _ask_endpoint(io, plan, existing_toml, lang)
+        _ask_api_key(io, plan, existing_env, "CVA_LLM_API_KEY", local=local, lang=lang)
     return provider
 
 
-def _ask_endpoint(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -> bool:
+def _ask_endpoint(
+    io: WizardIO, plan: _Plan, existing_toml: dict[str, object], lang: Lang
+) -> bool:
     """Plan ``llm_base_url`` and ``llm_model``; True for a local server."""
     current_url = existing_toml.get("llm_base_url")
     current_url = current_url if isinstance(current_url, str) else ""
@@ -411,43 +433,47 @@ def _ask_endpoint(io: WizardIO, plan: _Plan, existing_toml: dict[str, object]) -
         (n for n, p in _PRESETS.items() if current_url and p.base_url == current_url),
         _OTHER_PRESET if current_url else "1",
     )
-    io.print("  OpenAI-compatible endpoint:")
+    io.print(t("wizard.endpoint_intro", lang))
     for number, preset in _PRESETS.items():
         shown = f" - {preset.base_url}" if preset.base_url else ""
-        io.print(f"  [{number}] {preset.label}{shown}")
+        label = (
+            t("wizard.preset_other", lang) if number == _OTHER_PRESET else preset.label
+        )
+        io.print(f"  [{number}] {label}{shown}")
     while True:
-        choice = _ask(io, f"  Endpoint [{default}]: ", default)
+        choice = _ask(io, t("wizard.endpoint_prompt", lang, default=default), default)
         if choice in _PRESETS:
             break
-        io.print(f"  Please answer a number from 1 to {len(_PRESETS)}.")
+        io.print(t("wizard.endpoint_retry", lang, count=len(_PRESETS)))
     preset = _PRESETS[choice]
     url = preset.base_url
     while not url:
         shown = f" [{current_url}]" if current_url else ""
-        answer = _ask(io, f"  Base URL{shown}: ", current_url)
+        answer = _ask(io, t("wizard.base_url_prompt", lang, shown=shown), current_url)
         if answer.startswith(("http://", "https://")):
             url = answer.rstrip("/")
         else:
-            io.print(
-                "  Please type the full base URL, starting with http:// or https:// "
-                "(for example https://api.example.com/v1)."
-            )
+            io.print(t("wizard.base_url_retry", lang))
     model_default = current_model if current_url == url and current_model else ""
     model_default = model_default or preset.model
     if preset.local and not model_default:
-        io.print(
-            "  Type the name of a model you have downloaded "
-            "(for Ollama, see `ollama list`)."
-        )
+        io.print(t("wizard.local_model_hint", lang))
     while True:
         shown = f" [{model_default}]" if model_default else ""
-        model = _ask(io, f"  Model{shown}: ", model_default)
+        model = _ask(io, t("wizard.model_prompt", lang, shown=shown), model_default)
         if model:
             break
-        io.print("  Please type a model name.")
+        io.print(t("wizard.model_retry", lang))
     for key, value in (("llm_base_url", url), ("llm_model", model)):
         _propose(
-            io, plan.toml, existing_toml, key, value, where=LOCAL_TOML, secret=False
+            io,
+            plan.toml,
+            existing_toml,
+            key,
+            value,
+            where=LOCAL_TOML,
+            secret=False,
+            lang=lang,
         )
     return preset.local
 
@@ -459,33 +485,39 @@ def _ask_api_key(
     key: str,
     *,
     local: bool,
+    lang: Lang,
 ) -> None:
     """Plan the provider's API key in .env (hidden input, never printed)."""
     has_key = bool(existing_env.get(key))
     if local:
         io.print(
-            "  A local server ignores the API key, but one must be set: any "
-            f"non-empty value works. Press Enter to use the placeholder "
-            f"{LOCAL_KEY_PLACEHOLDER!r}."
+            t("wizard.local_key_note", lang, placeholder=repr(LOCAL_KEY_PLACEHOLDER))
         )
     if has_key:
-        hint = "Enter to keep the current key"
+        hint = t("wizard.hint_keep_key", lang)
     elif local:
-        hint = "Enter for the placeholder"
+        hint = t("wizard.hint_placeholder", lang)
     else:
-        hint = "Enter to skip"
-    value = _ask_secret(io, f"  API key, stored as {key} in .env (hidden; {hint}): ")
+        hint = t("wizard.hint_skip", lang)
+    value = _ask_secret(io, t("wizard.api_key_prompt", lang, key=key, hint=hint))
     if not value and local and not has_key:
         value = LOCAL_KEY_PLACEHOLDER
     if value:
         if _propose(
-            io, plan.env, existing_env, key, value, where=ENV_FILE, secret=True
+            io,
+            plan.env,
+            existing_env,
+            key,
+            value,
+            where=ENV_FILE,
+            secret=True,
+            lang=lang,
         ):
             plan.env_replaced.add(key)
     elif has_key:
-        io.print(f"  Keeping the {key} already in .env.")
+        io.print(t("wizard.key_kept", lang, key=key))
     else:
-        io.print(f"  Skipped: add {key}=<your key> to .env before starting the bot.")
+        io.print(t("wizard.key_skipped", lang, key=key))
 
 
 def _step_telegram(
@@ -493,74 +525,66 @@ def _step_telegram(
     plan: _Plan,
     existing_env: dict[str, str],
     existing_toml: dict[str, object],
+    lang: Lang,
+    owner_id: int | None = None,
 ) -> None:
-    io.print("")
-    io.print("Step 4/7 - Telegram")
-    io.print(
-        "  Bot token: in Telegram, open @BotFather, send /newbot and follow the "
-        "steps; it replies with a token like 123456789:AA... Keep it private."
-    )
-    io.print(
-        "  Your numeric user id: send any message to @userinfobot; it replies with "
-        "your id. The bot answers only this id."
-    )
-    token = _ask_secret(io, "  Bot token (hidden; Enter to skip): ")
+    """The bot token (with BotFather steps). The owner id is no longer asked:
+    the bot pairs with its owner through a one-time code (``/start <code>``);
+    an id passed with ``--owner-id`` or already in the config is kept."""
+    _step(io, lang, 4, "telegram")
+    io.print(t("wizard.botfather", lang))
+    token = _ask_secret(io, t("wizard.token_prompt", lang))
     if token:
         if not _TOKEN_SHAPE.match(token):
-            io.print(
-                "  Note: that does not look like a BotFather token; saving it anyway."
-            )
+            io.print(t("wizard.token_shape", lang))
         if _propose(
-            io, plan.env, existing_env, TOKEN_KEY, token, where=ENV_FILE, secret=True
+            io,
+            plan.env,
+            existing_env,
+            TOKEN_KEY,
+            token,
+            where=ENV_FILE,
+            secret=True,
+            lang=lang,
         ):
             plan.env_replaced.add(TOKEN_KEY)
     elif existing_env.get(TOKEN_KEY):
-        io.print("  Keeping the token already in .env.")
+        io.print(t("wizard.token_kept", lang))
     else:
-        io.print(f"  Skipped: set {TOKEN_KEY} in .env before starting the bot.")
-
-    while True:
-        answer = _ask(io, "  Your numeric Telegram user id (Enter to skip): ")
-        if not answer:
-            break
-        if answer.isdigit() and int(answer) > 0:
-            _propose(
-                io,
-                plan.toml,
-                existing_toml,
-                "owner_telegram_id",
-                int(answer),
-                where=LOCAL_TOML,
-                secret=False,
-            )
-            break
-        io.print("  Please enter digits only, for example 123456789.")
+        io.print(t("wizard.token_skipped", lang, key=TOKEN_KEY))
+    if owner_id is not None:
+        _propose(
+            io,
+            plan.toml,
+            existing_toml,
+            "owner_telegram_id",
+            owner_id,
+            where=LOCAL_TOML,
+            secret=False,
+            lang=lang,
+        )
+        return
+    current = existing_toml.get("owner_telegram_id")
+    if current not in _UNSET:
+        io.print(t("wizard.owner_kept", lang, owner=current))
+    else:
+        io.print(t("wizard.owner_claim", lang))
 
 
 def _step_bridge_secret(
-    io: WizardIO, plan: _Plan, existing_env: dict[str, str]
+    io: WizardIO, plan: _Plan, existing_env: dict[str, str], lang: Lang
 ) -> None:
-    io.print("")
-    io.print("Step 5/7 - Extension bridge secret")
-    io.print(
-        "  The browser extension sends offers to the bot over 127.0.0.1 with a "
-        "shared secret."
-    )
+    _step(io, lang, 5, "bridge")
+    io.print(t("wizard.bridge_intro", lang))
     if existing_env.get(SECRET_KEY):
-        if _yes(
-            io,
-            "  A bridge secret is already set in .env. Replace it with a new "
-            "random one (the extension must then be updated)?",
-        ):
+        if _yes(io, t("wizard.bridge_replace", lang), lang):
             plan.env[SECRET_KEY] = secrets.token_urlsafe(32)
             plan.env_replaced.add(SECRET_KEY)
         else:
-            io.print("  Keeping the existing bridge secret.")
+            io.print(t("wizard.bridge_kept", lang))
         return
     plan.env[SECRET_KEY] = secrets.token_urlsafe(32)
-    io.print(
-        f"  Generated a new random secret; it will be stored in .env as {SECRET_KEY}."
-    )
+    io.print(t("wizard.bridge_generated", lang, key=SECRET_KEY))
 
 
 def _step_profile(
@@ -569,52 +593,36 @@ def _step_profile(
     base_dir: Path,
     existing_toml: dict[str, object],
     demo_profile: Path,
+    lang: Lang,
 ) -> None:
-    io.print("")
-    io.print("Step 6/7 - Profile directory")
-    io.print(
-        "  Everything lazyhunt knows about you (claims, base CVs, voice, "
-        "preferences) lives in one directory. It holds personal data: keep it out "
-        "of version control (profiles/* is already gitignored, except the demo)."
-    )
+    _step(io, lang, 6, "profile")
+    io.print(t("wizard.profile_intro", lang))
     current = existing_toml.get("profile_dir")
     default = (
         current if isinstance(current, str) and current.strip() else DEFAULT_PROFILE
     )
     while True:
-        answer = _ask(io, f"  Profile directory [{default}]: ", default)
+        answer = _ask(io, t("wizard.profile_prompt", lang, default=default), default)
         dest = _profile_destination(answer, base_dir, demo_profile)
         if dest is not None:
             break
-        io.print(
-            "  Choose a directory inside this directory and outside profiles/demo "
-            "(for example profiles/me). To keep your profile somewhere else, set "
-            "profile_dir in config.local.toml by hand."
-        )
+        io.print(t("wizard.profile_retry", lang))
     if dest.exists():
         if not dest.is_dir():
-            io.print(f"  {answer} exists and is not a directory; skipped.")
+            io.print(t("wizard.profile_not_dir", lang, path=answer))
             return
-        io.print(f"  {answer} already exists; it is used as is and never modified.")
+        io.print(t("wizard.profile_exists", lang, path=answer))
     elif not demo_profile.is_dir():
-        io.print(
-            f"  The demo profile was not found at {demo_profile}; create {answer} "
-            "yourself (see profiles/demo in the repository for the layout)."
-        )
+        io.print(t("wizard.profile_no_demo", lang, demo=demo_profile, path=answer))
     else:
-        io.print(
-            "  [1] a skeleton with the demo's layout and clearly marked placeholders"
-        )
-        io.print("  [2] a copy of the fictional demo profile, to try lazyhunt first")
-        io.print(
-            "  [3] an empty profile: start the bot and answer its guided /setup "
-            "in Telegram (recommended)"
-        )
+        io.print(t("wizard.kind_skeleton", lang))
+        io.print(t("wizard.kind_demo", lang))
+        io.print(t("wizard.kind_empty", lang))
         while True:
-            kind = _ask(io, "  Start from [3]: ", "3")
+            kind = _ask(io, t("wizard.kind_prompt", lang), "3")
             if kind in _PROFILE_KINDS:
                 break
-            io.print("  Please answer 1, 2 or 3.")
+            io.print(t("wizard.kind_retry", lang))
         plan.profile_dest = dest
         plan.profile_label = answer
         plan.profile_kind = _PROFILE_KINDS[kind]
@@ -626,18 +634,13 @@ def _step_profile(
         answer,
         where=LOCAL_TOML,
         secret=False,
+        lang=lang,
     )
 
 
-def _step_gmail(io: WizardIO) -> None:
-    io.print("")
-    io.print("Step 7/7 - Gmail (optional, off by default)")
-    io.print(
-        "  Gmail sync is read-only and uses an OAuth client you create in your own "
-        "Google Cloud project. To enable it later, follow docs/gmail.md, run "
-        "`uv run cli.py gmail-auth` and set gmail_enabled = true in "
-        "config.local.toml. Nothing is configured now."
-    )
+def _step_gmail(io: WizardIO, lang: Lang) -> None:
+    _step(io, lang, 7, "gmail")
+    io.print(t("wizard.gmail", lang))
 
 
 # --- summary and writing --------------------------------------------------
@@ -648,14 +651,15 @@ def _print_summary(
     plan: _Plan,
     existing_toml: dict[str, object],
     missing_key: str = "",
+    lang: Lang = "en",
 ) -> None:
     io.print("")
-    io.print("Planned changes:")
+    io.print(t("wizard.planned", lang))
     for key in plan.env:
-        verb = "replace" if key in plan.env_replaced else "set"
-        io.print(f"  {ENV_FILE}: {verb} {key} (value hidden)")
+        verb = "wizard.env_replace" if key in plan.env_replaced else "wizard.env_set"
+        io.print(t(verb, lang, file=ENV_FILE, key=key))
     if missing_key:
-        io.print(f"  {ENV_FILE}: {missing_key} not set (the AI provider needs it)")
+        io.print(t("wizard.env_missing", lang, file=ENV_FILE, key=missing_key))
     for key, value in plan.toml.items():
         before = existing_toml.get(key)
         if before in _UNSET:
@@ -663,7 +667,8 @@ def _print_summary(
         else:
             io.print(f"  {LOCAL_TOML}: ~ {key}: {before!r} -> {_toml_value(value)}")
     if plan.profile_dest is not None:
-        io.print(f"  create {plan.profile_label}/ ({plan.profile_kind})")
+        kind = t(f"wizard.kind.{plan.profile_kind}", lang)
+        io.print(t("wizard.create_profile", lang, path=plan.profile_label, kind=kind))
 
 
 def _toml_value(value: str | int | list[str]) -> str:
@@ -955,40 +960,25 @@ def _print_next_steps(
     profile_dir: object,
     *,
     empty_profile: bool = False,
+    owner_set: bool = False,
+    lang: Lang = "en",
 ) -> None:
     port = existing_toml.get("bridge_port", DEFAULT_BRIDGE_PORT)
+    connect = "/connect" if lang == "en" else "/conectar"
+    setup = "/setup" if lang == "en" else "/configurar"
     io.print("")
-    io.print("Next steps:")
-    io.print(
-        "  1. Load the extension: open chrome://extensions, turn on Developer mode, "
-        "click Load unpacked and select the extension/ directory."
-    )
-    io.print(
-        f"  2. In the extension's Options set the bridge URL to "
-        f"http://127.0.0.1:{port}/bridge and paste the bridge secret "
-        f"({SECRET_KEY} in .env)."
-    )
-    io.print(
-        "  3. In Options > Portals enable only the portals whose terms you have read "
-        "and accept; each one shows its terms warning and asks the browser for "
-        "permission to that single domain. Some portals (notably LinkedIn) prohibit "
-        "automated access and your account could be restricted."
-    )
+    io.print(t("wizard.next", lang))
+    io.print(t("wizard.next_start" if owner_set else "wizard.next_start_claim", lang))
+    io.print(t("wizard.next_extension", lang))
+    io.print(t("wizard.next_pair", lang, connect=connect, port=port))
+    io.print(t("wizard.next_portals", lang))
     if empty_profile:
-        io.print(
-            "  4. Your profile is empty: once the bot runs, send /setup to it in "
-            "Telegram to set up your profile."
-        )
+        io.print(t("wizard.next_profile_empty", lang, setup=setup))
     elif isinstance(profile_dir, str) and profile_dir:
-        io.print(f"  4. Fill in your profile in {profile_dir} (see its README.md).")
+        io.print(t("wizard.next_profile_fill", lang, path=profile_dir))
     else:
-        io.print(
-            "  4. Create your profile directory and set profile_dir (see docs/getting-started.md)."
-        )
-    io.print(
-        "  5. Start the bot with `uv run bot.py` and send /help to it in Telegram."
-    )
-    io.print("  Full guide: docs/getting-started.md")
+        io.print(t("wizard.next_profile_create", lang))
+    io.print(t("wizard.next_guide", lang))
 
 
 def run_init(
@@ -998,63 +988,75 @@ def run_init(
     runner: Runner = default_runner,
     which: Which = shutil.which,
     demo_profile: Path = DEMO_PROFILE,
+    owner_id: int | None = None,
 ) -> int:
-    """Run the wizard against the installation in ``base_dir``; return an exit code."""
+    """Run the wizard against the installation in ``base_dir``; return an exit code.
+
+    ``owner_id`` (``cli.py init --owner-id``) plans ``owner_telegram_id`` for
+    a user who already knows it; otherwise the owner is paired by the bot.
+    """
     io = io or default_io()
+    lang: list[Lang] = ["en"]  # what the cancel message speaks
     try:
-        return _run(base_dir, io, runner, which, demo_profile)
+        return _run(base_dir, io, runner, which, demo_profile, owner_id, lang)
     except _Cancelled:
         io.print("")
-        io.print("Setup cancelled. Nothing was written.")
+        io.print(t("wizard.cancelled", lang[0]))
         return 130
 
 
 def _run(
-    base_dir: Path, io: WizardIO, runner: Runner, which: Which, demo_profile: Path
+    base_dir: Path,
+    io: WizardIO,
+    runner: Runner,
+    which: Which,
+    demo_profile: Path,
+    owner_id: int | None,
+    spoken: list[Lang],
 ) -> int:
-    io.print("lazyhunt setup. Every step can be skipped with Enter, and nothing is")
-    io.print("written until you confirm the summary at the end. Safe to re-run.")
-    io.print("")
     try:
         existing_toml = _read_toml(base_dir / LOCAL_TOML)
     except tomllib.TOMLDecodeError as exc:
-        io.print(f"{LOCAL_TOML} is not valid TOML ({exc}); fix it and run init again.")
+        io.print(t("wizard.invalid_toml", "en", file=LOCAL_TOML, error=exc))
         return 1
     existing_env = _read_env(base_dir / ENV_FILE)
     plan = _Plan()
 
-    _check_prerequisites(io, runner, which)
-    _step_language(io, plan, existing_toml)
-    provider = _step_provider(io, plan, existing_env, existing_toml)
-    _step_telegram(io, plan, existing_env, existing_toml)
-    _step_bridge_secret(io, plan, existing_env)
-    _step_profile(io, plan, base_dir, existing_toml, demo_profile)
-    _step_gmail(io)
+    lang = _step_language(io, plan, existing_toml)
+    spoken[0] = lang
+    _check_prerequisites(io, runner, which, lang)
+    provider = _step_provider(io, plan, existing_env, existing_toml, lang)
+    _step_telegram(io, plan, existing_env, existing_toml, lang, owner_id)
+    _step_bridge_secret(io, plan, existing_env, lang)
+    _step_profile(io, plan, base_dir, existing_toml, demo_profile, lang)
+    _step_gmail(io, lang)
 
     if plan.is_empty():
         io.print("")
-        io.print("Nothing to change: your configuration already matches these answers.")
+        io.print(t("wizard.nothing_to_change", lang))
     else:
         key = _PROVIDER_KEY.get(provider, "")
         missing = (
             key if key and key not in plan.env and not existing_env.get(key) else ""
         )
-        _print_summary(io, plan, existing_toml, missing)
-        if not _yes(io, "Write these changes?"):
-            io.print("Nothing was written.")
+        _print_summary(io, plan, existing_toml, missing, lang)
+        if not _yes(io, t("wizard.write_q", lang), lang):
+            io.print(t("wizard.nothing_written", lang))
             return 0
         _apply(plan, base_dir, demo_profile)
-        io.print(
-            "Saved. Secrets went to .env only (mode 600), settings to config.local.toml."
-        )
+        io.print(t("wizard.saved", lang))
 
     profile_dir = plan.toml.get("profile_dir", existing_toml.get("profile_dir"))
+    owner = plan.toml.get("owner_telegram_id", existing_toml.get("owner_telegram_id"))
     _print_next_steps(
-        io, existing_toml, profile_dir, empty_profile=plan.profile_kind == "empty"
+        io,
+        existing_toml,
+        profile_dir,
+        empty_profile=plan.profile_kind == "empty",
+        owner_set=owner not in _UNSET,
+        lang=lang,
     )
     secret = plan.env.get(SECRET_KEY) or existing_env.get(SECRET_KEY)
-    if secret and _yes(
-        io, "Show the bridge secret now to paste it into the extension?"
-    ):
+    if secret and _yes(io, t("wizard.show_secret", lang), lang):
         io.print(f"  {SECRET_KEY}: {secret}")
     return 0

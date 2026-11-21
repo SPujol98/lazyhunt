@@ -6,6 +6,7 @@ import { portalFor } from '../portals/registry.js';
 import { DEFAULT_SETTINGS } from './constants.js';
 import { reschedule } from './schedule.js';
 import { runRound, isRoundRunning } from './round.js';
+import { cancelRound } from './cancel.js';
 import { scanPage, SessionExpiredError } from './page_scan.js';
 import { ScrapeTab } from './scrape_tab.js';
 import { readKeys, writeKeys, isPlainObject } from './storage.js';
@@ -15,6 +16,8 @@ async function setPaused({ paused }) {
   const { settings } = await readKeys(['settings']);
   const next = { ...(isPlainObject(settings) ? settings : DEFAULT_SETTINGS), paused: Boolean(paused) };
   await writeKeys({ settings: next });
+  // Pausing stops a round in flight (beta3-ux): its current wait is dropped.
+  if (next.paused) cancelRound();
   await reschedule();
   return { ok: true, paused: next.paused };
 }

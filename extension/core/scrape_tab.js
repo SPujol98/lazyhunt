@@ -6,7 +6,8 @@
 // the round's one.
 
 import { t } from '../i18n.js';
-import { PAGE_LOAD_TIMEOUT_MS } from './constants.js';
+import { PAGE_LOAD_TIMEOUT_MS, SCRIPT_TIMEOUT_MS, TAB_CALL_TIMEOUT_MS } from './constants.js';
+import { bounded } from './cancel.js';
 import { readKeys, writeKeys, removeKeys } from './storage.js';
 
 async function liveTab(id) {
@@ -41,8 +42,8 @@ async function navigate(tabId, url) {
   });
   loaded.catch(() => {});
   try {
-    await chrome.tabs.update(tabId, { url });
-    await loaded;
+    await bounded(chrome.tabs.update(tabId, { url }), { ms: TAB_CALL_TIMEOUT_MS });
+    await bounded(loaded); // its own load timeout; a Pause stops it at once
   } finally {
     clearTimeout(timer);
     chrome.tabs.onUpdated.removeListener(listener);
@@ -64,7 +65,7 @@ export class ScrapeTab {
         return this.id;
       }
     }
-    const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    const tab = await bounded(chrome.tabs.create({ url: 'about:blank', active: false }), { ms: TAB_CALL_TIMEOUT_MS });
     this.id = tab.id;
     if (this.remembered) await writeKeys({ scrapeTabId: this.id });
     return this.id;
@@ -81,10 +82,18 @@ export class ScrapeTab {
 
   // Runs a self-contained page function in the tab and returns its result.
   async run(func, args = []) {
-    const results = await chrome.scripting.executeScript({
+    // A frozen or discarded tab can leave executeScript pending forever.
+    const results = await bounded(chrome.scripting.executeScript({
       target: { tabId: await this.ensure() },
       func,
       args,
+    }), {
+      ms: SCRIPT_TIMEOUT_MS,
+      message: t(
+        'sw_error_script_timeout',
+        [String(SCRIPT_TIMEOUT_MS / 1000)],
+        `The page did not answer within ${SCRIPT_TIMEOUT_MS / 1000} seconds`,
+      ),
     });
     return results && results[0] ? results[0].result : undefined;
   }
@@ -92,7 +101,7 @@ export class ScrapeTab {
   async dispose() {
     if (this.id !== null) {
       try {
-        await chrome.tabs.remove(this.id);
+        await bounded(chrome.tabs.remove(this.id), { ms: TAB_CALL_TIMEOUT_MS, cancellable: false });
       } catch {
         // already closed by the user or the browser
       }

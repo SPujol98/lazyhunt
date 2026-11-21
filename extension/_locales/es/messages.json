@@ -744,7 +744,7 @@
     "message": "Aplicar el filtro de títulos"
   },
   "searchesEmpty": {
-    "message": "Todavía no hay búsquedas."
+    "message": "Todavía no hay búsquedas: pulsa Sugerir desde mi perfil para obtenerlas de tu perfil, o Añadir búsqueda."
   },
   "searchesHeading": {
     "message": "Búsquedas"
@@ -981,5 +981,67 @@
   },
   "timeUnderMinute": {
     "message": "<1 min"
+  },
+  "popupNoSearches": {
+    "message": "Todavía no hay búsquedas: abre Opciones › Búsquedas y pulsa Sugerir desde mi perfil."
+  },
+  "popupOpenSearches": {
+    "message": "Abrir Búsquedas"
+  },
+  "statusBotSetup": {
+    "message": "Termina la configuración"
+  },
+  "statusBotSetupDetail": {
+    "message": "Termina primero /configurar en el chat del bot."
+  },
+  "resultBotSetup": {
+    "message": "Termina primero /configurar en el chat del bot: no se ha revisado nada."
+  },
+  "resultNoPortal": {
+    "message": "Nada que revisar: activa un portal (y permite su acceso) en Opciones › Portales."
+  },
+  "resultBotUnreachable": {
+    "message": "No se puede contactar con el bot: ¿está en marcha? Revisa la URL del puente en Opciones › Frecuencia y bot."
+  },
+  "resultBotUnauthorized": {
+    "message": "El bot ha rechazado el secreto: vuelve a emparejar con /conectar en Opciones › Frecuencia y bot."
+  },
+  "resultCancelled": {
+    "message": "Detenido: en pausa."
+  },
+  "popupLastOutcome": {
+    "message": "Última ronda $WHEN$: $WHAT$",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "what": {
+        "content": "$2"
+      }
+    }
+  },
+  "pairLabel": {
+    "message": "Emparejar con código"
+  },
+  "pairPlaceholder": {
+    "message": "ABCD-EFGH"
+  },
+  "pairButton": {
+    "message": "Emparejar"
+  },
+  "pairHint": {
+    "message": "Envía /conectar al bot y escribe el código que te responda: la URL y el secreto del puente se rellenan solos. Escribir el secreto a mano sigue funcionando."
+  },
+  "pairDone": {
+    "message": "Emparejado: el secreto del puente está guardado."
+  },
+  "pairRejected": {
+    "message": "El código es incorrecto, ya se usó o ha caducado: envía /conectar al bot para obtener otro."
+  },
+  "pairNeedsCode": {
+    "message": "Escribe primero el código que te envió el bot con /conectar."
+  },
+  "pairNeedsUrl": {
+    "message": "Escribe primero una URL del puente válida, por ejemplo http://127.0.0.1:8765/bridge."
   }
 }

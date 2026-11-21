@@ -101,12 +101,16 @@ COMMANDS: Final[tuple[Command, ...]] = (
     # of the questionnaire in the full app; ``/setup <section>`` re-runs one
     # section (usage ``/setup [section]``, see docs/onboarding.md).
     Command("configurar", SECTION_OTHER, en_name="setup"),
+    # Extension pairing (beta3-ux T1): a one-time code for the extension's
+    # Options. Unlisted (the full /help is near Telegram's 4096 limit): the
+    # setup-mode menu, its /help and the /setup Confirm reply offer it.
+    Command("conectar", SECTION_OTHER, en_name="connect", listed=False),
     Command("help", SECTION_OTHER, aliases=("start",)),
 )
 
 # What setup mode answers (onboarding-v2 T1): the menu while the profile is
 # not set up yet (``/start`` is the setup notice there, not an alias of help).
-SETUP_COMMANDS: Final[tuple[str, ...]] = ("configurar", "help")
+SETUP_COMMANDS: Final[tuple[str, ...]] = ("configurar", "conectar", "help")
 # Not offered on a legacy install (no ``profile_dir``): /setup refuses there.
 LEGACY_HIDDEN: Final[tuple[str, ...]] = ("configurar",)
 
@@ -262,3 +266,33 @@ def help_text(
     lines.extend(["", section_title("buttons", lang)])
     lines.extend(f"{label} — {what}" for label, what in buttons_for(families, lang))
     return "\n".join(lines)
+
+
+# Telegram refuses a text message longer than this many characters.
+TELEGRAM_MESSAGE_LIMIT: Final[int] = 4096
+
+
+def split_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
+    """``text`` cut into messages of at most ``limit`` characters, at line
+    boundaries (a blank line is preferred, so a /help section stays whole);
+    a single line longer than ``limit`` is cut inside. Joined back with
+    ``"\\n"`` the pieces give ``text`` again (minus the boundary newlines).
+    A text that fits is returned as is, in a one-item list."""
+    if len(text) <= limit:
+        return [text]
+    pieces: list[str] = []
+    rest = text
+    while len(rest) > limit:
+        window = rest[: limit + 1]  # a newline right at ``limit`` still fits
+        cut = window.rfind("\n\n")
+        if cut <= 0:
+            cut = window.rfind("\n")
+        if cut <= 0:
+            pieces.append(rest[:limit])
+            rest = rest[limit:]
+            continue
+        pieces.append(rest[:cut].rstrip("\n"))
+        rest = rest[cut:].lstrip("\n")
+    if rest:
+        pieces.append(rest)
+    return [piece for piece in pieces if piece]

@@ -63,7 +63,21 @@ EN: Final[dict[str, str]] = {
     "onboarding.q.salary": (
         "Your minimum gross annual salary? Type a number (e.g. 30000) or Skip."
     ),
-    "onboarding.q.currency": "In which currency? Tap one or type a 3-letter code.",
+    "onboarding.q.currency": (
+        "In which currency? Tap one (the one for your country is ticked), or "
+        "“Other” to type its 3-letter code. One currency: the one your "
+        "minimum salary is in."
+    ),
+    "onboarding.q.currency_other": "Type the 3-letter ISO code of the currency (e.g. SEK).",
+    "onboarding.btn.other_currency": "✏️ Other…",
+    "onboarding.salary.reference": (
+        "💡 Typical for {role} {level} in {city}: {low}–{high} EUR gross/year "
+        "(source: {source}). Use {low}?"
+    ),
+    "onboarding.salary.no_reference": (
+        "ℹ️ No salary reference for your profile, so no suggestion."
+    ),
+    "onboarding.btn.use_salary": "✅ Use {amount}",
     "onboarding.q.offer_langs": (
         "In which languages may an offer be written? Offers that require any "
         "other language are discarded. Tick them, then Done."
@@ -74,11 +88,65 @@ EN: Final[dict[str, str]] = {
     ),
     "onboarding.q.portal_terms": "{warning}",
     "onboarding.q.cv_pdfs": (
-        "Now your base CVs: the bot delivers these PDFs as they are. Send one "
-        "PDF as a file (📎 → File) for each position and language below, at "
-        "most {mb} MB and {pages} pages. Tap a line to choose which one the "
-        "next PDF is for. Skipped ones get no CV until you add one."
+        "Now your base CVs: the bot sends this CV, adapted, for each offer; "
+        "one per position type × language (the list below). For each one, "
+        "upload your own PDF (📎 → File, at most {mb} MB and {pages} pages), "
+        "create one with lazyhunt from your answers, or leave it for later. "
+        "Tap a line to work on that one."
     ),
+    "onboarding.cv.upload_hint": "📎 Send the PDF now as a file (📎 → File).",
+    "onboarding.btn.cv_upload": "📎 Upload my PDF",
+    "onboarding.btn.cv_create": "✨ Create one with lazyhunt",
+    "onboarding.btn.cv_later": "Not now ⏭",
+    "onboarding.btn.cv_more": "➕ Create another version",
+    "onboarding.btn.cv_create_now": "✨ Create one now",
+    "onboarding.btn.cv_skip_anyway": "Skip anyway ⏭⏭",
+    "onboarding.btn.letter": "✨ Create a base cover letter",
+    "onboarding.btn.letter_on": "Base cover letter: create it on Confirm",
+    "onboarding.cv.tpl.classic": "Classic",
+    "onboarding.cv.tpl.modern": "Modern",
+    "onboarding.cv.tpl.compact": "Compact",
+    "onboarding.cv.tpl_about.classic": (
+        "centred header and ruled sections; a safe choice anywhere."
+    ),
+    "onboarding.cv.tpl_about.modern": (
+        "your name in blue, left-aligned, coloured headings; fresh but sober."
+    ),
+    "onboarding.cv.tpl_about.compact": (
+        "smaller type and tight spacing; the most content on one page."
+    ),
+    "onboarding.cv.templates": (
+        "Pick a template for {slot}. All three are one-column, ATS-friendly "
+        "PDFs (selectable text, standard headings, no photo or tables) built "
+        "only from your answers:\n{templates}\n\nIt is a starting point: "
+        "add projects and achievements later (/setup cvs replaces it)."
+    ),
+    "onboarding.cv.created": (
+        "✨ CV created for {slot} ({pages} page(s)). It is a starting point: "
+        "add projects and achievements later."
+    ),
+    "onboarding.cv.created_mark": "✨ {template}",
+    "onboarding.cv.created_saved": (
+        "CVs created with lazyhunt: {slots}. They are a starting point: add "
+        "projects and achievements later and replace them with /setup cvs."
+    ),
+    "onboarding.cv.skip_warning": (
+        "⚠️ No CV yet for: {slots}. Without a CV the bot cannot send any — "
+        "create one now?"
+    ),
+    "onboarding.cv.more": (
+        "Another base CV, for another position type or language. Adding one "
+        "also adds that position to your searches, or that language to the "
+        "accepted offer languages, when they were not there yet."
+    ),
+    "onboarding.cv.added": "➕ Added {slot}: upload or create its CV.",
+    "onboarding.err.cv_create": "⚠️ Could not create that CV. Try another template or upload a PDF.",
+    "onboarding.letter.summary": "a base cover letter, from your answers",
+    "onboarding.letter.saved": (
+        "Base cover letter created (cover_letter_base.toml) from your answers: "
+        "a short starting point you can edit."
+    ),
+    "onboarding.edit.cover_letter": "Cover letter",
     "onboarding.cv.send": "Send the PDF for: {slot}",
     "onboarding.cv.all_set": "All set. Tap a line to replace its PDF, or Done.",
     "onboarding.cv.received": "✅ PDF received for {slot} ({pages}).",
@@ -155,7 +223,8 @@ EN: Final[dict[str, str]] = {
     ),
     "onboarding.q.spoken_levels": "Your level of {language}?",
     "onboarding.q.skills": (
-        "Your main skills or stack, separated by commas (e.g. Python, SQL, Docker)?"
+        "Your main skills or stack, separated by commas (e.g. Python, SQL, "
+        "Docker)? Up to 30; tip: the 10-15 strongest work best."
     ),
     "onboarding.q.exp_years": "How many years of professional experience do you have?",
     "onboarding.q.last_role": (
@@ -163,11 +232,17 @@ EN: Final[dict[str, str]] = {
     ),
     "onboarding.q.last_company": "And the company? (optional: Skip if you prefer)",
     "onboarding.q.education": (
-        "Your highest education, in one line (e.g. BSc Computer Science, "
-        "University of Valencia)? (optional: Skip if you prefer)"
+        "Your education, up to 5 entries: one per line, or separated by commas "
+        "(e.g. BSc Computer Science — University of Valencia, AWS Cloud "
+        "Practitioner)? Use one line per entry when an entry has a comma. "
+        "(optional: Skip if you prefer)"
     ),
     "onboarding.err.skills": (
-        "⚠️ Please type 1-20 skills separated by commas, each at most 50 characters."
+        "⚠️ Please type 1-30 skills separated by commas, each at most 50 characters."
+    ),
+    "onboarding.err.education": (
+        "⚠️ Please type 1-5 education entries (one per line or separated by "
+        "commas), each at most 100 characters."
     ),
     "onboarding.err.languages": (
         "⚠️ Please type 1-5 languages separated by commas, each at most 40 characters."
@@ -307,7 +382,20 @@ ES: Final[dict[str, str]] = {
         "¿Tu sueldo mínimo bruto anual? Escribe un número (p. ej. 30000) o pulsa "
         "Omitir."
     ),
-    "onboarding.q.currency": "¿En qué moneda? Pulsa una o escribe su código de 3 letras.",
+    "onboarding.q.currency": (
+        "¿En qué moneda? Pulsa una (va marcada la de tu país), u «Otra» para "
+        "escribir su código de 3 letras. Una sola moneda: la de tu sueldo mínimo."
+    ),
+    "onboarding.q.currency_other": "Escribe el código ISO de 3 letras de la moneda (p. ej. SEK).",
+    "onboarding.btn.other_currency": "✏️ Otra…",
+    "onboarding.salary.reference": (
+        "💡 Lo habitual para {role} {level} en {city}: {low}–{high} EUR brutos/año "
+        "(fuente: {source}). ¿Usar {low}?"
+    ),
+    "onboarding.salary.no_reference": (
+        "ℹ️ No hay referencia salarial para tu perfil, así que no sugiero ninguna cifra."
+    ),
+    "onboarding.btn.use_salary": "✅ Usar {amount}",
     "onboarding.q.offer_langs": (
         "¿En qué idiomas puede estar una oferta? Las que exijan otro idioma se "
         "descartan. Márcalos y pulsa Listo."
@@ -319,11 +407,65 @@ ES: Final[dict[str, str]] = {
     ),
     "onboarding.q.portal_terms": "{warning}",
     "onboarding.q.cv_pdfs": (
-        "Ahora tus CV base: el bot entrega estos PDF tal cual. Envía un PDF "
-        "como archivo (📎 → Archivo) por cada puesto e idioma de la lista, de "
-        "{mb} MB y {pages} páginas como máximo. Pulsa una línea para elegir a "
-        "cuál va el siguiente PDF. Los omitidos se quedan sin CV hasta que lo añadas."
+        "Ahora tus CV base: el bot envía este CV, adaptado, en cada oferta; "
+        "uno por tipo de puesto × idioma (la lista de abajo). Para cada uno, "
+        "sube tu PDF (📎 → Archivo, de {mb} MB y {pages} páginas como máximo), "
+        "créalo con lazyhunt a partir de tus respuestas o déjalo para más tarde. "
+        "Pulsa una línea para trabajar en ese."
     ),
+    "onboarding.cv.upload_hint": "📎 Envía ahora el PDF como archivo (📎 → Archivo).",
+    "onboarding.btn.cv_upload": "📎 Subir mi PDF",
+    "onboarding.btn.cv_create": "✨ Crear uno con lazyhunt",
+    "onboarding.btn.cv_later": "Ahora no ⏭",
+    "onboarding.btn.cv_more": "➕ Crear otra versión",
+    "onboarding.btn.cv_create_now": "✨ Crear uno ahora",
+    "onboarding.btn.cv_skip_anyway": "Omitir igualmente ⏭⏭",
+    "onboarding.btn.letter": "✨ Crear una carta de presentación base",
+    "onboarding.btn.letter_on": "Carta base: se crea al Confirmar",
+    "onboarding.cv.tpl.classic": "Clásica",
+    "onboarding.cv.tpl.modern": "Moderna",
+    "onboarding.cv.tpl.compact": "Compacta",
+    "onboarding.cv.tpl_about.classic": (
+        "cabecera centrada y secciones con línea; sirve en cualquier sitio."
+    ),
+    "onboarding.cv.tpl_about.modern": (
+        "tu nombre en azul, alineado a la izquierda, títulos en color; fresca pero sobria."
+    ),
+    "onboarding.cv.tpl_about.compact": (
+        "letra más pequeña y espaciado justo; el máximo contenido en una página."
+    ),
+    "onboarding.cv.templates": (
+        "Elige una plantilla para {slot}. Las tres son PDF de una columna, "
+        "aptos para ATS (texto seleccionable, títulos estándar, sin foto ni "
+        "tablas) hechos solo con tus respuestas:\n{templates}\n\nEs un punto "
+        "de partida: añade proyectos y logros más adelante (/configurar cvs lo sustituye)."
+    ),
+    "onboarding.cv.created": (
+        "✨ CV creado para {slot} ({pages} página(s)). Es un punto de partida: "
+        "añade proyectos y logros más adelante."
+    ),
+    "onboarding.cv.created_mark": "✨ {template}",
+    "onboarding.cv.created_saved": (
+        "CV creados con lazyhunt: {slots}. Son un punto de partida: añade "
+        "proyectos y logros más adelante y sustitúyelos con /configurar cvs."
+    ),
+    "onboarding.cv.skip_warning": (
+        "⚠️ Aún sin CV: {slots}. Sin un CV el bot no puede enviar ninguno — "
+        "¿lo creamos ahora?"
+    ),
+    "onboarding.cv.more": (
+        "Otro CV base, para otro tipo de puesto o idioma. Añadirlo también "
+        "añade ese puesto a tus búsquedas, o ese idioma a los idiomas de "
+        "oferta aceptados, si aún no estaban."
+    ),
+    "onboarding.cv.added": "➕ Añadido {slot}: sube o crea su CV.",
+    "onboarding.err.cv_create": "⚠️ No he podido crear ese CV. Prueba otra plantilla o sube un PDF.",
+    "onboarding.letter.summary": "una carta de presentación base, con tus respuestas",
+    "onboarding.letter.saved": (
+        "Carta de presentación base creada (cover_letter_base.toml) con tus "
+        "respuestas: un punto de partida breve que puedes editar."
+    ),
+    "onboarding.edit.cover_letter": "Carta de presentación",
     "onboarding.cv.send": "Envía el PDF de: {slot}",
     "onboarding.cv.all_set": "Todo listo. Pulsa una línea para cambiar su PDF, o Listo.",
     "onboarding.cv.received": "✅ PDF recibido para {slot} ({pages}).",
@@ -400,7 +542,7 @@ ES: Final[dict[str, str]] = {
     "onboarding.q.spoken_levels": "¿Tu nivel de {language}?",
     "onboarding.q.skills": (
         "¿Tus habilidades o stack principales, separados por comas (p. ej. Python, "
-        "SQL, Docker)?"
+        "SQL, Docker)? Hasta 30; consejo: funcionan mejor las 10-15 más fuertes."
     ),
     "onboarding.q.exp_years": "¿Cuántos años de experiencia profesional tienes?",
     "onboarding.q.last_role": (
@@ -408,12 +550,18 @@ ES: Final[dict[str, str]] = {
     ),
     "onboarding.q.last_company": "¿Y la empresa? (opcional: pulsa Omitir si lo prefieres)",
     "onboarding.q.education": (
-        "¿Tu formación más alta, en una línea (p. ej. Grado en Ingeniería "
-        "Informática, Universitat de València)? (opcional: pulsa Omitir si lo prefieres)"
+        "¿Tu formación, hasta 5 entradas: una por línea o separadas por comas "
+        "(p. ej. Grado en Ingeniería Informática — Universitat de València, AWS "
+        "Cloud Practitioner)? Usa una línea por entrada si alguna lleva coma. "
+        "(opcional: pulsa Omitir si lo prefieres)"
     ),
     "onboarding.err.skills": (
-        "⚠️ Escribe de 1 a 20 habilidades separadas por comas, de 50 caracteres "
+        "⚠️ Escribe de 1 a 30 habilidades separadas por comas, de 50 caracteres "
         "como máximo cada una."
+    ),
+    "onboarding.err.education": (
+        "⚠️ Escribe de 1 a 5 entradas de formación (una por línea o separadas "
+        "por comas), de 100 caracteres como máximo cada una."
     ),
     "onboarding.err.languages": (
         "⚠️ Escribe de 1 a 5 idiomas separados por comas, de 40 caracteres como "

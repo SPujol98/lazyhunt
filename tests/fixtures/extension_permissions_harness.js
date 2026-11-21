@@ -247,7 +247,11 @@ async function main() {
 
   reset({ store: { settings: BRIDGED, beacons: TWO, enabledPortals: ['linkedin', 'infojobs'] }, scenario: { configThrow: true } });
   r = await send({ type: 'run-now' });
-  check('bot unreachable: local rules apply and the round still runs', [r.summary.botPaused === true, hostsVisited()], [false, ['www.linkedin.com', 'www.infojobs.net']]);
+  // Changed by beta3-ux: an unreachable bot could receive nothing (its offers
+  // stayed unseen for the next round anyway), so the round stops at once with
+  // a reason the popup shows instead of scanning for minutes. A bot that
+  // answers without a usable /config (404, older bot) still runs (local rules).
+  check('bot unreachable: the round stops with a reason, nothing visited', [r.summary.botPaused === true, r.summary.reason, hostsVisited()], [false, 'botUnreachable', []]);
 
   reset({ store: { settings: SETTINGS, beacons: TWO, enabledPortals: ['linkedin', 'infojobs'] } });
   r = await send({ type: 'run-now' });

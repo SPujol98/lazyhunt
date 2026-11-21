@@ -130,7 +130,14 @@ def test_setup_app_answers_only_help_start_and_setup(
     tmp_path: Path, clean_settings: Callable[..., Settings]
 ) -> None:
     app, _ = _setup_app(tmp_path, clean_settings, "en")
-    assert set(_commands(app)) == {"help", "start", "setup", "configurar"}
+    assert set(_commands(app)) == {
+        "help",
+        "start",
+        "setup",
+        "configurar",
+        "connect",  # beta3-ux T1: pair the extension during setup
+        "conectar",
+    }
     assert bot._SERVICE_KEY not in app.bot_data  # no JobService, no legacy data
 
 
@@ -441,7 +448,8 @@ def test_main_with_a_complete_profile_starts_the_full_app(
 ) -> None:
     profile = tmp_path / "me"
     shutil.copytree(DEMO_PROFILE, profile)
-    settings = clean_settings(profile_dir=str(profile))
+    # An owner is set: no claim app (beta3-ux T1), straight to the full app.
+    settings = clean_settings(profile_dir=str(profile), owner_telegram_id=OWNER)
     runs: list[Any] = []
     _patch_main(monkeypatch, settings, runs)
     built: list[Settings] = []
@@ -579,7 +587,8 @@ def _auth(value: str = SECRET) -> dict[str, str]:
 def test_setup_bridge_config_is_paused_with_no_portals(setup_bridge: Any) -> None:
     resp = httpx.get(_url(setup_bridge.handle.port, "/config"), headers=_auth())
     assert resp.status_code == 200
-    assert resp.json() == {"paused": True, "enabledPortals": []}
+    # beta3-ux T2: "setup" lets the popup say to finish /setup first.
+    assert resp.json() == {"paused": True, "enabledPortals": [], "setup": True}
 
 
 def test_setup_bridge_suggests_no_searches(setup_bridge: Any) -> None:

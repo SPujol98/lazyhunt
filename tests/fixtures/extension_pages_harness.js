@@ -939,7 +939,142 @@ async function areaLanguage() {
   check('auto goes back to chrome.i18n', t('timeAgo', ['5m'], 'x'), en('timeAgo', ['5m']));
 }
 
+// --- pairing with a one-time code (beta3-ux T1) ------------------------------------
+
+async function areaPair() {
+  const store = {
+    settings: { intervalMinutes: 45, paused: false, bridgeUrl: '', bridgeSecret: '' },
+    beacons: [], enabledPortals: ['linkedin'],
+  };
+  const pairCalls = [];
+  const pairFetch = (status, body) => async (url, init = {}) => {
+    if (String(url).endsWith('/pair')) {
+      pairCalls.push({ url: String(url), method: init.method, headers: init.headers, body: JSON.parse(init.body) });
+      return { ok: status < 300, status, json: async () => body };
+    }
+    return b.fetch(url, init);
+  };
+
+  setScenario('pair: the code is traded for the secret, stored like a typed one');
+  pairCalls.length = 0;
+  await loadPage(OPTIONS, store, { fetch: pairFetch(200, { secret: 'paired-secret' }) });
+  await type($('pairCodeInput'), ' abcd-efgh ');
+  await click($('pairBtn'));
+  check('one POST /pair to the default bridge with the code', pairCalls.map((c) => [c.url, c.method, c.headers['Content-Type'], c.body]),
+    [['http://127.0.0.1:8765/pair', 'POST', 'application/json', { code: 'abcd-efgh' }]]);
+  check('no secret header sent to /pair', pairCalls[0] && pairCalls[0].headers['X-CVA-Bridge-Secret'], undefined);
+  check('stored in settings, other settings kept', b.store.settings, { intervalMinutes: 45, paused: false, bridgeUrl: BRIDGE, bridgeSecret: 'paired-secret' });
+  check('fields filled, code cleared', [$('bridgeUrlInput').value, $('bridgeSecretInput').value, $('pairCodeInput').value], [BRIDGE, 'paired-secret', '']);
+  check('success toast', $('toast').textContent, 'Paired: the bridge secret is saved.');
+  check('status no longer asks to connect', $('statusChip').textContent !== 'Bot not connected', true);
+  check('the worker is told', sent('settings-updated').length, 1);
+
+  setScenario('pair: a custom bridge URL is used');
+  pairCalls.length = 0;
+  await loadPage(OPTIONS, { ...store, settings: { ...store.settings, bridgeUrl: 'http://127.0.0.1:9999/bridge' } }, { fetch: pairFetch(200, { secret: 'x' }) });
+  await type($('pairCodeInput'), 'ABCDEFGH');
+  await click($('pairBtn'));
+  check('POST to that port', pairCalls.map((c) => c.url), ['http://127.0.0.1:9999/pair']);
+
+  for (const [label, impl, text] of [
+    ['rejected code', pairFetch(401, { error: 'invalid or expired code' }), 'The code is wrong, used or expired: send /connect to the bot for a new one.'],
+    ['bot down', async () => { throw new TypeError('Failed to fetch'); }, 'The bot is not reachable. Is it running?'],
+    ['other error', pairFetch(403, { error: 'forbidden origin' }), 'The bot answered with HTTP 403.'],
+  ]) {
+    setScenario(`pair: ${label}`);
+    await loadPage(OPTIONS, store, { fetch: impl });
+    await type($('pairCodeInput'), 'ABCDEFGH');
+    await click($('pairBtn'));
+    check('message', $('toast').textContent, text);
+    check('nothing stored', b.store.settings, store.settings);
+  }
+
+  setScenario('pair: needs a code');
+  pairCalls.length = 0;
+  await loadPage(OPTIONS, store, { fetch: pairFetch(200, { secret: 'x' }) });
+  await click($('pairBtn'));
+  check('no request, a hint', [pairCalls.length, $('toast').textContent], [0, 'Type the code the bot sent for /connect first.']);
+
+  setScenario('pair: Spanish labels');
+  await loadPage(OPTIONS, store, { lang: 'es', fetch: pairFetch(401, {}) });
+  check('button', $('pairBtn').textContent, 'Emparejar');
+  await type($('pairCodeInput'), 'ABCDEFGH');
+  await click($('pairBtn'));
+  ok('rejection in Spanish', /\/conectar/.test($('toast').textContent), $('toast').textContent);
+
+  setScenario('pair: typing the secret by hand still works');
+  await loadPage(OPTIONS, store);
+  await type($('bridgeUrlInput'), BRIDGE);
+  await type($('bridgeSecretInput'), 'typed');
+  await click($('saveBtn'));
+  check('saved as before', [b.store.settings.bridgeUrl, b.store.settings.bridgeSecret], [BRIDGE, 'typed']);
+}
+
+// --- searches guidance (beta3-ux T2) ------------------------------------------------
+
+async function areaSearchGuide() {
+  const store = {
+    settings: { intervalMinutes: 60, paused: false, bridgeUrl: BRIDGE, bridgeSecret: 's' },
+    beacons: [], searches: [], enabledPortals: ['linkedin'],
+  };
+  const noSearches = 'No searches yet — open Options › Searches and press Suggest from my profile.';
+
+  setScenario('guide: no searches -> empty state points at Suggest from my profile');
+  await loadPage(POPUP, store);
+  check('empty state text and buttons', [$('emptyState').hidden, $('emptyText').textContent, $('openSearchesBtn').hidden, $('emptyOptionsBtn').hidden], [false, noSearches, false, true]);
+  check('status detail says the same', $('statusDetail').textContent, noSearches);
+  await click($('openSearchesBtn'));
+  check('opens Options at the Searches section', b.calls.tabsCreate.map((c) => c.url), ['chrome-extension://harness-extension-id/options.html#searches']);
+
+  setScenario('guide: Check now with no searches shows the message');
+  await loadPage(POPUP, store, { messageHandler: () => ({ ok: true, summary: { skipped: false, beaconsScanned: 0, totalNew: 0, errors: 0, reason: 'noSearches' } }) });
+  await click($('checkNowBtn'));
+  check('result', [$('resultLine').textContent, $('resultLine').classList.contains('is-error')], [noSearches, true]);
+
+  setScenario('guide: Spanish');
+  await loadPage(POPUP, store, { lang: 'es' });
+  check('empty text', $('emptyText').textContent, 'Todavía no hay búsquedas: abre Opciones › Búsquedas y pulsa Sugerir desde mi perfil.');
+
+  setScenario('guide: searches exist but no portal is enabled -> the old empty text');
+  await loadPage(POPUP, { ...store, searches: [{ id: 's1', name: 'X', keywords: 'x', location: '', filterProfile: 'ai', portals: ['linkedin'], titleFilter: 'on' }], enabledPortals: [] });
+  check('old text, options button', [$('emptyText').textContent, $('openSearchesBtn').hidden, $('emptyOptionsBtn').hidden], ['Nothing to watch yet. Add a search or a beacon in the options.', true, false]);
+
+  setScenario('guide: the bot is still in setup mode');
+  const search = { id: 's1', name: 'X', keywords: 'x', location: '', filterProfile: 'ai', portals: ['linkedin'], titleFilter: 'on' };
+  await loadPage(POPUP, { ...store, searches: [search], botConfig: { paused: true, enabledPortals: [], setup: true, at: 1 } });
+  check('status', [$('statusChip').textContent, $('statusDetail').textContent], ['Finish setup first', 'Finish /setup in the bot chat first.']);
+  await loadPage(POPUP, { ...store, searches: [search], botConfig: { paused: true, enabledPortals: [], setup: true, at: 1 } }, { lang: 'es' });
+  check('status (es)', $('statusDetail').textContent, 'Termina primero /configurar en el chat del bot.');
+
+  for (const [reason, text] of [
+    ['botUnreachable', 'The bot is not reachable: is it running? Check the bridge URL in Options › Schedule and bot.'],
+    ['botUnauthorized', 'The bot rejected the secret: pair again with /connect in Options › Schedule and bot.'],
+    ['botSetup', 'Finish /setup in the bot chat first: nothing was scanned.'],
+    ['noPortal', 'Nothing to scan: enable a portal (and allow its permission) in Options › Portals.'],
+    ['cancelled', 'Stopped: paused.'],
+  ]) {
+    setScenario(`guide: Check now explains ${reason}`);
+    await loadPage(POPUP, { ...store, searches: [search] }, { messageHandler: () => ({ ok: true, summary: { skipped: false, beaconsScanned: 0, reason } }) });
+    await click($('checkNowBtn'));
+    check('result', $('resultLine').textContent, text);
+  }
+
+  setScenario('guide: the last round outcome is shown');
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: { at: Date.now() - 2 * 60000, reason: 'botUnreachable', beaconsScanned: 0, totalNew: 0, errors: 0 } });
+  check('line', [$('lastOutcome').hidden, $('lastOutcome').textContent], [false, 'Last round 2m ago: The bot is not reachable: is it running? Check the bridge URL in Options › Schedule and bot.']);
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: { at: Date.now() - 2 * 60000, reason: null, beaconsScanned: 3, totalNew: 1, errors: 0 } });
+  check('counts when it ran', $('lastOutcome').textContent, 'Last round 2m ago: 3 scanned · 1 new');
+  await loadPage(POPUP, { ...store, searches: [search] });
+  check('hidden before any round', $('lastOutcome').hidden, true);
+
+  setScenario('guide: Options says how to get searches');
+  await loadPage(OPTIONS, store);
+  check('options empty row', $('searchEmpty').textContent, 'No searches yet: press Suggest from my profile to get searches from your profile, or Add search.');
+}
+
 const AREAS = {
+  pair: areaPair,
+  searchguide: areaSearchGuide,
   language: areaLanguage,
   nobridge: areaNoBridge,
   i18n: areaI18n,

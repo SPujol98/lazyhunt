@@ -262,7 +262,8 @@ def test_legacy_install_publishes_a_menu_without_setup(
     def capture(app: Any, lang: Lang, only: Any = None, hidden: Any = ()) -> None:
         menus.append(hidden)
 
-    settings = clean_settings(profile_dir=None)  # the legacy layout
+    # An owner is set: owner 0 now starts the claim app first (beta3-ux T1).
+    settings = clean_settings(profile_dir=None, owner_telegram_id=5)  # legacy
     assert settings.profile_dir is None
     monkeypatch.setattr(bot, "Settings", lambda: settings)
     monkeypatch.setattr(bot, "configure_logging", lambda: None)

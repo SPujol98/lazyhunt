@@ -107,18 +107,36 @@ CVs stay in `/setup <section>`.
 5. Spoken languages: tick the common ones (Spanish, English, Catalan, French,
    German, Italian, Portuguese) or type others ("Other languages"), then pick
    a level for each one: Native, C2, C1, B2, B1 or A2
-6. Main skills or stack, separated by commas (1-20 items, at most 50
-   characters each; spaces are normalized and repeats dropped)
+6. Main skills or stack, separated by commas (1-30 items, at most 50
+   characters each; spaces are normalized and repeats dropped). Tip: the
+   10-15 strongest work best.
 7. Experience: years (0, <1, 1-2, 3-5, 6-10, 10+), then your last role and
    its company (both optional: Skip; the company is asked only with a role)
-8. Highest education, in one line (optional: Skip)
+8. Education, up to 5 entries (optional: Skip): one per line or separated
+   by `;`; without either, separated by commas. Use one line per entry when
+   an entry has a comma (`BSc Computer Science, UPV`). Each entry, at most
+   100 characters, becomes its own claim.
 9. Work modes (remote, hybrid, on-site), then the city you want to work in
    (your city from step 2 is offered) and the country
-10. Minimum gross annual salary (or Skip), then the currency (EUR by default)
+10. Minimum gross annual salary (or Skip). When the profile's
+    `salary_reference.toml` has a range for one of your positions, your
+    level (junior or mid) and your work city (Barcelona, Madrid, or another
+    Spanish city with remote work accepted, as `spain_remote`), the step
+    shows "Typical for <role> <level> in <city>: <low>–<high> EUR
+    gross/year (source: …). Use <low>?" with a button that takes the low
+    end. Without such a row (no table, senior level, a country other than
+    Spain, a city that does not map) it says there is no reference: no
+    number is ever invented. Then the currency: buttons EUR, USD, GBP, CHF
+    and Other (type a 3-letter ISO code). The one ticked by default comes
+    from the country: the UK is GBP, the US USD, Switzerland CHF, anything
+    else (Spain and the euro area included) EUR. One currency on purpose:
+    the one your minimum salary is in.
 11. Languages an offer may be written in
 12. Portals to enable. Before a portal is enabled, you see the terms warning
     the browser extension shows for it.
-13. Base CV PDFs: one per position and language (see below), or Skip
+13. Base CVs: one per position type × language. For each one, upload
+    your PDF, create one with lazyhunt from your answers, or leave it for
+    later; optionally a base cover letter (see below)
 14. Summary, then Confirm or Edit
 
 ## After Confirm
@@ -207,7 +225,7 @@ with mode `0600` because it holds your contact data.
     "spoken_languages": [{"language": "es", "level": "native"}, {"language": "Basque", "level": "B1"}],
     "skills": ["Python", "SQL"],
     "experience": {"years": "3-5", "role": "Backend Developer", "company": "Acme"},
-    "education": "BSc Computer Science"
+    "education": ["BSc Computer Science"]
   },
   "portals": ["linkedin"],
   "answers": {"…": "every answer as given"}
@@ -219,7 +237,9 @@ language and the name as typed for any other; a typed name that matches a
 common one (`english`, `Inglés`) counts as that one. `level` is one of
 `native`, `C2`, `C1`, `B2`, `B1`, `A2`. `years` is one of `0`, `lt1`, `1-2`,
 `3-5`, `6-10`, `10plus`. `experience` is `null` without a years answer;
-`role`, `company` and `education` are `null` when skipped.
+`role` and `company` are `null` when skipped; `education` is a list of
+entries (empty when skipped). An older file whose `education` is one line
+still loads: that line is one entry, never split again.
 
 In the full bot, the new preferences and portals take effect immediately
 (`reload_preferences`; the bridge reads `enabled_portals` on every request).
@@ -227,7 +247,36 @@ Some service texts change only after a restart.
 
 ## Base CV PDFs (step 13)
 
-The bot delivers your base CVs as they are, so this step asks for one PDF
+The step starts by saying what base CVs are for: the bot sends this CV,
+adapted, for each offer; one per position type × language. For the slot
+marked 👈 it offers three buttons:
+
+- **📎 Upload my PDF**: send your own PDF as a file (the rules below).
+- **✨ Create one with lazyhunt**: pick one of three templates (Classic:
+  centred header and ruled sections; Modern: the name in blue, coloured
+  headings; Compact: smaller type, the most content on one page). The PDF is
+  built only from your answers (name, contact, target position, a profile
+  line from your level and years, last role and company, education entries,
+  skills, spoken languages with levels): empty sections are left out,
+  nothing is invented, and it is one column with selectable text, standard
+  headings, no photo and no tables (ATS-friendly). It is a starting point:
+  add projects and achievements later. It is stored exactly like an upload
+  (same pending area, same file name and manifest `sha256`), so delivery
+  works unchanged; on Confirm it is drawn again from your final answers.
+- **Not now**: leave that slot without a CV for now.
+
+**Skip all** first warns "Without a CV the bot cannot send any — create one
+now?" (listing the slots still without one), with **Create one now** and
+**Skip anyway**. **➕ Create another version** adds a base CV for another
+position type or language; it also adds that position to your searches or
+that language to the accepted offer languages when they were not there (full
+`/setup` only). When the profile has no `cover_letter_base.toml`, **✨ Create
+a base cover letter** writes one on Confirm from your answers (Spanish,
+English and Catalan; short and plain: who you are, your last role, your main
+skills); an existing file is never offered or overwritten, and it is part of
+the all-or-nothing Confirm.
+
+The rest of this section is about uploads. The bot asks for one PDF
 for each position you chose and each CV language that position ends up with
 (the accepted offer languages it can write: Spanish, English, Catalan). These
 are the `<ROLE>_<LANG>` keys of `cv_base_pdfs/manifest.json`, for example
@@ -338,7 +387,7 @@ the setup removes the files it just created and shows the error.
 | `setup-lang-<code>` or `setup-lang-<slug>` | `language` | `<Language> — <level>`, for example `Spanish — Native` (the language name) |
 | `setup-skill-<slug>` | `skill` | The skill as you typed it (the skill) |
 | `setup-experience` | `experience` | The years answer, then `Last role: <role> at <company>` with only what you typed, for example `3-5 years of professional experience · Last role: Backend Developer at Acme` (role, company) |
-| `setup-education` | `education` | The line as you typed it (no tags) |
+| `setup-education-<slug>` | `education` | One claim per education entry, as you typed it (no tags) |
 
 Language names, levels and the experience words are in the bot language you
 chose. `<slug>` is the text in lowercase ASCII (`+` becomes `plus`, `#`
@@ -405,6 +454,18 @@ step 13 (`cv_base_pdfs/`); skipped slots have no CV to send until you add one.
   read, only while `[search_targets] locations` is not written; the bridge
   serves them through `cva/suggest.py`. The next-step line of the full
   `/setup` reply is `onboarding.next_step`.
+- The starter CVs are `cva/cvgen/starter.py` (fpdf2 and the CV font,
+  templates `classic`, `modern`, `compact`) fed by
+  `cva/onboarding/starter.py` (`starter_cv`, `create_pending_cv`, which runs
+  the result through `cv_upload.accept_download`, and `write_cover_letter`).
+  The Confirm reply has one extension point for an extra line and keyboard:
+  `flow.CONFIRM_REPLY_EXTRAS` (callables `(env, lang)` returning a
+  `flow.ConfirmExtra` or `None`).
+- The profile endpoint's `education` is `null`, a list of entries, or one
+  string split like the questionnaire answer; `GET /profile` shows the
+  entries joined with `; `, which posts back unchanged.
+- A button pressed again that leaves the message as it is (Telegram's
+  "message is not modified") is ignored; any other edit error propagates.
 - Callback data looks like `ob:<step>:<action>[:<arg>]`. The prefix `ob` is
   registered in `bot.CALLBACK_HANDLERS`. In setup mode, a
   `CallbackQueryHandler(pattern="^ob:")` handles these callbacks.

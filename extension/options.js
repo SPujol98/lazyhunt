@@ -17,7 +17,7 @@ import {
 } from './filter.js';
 import {
   configUrl, dedupeSearchIds, expandSearches, mergeSuggestedSearches, normalizeSearches,
-  parseBotConfig, parseSuggestions, resolveEnabledPortals, suggestionsUrl,
+  pairUrl, parseBotConfig, parseSuggestions, resolveEnabledPortals, suggestionsUrl,
 } from './searches.js';
 import { mountProfileEditor, parseProfile, profileUrl } from './profile_editor.js';
 
@@ -29,6 +29,7 @@ const MAX_INTERVAL = 1440;
 const WARN_INTERVAL = 30;
 const FETCH_TIMEOUT_MS = 5000;
 const SECRET_HEADER = 'X-CVA-Bridge-Secret';
+const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:8765/bridge';
 const LOAD_KEYS = [
   'settings', 'beacons', 'searches', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters',
   'profileFamilies', 'familyTitleFilters', 'enabledPortals', 'botConfig', 'lastCheck', 'uiLanguage',
@@ -680,6 +681,68 @@ async function loadProfile() {
   }
 }
 
+// --- pairing with a one-time code (beta3-ux) ------------------------------------------
+
+// Trades the code /connect gave for the bridge secret (POST /pair) and stores
+// it exactly where a typed secret goes (settings.bridgeSecret), with the URL.
+async function pairWithCode() {
+  const code = $('pairCodeInput').value.trim();
+  if (!code) {
+    toast(tr('pairNeedsCode', null, 'Type the code the bot sent for /connect first.'), 'error');
+    return;
+  }
+  const bridgeUrl = state.draft.bridgeUrl.trim() || DEFAULT_BRIDGE_URL;
+  const url = pairUrl(bridgeUrl);
+  if (!url) {
+    toast(tr('pairNeedsUrl', null, 'Type a valid bridge URL first, for example http://127.0.0.1:8765/bridge.'), 'error');
+    return;
+  }
+  const button = $('pairBtn');
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  try {
+    let response;
+    try {
+      response = await fetchWithTimeout(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
+      });
+    } catch (_) {
+      toast(tr('suggestUnreachable', null, 'The bot is not reachable. Is it running?'), 'error');
+      return;
+    }
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (_) {
+      payload = null;
+    }
+    const secret = payload && typeof payload.secret === 'string' ? payload.secret.trim() : '';
+    if (response.status === 401) {
+      toast(tr('pairRejected', null, 'The code is wrong, used or expired: send /connect to the bot for a new one.'), 'error');
+      return;
+    }
+    if (!response.ok || !secret) {
+      toast(tr('suggestHttpError', response.status, 'The bot answered with HTTP $1.'), 'error');
+      return;
+    }
+    const fresh = asObject((await chrome.storage.local.get('settings')).settings);
+    const settings = { ...fresh, bridgeUrl, bridgeSecret: secret };
+    await chrome.storage.local.set({ settings });
+    state.stored = { ...state.stored, settings };
+    state.draft.bridgeUrl = bridgeUrl;
+    state.draft.bridgeSecret = secret;
+    $('pairCodeInput').value = '';
+    renderConnection();
+    renderStatus();
+    await notifyWorker();
+    toast(tr('pairDone', null, 'Paired: the bridge secret is saved.'), 'ok');
+    await fetchBotConfig();
+  } finally {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+  }
+}
+
 // --- suggestions -----------------------------------------------------------------
 
 async function suggestSearches() {
@@ -1152,6 +1215,7 @@ function wire() {
     markDirty();
   });
   $('toggleSecretBtn').addEventListener('click', toggleSecret);
+  $('pairBtn').addEventListener('click', pairWithCode);
   $('clearHistoryBtn').addEventListener('click', clearHistory);
   for (const button of $('languageSegment').querySelectorAll('[data-lang]')) {
     button.addEventListener('click', () => setLanguage(button.getAttribute('data-lang')));

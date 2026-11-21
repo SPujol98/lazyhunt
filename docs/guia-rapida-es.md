@@ -79,37 +79,41 @@ uv run cli.py init
 ```
 
 El asistente solo configura el bot; lo que tiene que ver contigo llega después,
-en Telegram. **Sus preguntas están en inglés**; aquí tienes qué contestar en
-cada una. Pulsa Intro para saltar un paso; no escribe nada hasta que
+en Telegram. La primera pregunta es el idioma (en inglés y en español):
+contesta `es` y **el resto del asistente te habla en español**. Aquí tienes qué
+contestar en cada paso. Pulsa Intro para saltar un paso; no escribe nada hasta que
 confirmas el resumen y puedes repetirlo cuando quieras.
 
-1. **Prerequisites.** Comprueba Python, `uv`, que `claude` esté instalado y
+1. **Idioma del bot** (*Language / Idioma*). `auto` (el idioma de tu
+   sistema), `en` o `es`. Escribe `es` para tener el asistente, el bot, la
+   línea de comandos y el panel en español. Los CV y las cartas siguen el
+   idioma de cada oferta.
+2. **Requisitos.** Comprueba Python, `uv`, que `claude` esté instalado y
    con la sesión iniciada, y si tienes `codex`. Si falta algo, te dice cómo
    arreglarlo y sigue.
-2. **Bot language.** `auto` (el idioma de tu sistema), `en` o `es`. Escribe
-   `es` para tener el bot, la línea de comandos y el panel en español. Los CV
-   y las cartas siguen el idioma de cada oferta.
-3. **AI provider.** Pulsa Intro para `claude_code`, o elige otra IA (puedes
+3. **Proveedor de IA.** Pulsa Intro para `claude_code`, o elige otra IA (puedes
    escribir el nombre o su número): `codex_cli`, `anthropic` u
    `openai_compatible`. Mira [¿Otra IA?](#otra-ia) más abajo.
-4. **Telegram.**
-   - Abre [@BotFather](https://t.me/BotFather), envía `/newbot` y sigue los
-     pasos (un nombre y un usuario que acabe en `bot`). Pega el token que te
-     da; no se ve mientras lo escribes.
-   - Abre [@userinfobot](https://t.me/userinfobot) y copia tu id numérico.
-     El bot **solo** contesta a ese id.
-5. **Bridge secret.** Genera un secreto aleatorio largo que la extensión usa
-   para hablar con el bot. No tienes que hacer nada.
-6. **Profile directory.** Deja `profiles/me` y, en `Start from [3]`, pulsa
+4. **Telegram.** En Telegram busca [@BotFather](https://t.me/BotFather),
+   envía `/newbot`, escribe un nombre y luego un usuario que acabe en `bot`.
+   Te responde con un token como `1234567890:AAH…`: pega la línea entera; no
+   se ve mientras la pegas (es normal). **No hace falta tu id numérico**: al
+   arrancar, el bot te da un código de un solo uso (paso 5). Si ya lo sabes,
+   `uv run cli.py init --owner-id <id>` lo escribe.
+5. **Secreto del puente.** Genera un secreto aleatorio largo que la extensión
+   usa para hablar con el bot. No tienes que copiarlo: el bot le da a la
+   extensión un código de emparejamiento (`/conectar`, paso 7).
+6. **Carpeta del perfil.** Deja `profiles/me` y, en `Empezar con [3]`, pulsa
    Intro: la opción **3, un perfil vacío**, es la recomendada. El bot arranca
    en *modo configuración* y crea el perfil contigo con `/configurar`.
    (La 2 copia el perfil de demostración, de una persona ficticia, por si
    quieres curiosear antes.)
 7. **Gmail.** Solo un enlace a [gmail.md](gmail.md); queda desactivado.
 
-Al final contesta `y` a `Write these changes?`. Después te ofrece mostrar el
-secreto del puente (`Show the bridge secret now…?`): di `y` y guárdalo para el
-paso 7, o búscalo luego como `CVA_BRIDGE_SECRET` en `.env`.
+Al final contesta `s` (o `y`) a `¿Escribir estos cambios?`. Después te
+ofrece mostrar el secreto del puente: no hace falta (emparejarás con
+`/conectar`), pero si prefieres pegarlo a mano di `s`, o búscalo luego como
+`CVA_BRIDGE_SECRET` en `.env`.
 
 ### ¿Otra IA?
 
@@ -139,9 +143,26 @@ conservas todo lo demás. Detalles: [providers.md](providers.md).
 uv run bot.py
 ```
 
-Abre tu bot en Telegram y envía `/help`. Con el perfil vacío contesta en
-**modo configuración**: solo funcionan `/help`, `/start` y `/configurar`
-hasta que completes el perfil.
+**La primera vez**, el terminal muestra un código de un solo uso (y un enlace
+`t.me` que lo envía por ti):
+
+```text
+lazyhunt aún no tiene dueño. Para ser su dueño, envía este mensaje a tu bot en Telegram:
+
+    /start ABCD-EFGH
+```
+
+Envía exactamente eso a tu bot. Te contesta que ya eres su dueño y guarda tu id
+como `owner_telegram_id` en `config.local.toml`; desde entonces **solo** te
+contesta a ti. Hasta entonces ignora todos los mensajes, y a un código
+incorrecto no responde. El código sirve una vez, durante 30 minutos; tras 5
+intentos fallidos deja de funcionar: reinicia el bot para obtener otro. Solo se
+muestra en un terminal, nunca en un archivo de log: aunque luego lo uses como
+servicio, la primera vez arráncalo con `uv run bot.py` en un terminal.
+
+Después envía `/help`. Con el perfil vacío contesta en **modo
+configuración**: solo funcionan `/help`, `/start`, `/configurar` y
+`/conectar` hasta que completes el perfil.
 
 El bot funciona mientras ese terminal siga abierto. Para dejarlo en segundo
 plano o que arranque al iniciar sesión (systemd, launchd o el Programador de
@@ -202,10 +223,13 @@ repositorio. Sus textos siguen el idioma de tu navegador.
 1. Abre `chrome://extensions` (en Brave, `brave://extensions`), activa el
    **Modo de desarrollador**, pulsa **Cargar extensión sin empaquetar**
    (*Load unpacked* si tu navegador está en inglés) y elige la carpeta `extension/` del repositorio.
-2. Abre las **Opciones** de la extensión › **Frecuencia y bot**. En
-   **URL del puente** pon `http://127.0.0.1:8765/bridge` y en
-   **Secreto del puente** pega el secreto (`CVA_BRIDGE_SECRET` en `.env`).
-   Pulsa **Guardar cambios**.
+2. Envía `/conectar` al bot: te responde un código de un solo uso. Abre las
+   **Opciones** de la extensión › **Frecuencia y bot**, escríbelo en
+   **Emparejar con código** y pulsa **Emparejar**: la URL del puente
+   (`http://127.0.0.1:8765/bridge`) y el secreto se rellenan y se guardan
+   solos. El código sirve una vez, durante 10 minutos. (Pegar el secreto a mano
+   en **Secreto del puente** sigue funcionando: es `CVA_BRIDGE_SECRET` en
+   `.env`; pulsa luego **Guardar cambios**.)
 3. En **Portales**, activa **los mismos** que elegiste en `/configurar`: un
    portal solo se escanea si está activo en el bot y en la extensión. Cada
    interruptor muestra el aviso de condiciones y pide al navegador permiso
@@ -213,11 +237,16 @@ repositorio. Sus textos siguen el idioma de tu navegador.
 4. En **Búsquedas**, pulsa **Sugerir desde mi perfil**. Propone búsquedas
    hechas con tus respuestas (los puestos que elegiste, en tu ciudad si
    aceptas presencial o híbrido, más una en remoto si lo aceptas). Quédate
-   con las que quieras, añade las tuyas y pulsa **Guardar cambios**.
+   con las que quieras, añade las tuyas y pulsa **Guardar cambios**. Mientras
+   no tengas ninguna, la ventana de la extensión dice "Todavía no hay
+   búsquedas" y te trae aquí.
 
 **Tu primera oferta.** No hace falta esperar: pulsa **Comprobar ahora** en la
 ventana de la extensión (su icono en la barra), o pega el enlace de una
-oferta en Telegram con `/analyze <url>`. Después las rondas se repiten solas
+oferta en Telegram con `/analyze <url>`. Si no puede revisar nada, lo dice al
+momento (el bot no responde, rechaza el secreto, falta terminar
+`/configurar`, no hay búsquedas o ningún portal está activo) y **Pausar**
+detiene una ronda en curso. Después las rondas se repiten solas
 cada 60 minutos (se cambia en **Frecuencia y bot**).
 
 **La tarjeta en Telegram** trae la puntuación de 0 a 100, el veredicto
@@ -269,9 +298,10 @@ contacto, los portales y los CV solo se cambian con `/configurar <sección>`.
 
 **El bot no contesta en Telegram.**
 Comprueba que sigue en marcha (el terminal o tu servicio). `CVA_TELEGRAM_TOKEN`
-en `.env` debe ser el token de BotFather, y `owner_telegram_id` en
-`config.local.toml` tu id numérico de @userinfobot: mientras valga `0` ignora
-todos los mensajes. `uv run cli.py check` carga tu configuración sin Telegram y
+en `.env` debe ser el token de BotFather. Si aún no tiene dueño
+(`owner_telegram_id` sin definir o `0`), solo atiende `/start <código>` con el
+código que muestra su terminal; tras 5 códigos incorrectos o 30 minutos,
+reinícialo para obtener otro. Ya emparejado, solo contesta al id guardado. `uv run cli.py check` carga tu configuración sin Telegram y
 nombra el ajuste que esté mal.
 
 **Solo contesta a `/configurar`.** Está en modo configuración: termina el
@@ -282,9 +312,11 @@ conservan. El mensaje nombra el archivo y la causa (suele ser un
 `preferences.toml` o `config.local.toml` editado a mano que ya no se lee):
 corrígelo y pulsa **Confirmar** otra vez.
 
-**La extensión dice "Bot sin conectar".** El bot tiene que estar en marcha,
-la URL del puente debe ser exactamente `http://127.0.0.1:8765/bridge` y el
-secreto, el mismo que `CVA_BRIDGE_SECRET`. Si al sugerir búsquedas sale
+**La extensión dice "Bot sin conectar".** El bot tiene que estar en marcha y
+la URL del puente debe ser exactamente `http://127.0.0.1:8765/bridge`. Lo más
+fácil es volver a emparejar: `/conectar` en el bot y el código en **Emparejar
+con código**. Un secreto escrito a mano debe ser el mismo que
+`CVA_BRIDGE_SECRET`. Si al sugerir búsquedas sale
 "El bot ha rechazado el secreto.", el secreto no coincide. Si el log dice
 `bridge bind failed on 127.0.0.1:8765`, otro programa usa ese puerto: pon otro
 `bridge_port` en `config.local.toml`, reinicia y usa ese puerto en la URL.

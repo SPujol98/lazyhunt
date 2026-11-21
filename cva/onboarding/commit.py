@@ -14,7 +14,7 @@ caller that reads the current answers before writing can hold it around both.
 
 import json
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -22,6 +22,7 @@ from typing import Any, Final
 from cva.i18n import Lang
 from cva.onboarding import answers as A
 from cva.onboarding import cv_upload as U
+from cva.onboarding import starter
 from cva.onboarding.portals import write_enabled_portals
 from cva.onboarding.profile_gen import (
     GENERATED_FILES,
@@ -44,6 +45,7 @@ class Committed:
     identity: IdentitySync = "unchanged"  # the identity claim (contact answers)
     identity_claim: str = ""  # its id
     portals: list[str] | None = None  # enabled_portals written (None: not)
+    cover_letter: bool = False  # cover_letter_base.toml created (beta3-ux T4)
 
 
 def _previous_contact(profile_dir: Path) -> dict[str, Any] | None:
@@ -74,6 +76,9 @@ def commit_all(
     section: str | None,
     hooks: Iterable[Hook],
     config_path: Path | None = None,
+    *,
+    cover_letter: bool = False,
+    declared: Sequence[tuple[str, str]] = (),
 ) -> Committed:
     """Write everything Confirm writes, or nothing: on any failure every file
     is put back as it was (:mod:`cva.onboarding.snapshot`) and
@@ -88,7 +93,12 @@ def commit_all(
     With ``config_path`` (``config.local.toml``), the full questionnaire and
     ``/setup portals`` also set its ``enabled_portals`` to the chosen portals
     (:func:`cva.onboarding.portals.write_enabled_portals`), inside the same
-    snapshot: a failure anywhere puts that file back too."""
+    snapshot: a failure anywhere puts that file back too.
+
+    With ``cover_letter`` a profile without ``cover_letter_base.toml`` gets
+    one written from the answers (:func:`cva.onboarding.starter.write_cover_letter`;
+    ``declared`` labels the kept non-built-in families), inside the same
+    snapshot; an existing file is never touched."""
     config = config_path if section in (None, "portals") else None
     with WRITE_LOCK:
         try:
@@ -106,6 +116,7 @@ def commit_all(
                         )
                     ),
                     *([config] if config is not None else []),
+                    starter.letter_path(profile_dir),
                 ],
                 [U.base_dir(profile_dir)],
             )
@@ -114,11 +125,16 @@ def commit_all(
         previous = _previous_contact(profile_dir)
         identity: tuple[IdentitySync, str] = ("unchanged", "")
         portals: list[str] | None = None
+        letter = False
         try:
             A.write_answers(profile_dir, answers, lang, section)
             stored = U.commit(profile_dir, got, slots, str(answers.get("name") or ""))
             for hook in hooks:
                 hook(profile_dir, answers)
+            if cover_letter:
+                letter = starter.write_cover_letter(
+                    profile_dir, answers, list(declared)
+                )
             if section in (None, "contact"):
                 identity = sync_identity_claims(profile_dir, previous, answers)
             if config is not None:
@@ -137,4 +153,4 @@ def commit_all(
             if not isinstance(exc, (ProfileError, OSError)):
                 raise
             raise ConfirmFailed(exc, undo) from exc
-        return Committed(stored, *identity, portals)
+        return Committed(stored, *identity, portals, letter)

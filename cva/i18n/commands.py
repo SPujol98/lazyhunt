@@ -135,6 +135,12 @@ EN: Final[dict[str, str]] = {
         "Guided profile setup, or only one section (contact, salary, cvs...)."
     ),
     "commands.cmd.configurar.example": "/setup salary",
+    "commands.cmd.conectar.usage": "/connect",
+    "commands.cmd.conectar.menu": "Connect the browser extension (pairing code)",
+    "commands.cmd.conectar.explanation": (
+        "A one-time code to type in the extension's Options (no .env to open)."
+    ),
+    "commands.cmd.conectar.example": "/connect",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Show this help",
     "commands.cmd.help.explanation": "Commands and buttons (also /start).",
@@ -347,6 +353,12 @@ ES: Final[dict[str, str]] = {
         "Configuración guiada del perfil, o solo una sección (salario, cvs...)."
     ),
     "commands.cmd.configurar.example": "/configurar salario",
+    "commands.cmd.conectar.usage": "/conectar",
+    "commands.cmd.conectar.menu": "Conecta la extensión del navegador (código)",
+    "commands.cmd.conectar.explanation": (
+        "Un código de un solo uso para las Opciones de la extensión (sin abrir .env)."
+    ),
+    "commands.cmd.conectar.example": "/conectar",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Muestra esta ayuda",
     "commands.cmd.help.explanation": "Comandos y botones (también /start).",

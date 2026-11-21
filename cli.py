@@ -104,6 +104,15 @@ def _non_negative_float(lang: Lang) -> Callable[[str], float]:
     return parse
 
 
+def _owner_id(lang: Lang) -> Callable[[str], int]:
+    def parse(value: str) -> int:
+        if not value.strip().isdigit() or int(value) <= 0:
+            raise argparse.ArgumentTypeError(t("wizard.cli.owner_id_invalid", lang))
+        return int(value)
+
+    return parse
+
+
 def _score_0_100(lang: Lang) -> Callable[[str], int]:
     def parse(value: str) -> int:
         try:
@@ -376,11 +385,18 @@ def build_parser(
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser(
+    init = sub.add_parser(
         "init",
         help="interactive first-run setup: checks Claude Code, writes secrets to "
         ".env and settings to config.local.toml, creates a profile skeleton "
         "(safe to re-run)",
+    )
+    init.add_argument(
+        "--owner-id",
+        type=_owner_id(lang),
+        default=None,
+        metavar="ID",
+        help=t("wizard.cli.owner_id", lang),
     )
     sub.add_parser("check", help=h("check"))
 
@@ -496,14 +512,14 @@ def run(
         "judge-eval": lambda: _cmd_judge_eval(service, args, settings, lang),
         "rejudge": lambda: _cmd_rejudge(service, args, settings, lang),
         "gmail-auth": lambda: _cmd_gmail_auth(args, settings, lang),
-        "init": _cmd_init,
+        "init": lambda: _cmd_init(args.owner_id),
     }
     return handlers[args.command]()
 
 
-def _cmd_init() -> str:
+def _cmd_init(owner_id: int | None = None) -> str:
     """Run the setup wizard in the current directory (it prints as it goes)."""
-    code = run_init(Path.cwd())
+    code = run_init(Path.cwd(), owner_id=owner_id)
     return "" if code == 0 else f"init ended with exit code {code}"
 
 
@@ -517,8 +533,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     arguments = list(argv if argv is not None else sys.argv[1:])
     if arguments[:1] == ["init"]:
         # A fresh clone has no token yet: never load Settings for the wizard.
-        build_parser(lang=DEFAULT_LANG).parse_args(arguments)
-        code = run_init(Path.cwd())
+        parsed = build_parser(lang=DEFAULT_LANG).parse_args(arguments)
+        code = run_init(Path.cwd(), owner_id=parsed.owner_id)
         if code:
             raise SystemExit(code)
         return

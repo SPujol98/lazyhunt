@@ -5,6 +5,7 @@ import { t } from '../i18n.js';
 import { noResultsSource } from '../portals/registry.js';
 import { SESSION_EXPIRED_CODE } from './constants.js';
 import { sleep } from './util.js';
+import { bounded } from './cancel.js';
 
 // The portal's login wall. Its message is the code scan_report.js classifies
 // as `session_expired`; `userMessage` is the text shown to the owner.
@@ -39,7 +40,7 @@ export async function scanPage(tab, url, portal) {
   if (typeof portal.isSessionExpired === 'function' && portal.isSessionExpired(await tab.currentUrl())) {
     throw new SessionExpiredError(portal);
   }
-  await sleep(portal.settleMs || 0);
+  await bounded(sleep(portal.settleMs || 0));
   const result = await tab.run(portal.extractCards);
   const cards = Array.isArray(result) ? result : [];
   const noResults = cards.length === 0 ? await confirmedEmpty(tab, portal) : false;

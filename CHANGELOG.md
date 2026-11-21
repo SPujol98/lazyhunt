@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.3] - 2026-11-21
+
+Third pre-release for testers: a much shorter first run, based on the first real test.
+
+### Added
+
+- No more looking up your numeric Telegram id: the bot prints a one-time code when it starts, and you send it `/start <code>` (single use, 30 minutes).
+- Connect the extension without opening `.env`: send `/connect` (`/conectar`) to the bot and paste the one-time code in the extension's Options.
+- `uv run cli.py init` speaks Spanish when you choose Spanish, with step-by-step @BotFather help.
+- No CV yet? The CV step of `/setup` can create one for you from three plain, ATS-friendly templates (Classic, Modern, Compact), built only from your answers, plus a base cover letter. "Create another version" adds one for another kind of job.
+- Several education entries; a minimum-salary suggestion when the profile's salary reference has data for your role, level and city (never invented); currency buttons; up to 30 skills.
+
+### Changed
+
+- The CV step explains what base CVs are for and asks before skipping them all.
+- The extension tells you why a check cannot run (no searches, no portal, bot not reachable, wrong secret, setup not finished) and points to "Suggest from my profile" when there are no searches. Every wait has a time limit and Pause stops a running check at once.
+
+### Fixed
+
+- `/start` and `/help` no longer fail with "Message is too long" on profiles with many positions.
+- Pressing a setup button that changes nothing no longer logs an error.
+
 ## [2.0.0-beta.2] - 2026-11-21
 
 Second pre-release for testers: use the AI you already have.
@@ -140,7 +162,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...HEAD
+[2.0.0-beta.3]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...v2.0.0-beta.3
 [2.0.0-beta.2]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...v2.0.0-beta.2
 [2.0.0-beta.1]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...v2.0.0-beta.1
 [0.5.0]: https://github.com/SPujol98/lazyhunt/compare/v0.4.2...v0.5.0

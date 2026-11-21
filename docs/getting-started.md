@@ -70,6 +70,9 @@ Telegram. It asks everything first, shows a summary, and writes only after you
 confirm. Press Enter to skip any step; you can run it again at any time and
 it never overwrites a value without asking.
 
+The first question is the language (asked in English and Spanish); the rest
+of the wizard speaks the language you choose.
+
 1. **Prerequisites.** It checks Python, `uv`, and `claude` (`claude --version`
    and `claude auth status`; only the "logged in" yes/no is read). If
    `claude` is missing or logged out it tells you how to fix it and goes on.
@@ -94,11 +97,16 @@ it never overwrites a value without asking.
      and Enter sets the placeholder `local`.
 
    On a re-run, Enter keeps every current value, including the key.
-4. **Telegram.** Create a bot: open [@BotFather](https://t.me/BotFather),
-   send `/newbot` and follow the steps; paste the token it gives you (the
-   input is hidden). Get your numeric user id from
-   [@userinfobot](https://t.me/userinfobot); the bot answers only that id.
+4. **Telegram.** Create a bot: in Telegram open
+   [@BotFather](https://t.me/BotFather), send `/newbot`, type a name and then
+   a username ending in `bot`. It replies with a token like
+   `1234567890:AAH…`: paste the whole token (the input is hidden, nothing
+   appears while you paste). Your numeric user id is **not** asked: the bot
+   pairs with you through a one-time code when it starts (step 4). If you
+   already know it, `uv run cli.py init --owner-id <id>` writes it.
 5. **Bridge secret.** A long random secret is generated for the extension.
+   You never copy it: the bot gives the extension a one-time pairing code
+   (`/connect`, step 6).
 6. **Profile directory.** Default `profiles/me` (gitignored). Choose an
    empty profile (the default and the recommended choice: the bot starts in
    setup mode and builds the profile with you through `/setup`), a skeleton
@@ -111,7 +119,7 @@ Where things go:
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, and `ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY` if your provider needs one |
-| `config.local.toml` | `ui_language`, `llm_provider` (plus `llm_base_url` and `llm_model` for `openai_compatible`), `owner_telegram_id`, `profile_dir` |
+| `config.local.toml` | `ui_language`, `llm_provider` (plus `llm_base_url` and `llm_model` for `openai_compatible`), `profile_dir`; `owner_telegram_id` once you pair with `/start <code>` |
 | `profiles/me/` | your profile |
 
 Both files are gitignored. Secrets are read from the environment only;
@@ -124,9 +132,19 @@ values put in TOML files are ignored. Manual setup is still possible: copy
 uv run bot.py
 ```
 
-Send `/help` to your bot in Telegram. With an empty profile it answers in
-**setup mode**: only `/help`, `/start` and `/setup` work until the profile
-is complete, and `/start` tells you to run `/setup`.
+**The first time**, the terminal shows a one-time code such as
+`/start ABCD-EFGH` (plus a `t.me` link that sends it for you). Send exactly
+that to your bot: it answers that you are its owner and saves your id as
+`owner_telegram_id` in `config.local.toml`. From then on it answers only you.
+Until then it ignores every message and gives no answer to a wrong code. The
+code works once, for 30 minutes; after 5 wrong tries it stops working, and a
+restart prints a new one. It is shown only in a terminal, never in a log
+file, so run `uv run bot.py` in a terminal the first time even if you later
+run it as a service.
+
+Then send `/help`. With an empty profile it answers in **setup mode**: only
+`/help`, `/start`, `/setup` and `/connect` work until the profile is
+complete, and `/start` tells you to run `/setup`.
 
 The bot runs as long as that terminal stays open. To keep it running in the
 background or start it when you log in (systemd, launchd or Task Scheduler),
@@ -181,9 +199,12 @@ bot before answering anything, choose the demo profile in the wizard (or set
 
 1. Open `chrome://extensions`, turn on **Developer mode**, click **Load
    unpacked** and select the `extension/` directory.
-2. In the extension's **Options › Schedule and bot**, set the bridge URL to
-   `http://127.0.0.1:8765/bridge` and paste the bridge secret. It is
-   `CVA_BRIDGE_SECRET` in `.env`; the wizard can also show it once at the end.
+2. Send `/connect` (`/conectar`) to the bot; it answers a one-time code.
+   In the extension's **Options › Schedule and bot**, type it under **Pair
+   with code** and press **Pair**: the bridge URL
+   (`http://127.0.0.1:8765/bridge`) and secret are filled in and saved. The
+   code works once, for 10 minutes. Typing the secret by hand still works
+   (`CVA_BRIDGE_SECRET` in `.env`; the wizard can show it once at the end).
 3. In **Options › Portals**, switch on the same portals you chose in
    `/setup`. `/setup` activated them on the bot, but a portal is scanned only
    when it is on in both places. Each switch shows the portal's terms warning
@@ -192,11 +213,14 @@ bot before answering anything, choose the demo profile in the wizard (or set
    searches built from your answers: the roles of each position you chose, in
    your city when you accept on-site or hybrid work, plus a remote search
    when you accept remote work. Tick the ones you want, or add your own.
+   Until you have a search, the popup says "No searches yet" and points here.
 
 ## 7. Get your first offer
 
 Click **Check now** in the extension's toolbar popup to run a round
-immediately, or paste an offer link into Telegram with `/analyze <url>`.
+immediately (when it cannot scan it says why at once: bot not reachable,
+secret rejected, `/setup` not finished, no searches, or no portal enabled;
+**Pause** stops a round in progress), or paste an offer link into Telegram with `/analyze <url>`.
 After that, rounds run on their own every 60 minutes by default. `/pause`
 stops every automatic task at once (`/pausa` in Spanish; both work).
 

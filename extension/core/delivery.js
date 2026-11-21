@@ -16,6 +16,7 @@ import {
   MAX_DETAIL_PER_ROUND, MAX_DETAIL_ATTEMPTS, SEEN_LIMIT_PER_BEACON, DETAIL_SETTLE_MS, BEFORE_DETAIL_MS,
 } from './constants.js';
 import { sleep, randomBetween, log } from './util.js';
+import { RoundCancelled, bounded, throwIfCancelled } from './cancel.js';
 
 function titleFilterPasses(beacon, filters) {
   if (beacon.auto && beacon.titleFilter === 'off') return () => true;
@@ -25,12 +26,13 @@ function titleFilterPasses(beacon, filters) {
 
 async function readDetail(tab, portal, card) {
   try {
-    await sleep(randomBetween(BEFORE_DETAIL_MS));
+    await bounded(sleep(randomBetween(BEFORE_DETAIL_MS)));
     await tab.load(card.link);
-    await sleep(DETAIL_SETTLE_MS);
+    await bounded(sleep(DETAIL_SETTLE_MS));
     const text = await tab.run(portal.extractDetail, portal.detailArgs || []);
     return typeof text === 'string' && text.trim() ? text : null;
-  } catch {
+  } catch (error) {
+    if (error instanceof RoundCancelled) throw error; // Pause: stop the round
     return null;
   }
 }
@@ -70,6 +72,7 @@ async function collectOffers({ tab, portal, beacon, passing, ledger }) {
   const offers = [];
   passing.slice(MAX_DETAIL_PER_ROUND).forEach((card) => ledger.retry.add(String(card.id)));
   for (const card of passing.slice(0, MAX_DETAIL_PER_ROUND)) {
+    throwIfCancelled();
     const text = await readDetail(tab, portal, card);
     if (text) offers.push({ card, text });
     else ledger.fail(String(card.id), beacon);

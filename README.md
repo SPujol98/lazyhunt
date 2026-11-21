@@ -122,11 +122,11 @@ uv run cli.py init
 
 The wizard only sets up the bot itself; everything about you comes later, in Telegram. It asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
 
-1. **Prerequisites.** Checks Python, `uv`, that `claude` is installed and logged in (only the yes/no is read) and whether `codex` is installed. If something is missing it tells you how to fix it and carries on.
-2. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`.
+1. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`, and the wizard itself continues in that language.
+2. **Prerequisites.** Checks Python, `uv`, that `claude` is installed and logged in (only the yes/no is read) and whether `codex` is installed. If something is missing it tells you how to fix it and carries on.
 3. **AI provider.** `claude_code` (default), `codex_cli`, `anthropic` or `openai_compatible`. The two CLIs use your own login and need no key. For `anthropic` it asks your API key (hidden). For `openai_compatible` it offers presets (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, or another URL), then the model (filled in from the preset) and the API key (hidden; for a local Ollama or LM Studio server any value works, and Enter sets a placeholder).
-4. **Telegram.** Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the steps, then paste the token it gives you (the input is hidden). Get your numeric user id from [@userinfobot](https://t.me/userinfobot): the bot will answer **only** that id.
-5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot.
+4. **Telegram.** In Telegram open [@BotFather](https://t.me/BotFather), send `/newbot`, type a name and then a username ending in `bot`; it replies with a token like `1234567890:AAH…`. Paste the whole token (the input is hidden: nothing appears while you paste). You do **not** need your numeric user id: when the bot starts it prints a one-time code, and whoever sends `/start <code>` to the bot first becomes its only owner (see step 3). Already know your id? `uv run cli.py init --owner-id <id>` writes it.
+5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot. You never copy it: the bot gives the extension a one-time pairing code (step 5).
 6. **Profile directory.** Creates `profiles/me` (gitignored). Choose **empty** (the default and the recommended choice): the bot then starts in *setup mode* and builds the profile with you through `/setup`. The other choices are a skeleton with placeholders to fill in by hand, or a copy of the fictional demo profile to try things first.
 7. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
 
@@ -135,7 +135,7 @@ Where things end up:
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, and the API key if your provider needs one (`ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY`) |
-| `config.local.toml` | Settings: `ui_language`, `llm_provider` (with `llm_base_url` and `llm_model` for `openai_compatible`), `owner_telegram_id`, `profile_dir`; later `enabled_portals`, the portals you choose in `/setup` |
+| `config.local.toml` | Settings: `ui_language`, `llm_provider` (with `llm_base_url` and `llm_model` for `openai_compatible`), `profile_dir`; later `owner_telegram_id` (written when you pair with `/start <code>`) and `enabled_portals`, the portals you choose in `/setup` |
 | `profiles/me/` | Your profile (empty until `/setup`) |
 
 > [!TIP]
@@ -147,7 +147,17 @@ Where things end up:
 uv run bot.py
 ```
 
-Open your bot in Telegram and send `/help`. With an empty profile it answers in **setup mode**: only `/help`, `/start` and `/setup` work until your profile is complete.
+**The first time**, the terminal shows a one-time code (and a `t.me` link that sends it for you):
+
+```text
+lazyhunt has no owner yet. To become its owner, send this message to your bot in Telegram:
+
+    /start ABCD-EFGH
+```
+
+Send exactly that to your bot. It answers that you are now its owner and saves your id as `owner_telegram_id` in `config.local.toml`; from then on it answers **only** you. Until then it ignores every message, and a wrong code gets no answer. The code works once, for 30 minutes, and after 5 wrong tries it stops working: restart the bot for a new one. It is shown only in a terminal, never in a log file: if you run the bot as a service from the start, run `uv run bot.py` once in a terminal first.
+
+Then send `/help`. With an empty profile it answers in **setup mode**: only `/help`, `/start`, `/setup` and `/connect` work until your profile is complete.
 
 The bot runs as long as that terminal stays open. To keep it running in the background, or to start it when you log in (systemd on Linux, launchd on macOS, Task Scheduler on Windows), see [docs/running.md](docs/running.md).
 
@@ -168,9 +178,9 @@ Every step has **Back** and **Cancel**, and nothing is saved until you press **C
 ### 5. Load the extension
 
 1. Open `chrome://extensions` (Brave: `brave://extensions`), turn on **Developer mode**, click **Load unpacked** and select the `extension/` folder of this repository. The extension is not in a store; you load it straight from the code you can read.
-2. Open the extension's **Options › Schedule and bot**. Set the bridge URL to `http://127.0.0.1:8765/bridge` and paste the bridge secret (it is `CVA_BRIDGE_SECRET` in `.env`; the wizard can also show it once at the end).
+2. Send `/connect` (`/conectar`) to the bot: it answers a one-time pairing code. In the extension's **Options › Schedule and bot**, type it under **Pair with code** and press **Pair**: the bridge URL (`http://127.0.0.1:8765/bridge` by default) and the secret are filled in and saved for you. The code works once, for 10 minutes; send `/connect` again for a new one. (Typing the secret by hand still works: it is `CVA_BRIDGE_SECRET` in `.env`, and the wizard can show it once at the end.)
 3. In **Options › Portals**, switch on the same portals you chose in `/setup`. `/setup` activated them on the bot, but a portal is scanned only when it is on in both places. Each switch shows the portal's terms warning and asks the browser for permission to that single site.
-4. In **Options › Searches**, press **Suggest from my profile**. It proposes searches built from your answers: the roles of each position you chose, in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work. Tick the ones you want, or add your own (keywords and location). Each search runs on every portal you tick.
+4. In **Options › Searches**, press **Suggest from my profile** (until you do, the popup says "No searches yet" and **Check now** has nothing to scan). It proposes searches built from your answers: the roles of each position you chose, in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work. Tick the ones you want, or add your own (keywords and location). Each search runs on every portal you tick.
 
 Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Manfred, Adzuna and foorilla (*experimental*: its search filter has not been verified on the live site, its cards carry no company name, and it is a worldwide feed, so expect to rely on the location gate and title filters). Status and caveats per portal: [docs/portals.md](docs/portals.md#portal-status).
 
@@ -373,7 +383,7 @@ Everything that describes you or your search is yours to change, and none of it 
 
 - Check that it is running: the terminal where you started it, or your service (see [docs/running.md](docs/running.md)).
 - `CVA_TELEGRAM_TOKEN` in `.env` must be the token BotFather gave you; after `/revoke`, paste the new one and restart.
-- `owner_telegram_id` in `config.local.toml` must be **your** numeric id from [@userinfobot](https://t.me/userinfobot). The bot ignores everyone else, and while it is `0` it ignores every message (the log says `owner_telegram_id is 0 (unset)`).
+- Has it got an owner? While `owner_telegram_id` is unset (`0`) the bot ignores every message except `/start <code>` with the code printed in its terminal (the log says `waiting for the owner claim`; started without a terminal it prints no code and says to run `uv run bot.py` once in a terminal). After 5 wrong codes, or 30 minutes, restart it for a new code. Once paired, it answers only the id saved in `owner_telegram_id`.
 - `uv run cli.py check`, run in the lazyhunt folder, loads your settings and profile without Telegram and runs any due beacons stored in the bot; if a setting is wrong, the error names it.
 
 </details>
@@ -395,7 +405,9 @@ Everything that describes you or your search is yours to change, and none of it 
 <br>
 
 - The bot must be running, and the bridge URL in **Options › Schedule and bot** must be exactly `http://127.0.0.1:8765/bridge`.
-- The secret must be the same as `CVA_BRIDGE_SECRET` in `.env`. A wrong secret is answered with HTTP 401 ("The bot rejected the secret." when you press **Suggest from my profile**). Without a secret in `.env` the bot opens no port at all.
+- Pair again: send `/connect` to the bot and type the code under **Options › Schedule and bot › Pair with code**. "The code is wrong, used or expired" means exactly that: ask for a new one (a code locks after 5 wrong tries).
+- A typed secret must be the same as `CVA_BRIDGE_SECRET` in `.env`. A wrong secret is answered with HTTP 401 ("The bot rejected the secret." when you press **Suggest from my profile**, "The bot rejected the secret: pair again…" after **Check now**). Without a secret in `.env` the bot opens no port at all (`/connect` says the bridge is off).
+- **Check now** stops at once and says why when it cannot scan: the bot is not reachable, the secret was rejected, the bot is still in `/setup`, there are no searches, or no portal is enabled and allowed. The popup also shows the outcome of the last round. **Pause** stops a round in progress.
 - If another program already uses port 8765, the bot log says `bridge bind failed on 127.0.0.1:8765`. Set another `bridge_port` in `config.local.toml`, restart the bot, and use the same port in the bridge URL.
 
 </details>
@@ -460,7 +472,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.2`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.3`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

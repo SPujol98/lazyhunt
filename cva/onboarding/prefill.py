@@ -162,11 +162,16 @@ def _background(answers: dict[str, Any], claims: list[dict[str, Any]]) -> None:
     ]
     if skills:
         answers["skills"] = skills
+    education: list[str] = []
     for claim in setup:
         if claim["id"] == f"{_SETUP}experience":
             _experience(answers, str(claim["text"]))
-        elif claim["id"] == f"{_SETUP}education":
-            answers["education"] = str(claim["text"])
+        elif claim["id"] == f"{_SETUP}education" or str(claim["id"]).startswith(
+            f"{_SETUP}education-"
+        ):  # one claim per entry (an older profile: one ``setup-education``)
+            education.append(str(claim["text"]))
+    if education:
+        answers["education"] = education
 
 
 def _from_preferences(answers: dict[str, Any], doc: Mapping[str, Any]) -> None:
@@ -209,6 +214,8 @@ def current_answers(profile_dir: Path) -> dict[str, Any]:
     if "skills" not in answers:
         _background(answers, claims)
     _from_preferences(answers, _document(profile_dir / "preferences.toml"))
+    if "education" in answers:  # an older answers file: one line, kept whole
+        answers["education"] = A.education_entries(answers["education"]) or None
     return {k: v for k, v in answers.items() if v is not None or k in _NULLABLE}
 
 

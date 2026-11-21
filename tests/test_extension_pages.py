@@ -48,6 +48,8 @@ def _messages(lang: str) -> dict[str, dict]:
         "maintenance",
         "popup",
         "nobridge",
+        "pair",  # beta3-ux T1
+        "searchguide",  # beta3-ux T2
     ],
 )
 def test_pages_behaviour(area: str) -> None:

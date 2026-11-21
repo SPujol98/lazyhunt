@@ -252,7 +252,22 @@ def test_setup_menu_still_lists_setup(lang: Lang) -> None:
     from cva.commands import SETUP_COMMANDS
 
     names = {name for name, _ in menu_commands(lang, only=SETUP_COMMANDS)}
-    assert names == {"setup" if lang == "en" else "configurar", "help"}
+    # beta3-ux T1: /connect pairs the extension from setup mode too.
+    assert names == {
+        "setup" if lang == "en" else "configurar",
+        "connect" if lang == "en" else "conectar",
+        "help",
+    }
+
+
+def test_connect_stays_out_of_the_full_help_and_menu() -> None:
+    # The full /help is close to Telegram's limit: /connect is offered by the
+    # setup-mode menu and /help, the /setup Confirm reply and the docs.
+    for lang in LANGS:
+        assert "/connect" not in help_text(lang=lang)
+        assert "/conectar" not in help_text(lang=lang)
+        names = {n for n, _ in menu_commands(lang)}
+        assert "connect" not in names and "conectar" not in names
 
 
 # --- onboarding-v2 T9: /setup [section] re-runs one section --------------------
