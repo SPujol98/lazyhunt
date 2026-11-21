@@ -279,6 +279,7 @@ def test_end_to_end_red_then_green_in_a_copy(tmp_path: Path) -> None:
     assert green.returncode == 0, f"{green.stdout}\n{green.stderr}"
 
 
+@pytest.mark.owner  # the Claude skill stays private; the public recipe is a doc
 def test_add_portal_skill_has_valid_frontmatter_and_workflow() -> None:
     skill = (_ROOT / ".claude" / "skills" / "add-portal" / "SKILL.md").read_text(
         encoding="utf-8"
@@ -300,11 +301,25 @@ def test_add_portal_skill_has_valid_frontmatter_and_workflow() -> None:
         assert needle in body, needle
 
 
+def test_adding_a_portal_recipe_covers_the_workflow() -> None:
+    """The public, tool-agnostic recipe any coding agent can follow."""
+    recipe = (_ROOT / "docs" / "adding-a-portal.md").read_text(encoding="utf-8")
+    for needle in (
+        "scripts/new_portal.py",
+        "NEVER browse",
+        "RED",
+        "host_permissions",
+        "cva/ingest/sources.py",
+        "raw saved page",
+    ):
+        assert needle in recipe, needle
+
+
 def test_portals_guide_covers_the_essentials() -> None:
     guide = (_ROOT / "docs" / "portals.md").read_text(encoding="utf-8")
     for needle in (
         "buildSearchUrl",
-        "add-portal",
+        "adding-a-portal.md",
         "reload",
         "Terms of use",
         "host_permissions",

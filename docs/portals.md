@@ -263,10 +263,10 @@ is global.
 
 ## Adding a portal
 
-Use the `add-portal` skill (say "add portal", "añade portal" or "nuevo
-portal"). You provide the portal name, a search URL you use, and a saved
-results page (Ctrl+S in the browser). The skill never browses the portal on
-its own. It then:
+Follow [adding-a-portal.md](adding-a-portal.md), by hand or by asking a
+coding agent (Claude Code, Codex, …) to follow it. You provide the portal
+name, a search URL you use, and a saved results page (Ctrl+S in the browser).
+The recipe never browses the portal on its own. It then:
 
 1. checks the ToS posture from what you tell it (personal use, low volume),
 2. analyses the saved HTML,
