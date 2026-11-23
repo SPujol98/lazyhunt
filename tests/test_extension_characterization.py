@@ -90,3 +90,8 @@ def test_options_import_config_round_trip_and_validation() -> None:
 def test_round_stops_with_a_reason_bounded_waits_and_pause() -> None:
     # beta3-ux: "Check now" spun ~5 minutes in the owner's beta.2 test.
     _run(WORKER_HARNESS, "stops")
+
+
+def test_delivery_failures_are_counted_and_the_bridge_url_self_heals() -> None:
+    # beta4-polish S4: ".../bridge." made every offers POST 404 while the popup said "200 new".
+    _run(WORKER_HARNESS, "delivery")

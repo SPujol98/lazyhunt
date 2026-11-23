@@ -119,6 +119,9 @@ function beaconState(beacon, lastCheck) {
   if (beacon.portalOff) return { text: tr('beaconPortalOff', portalLabelOf(beacon), '$1 is not enabled'), tone: 'warn' };
   const entry = lastCheck[beacon.id];
   if (!entry) return { text: tr('beaconNotScanned', null, 'Not scanned yet'), tone: '' };
+  if (entry.status === 'ok' && Number(entry.undelivered) > 0) {
+    return { text: tr('beaconUndelivered', [Number(entry.undelivered), relativeTime(entry.at)], '$1 not delivered · $2'), tone: 'warn' };
+  }
   switch (entry.status) {
     case 'no_permission':
       return { text: tr('beaconNoPermission', null, 'Permission missing: enable the portal in the options'), tone: 'warn' };
@@ -229,6 +232,35 @@ function reasonText(reason) {
   }
 }
 
+// Why offers or scan reports did not reach the bot (beta4-polish S4).
+function problemText(problem) {
+  const p = problem && typeof problem === 'object' ? problem : {};
+  if (p.code === 'unreachable') return tr('problemUnreachable', null, 'the bot is not reachable — is it running?');
+  if (p.code === 'badUrl') return tr('problemBadUrl', null, 'the bridge URL is not valid — check it in Options › Advanced');
+  const status = Number(p.status) || 0;
+  if (status === 404 || status === 405) return tr('problemWrongUrl', status, 'bot answered $1 — check the bridge URL in Options › Advanced');
+  if (status === 401 || status === 403) return tr('problemSecret', status, 'bot answered $1 — send /connect for a new code');
+  return tr('problemHttp', status || '?', 'bot answered $1');
+}
+
+// The counts of a round that ran: offers that did not reach the bot are not
+// "new" (beta4-polish S4); a healthy round reads as before. `failed` says the
+// line reports a delivery problem.
+function countsText({ scanned, totalNew, sent, undelivered, reportsFailed, problem }) {
+  const why = problemText(problem);
+  if (undelivered > 0) {
+    return {
+      failed: true,
+      text: tr('resultUndelivered', [scanned, sent, undelivered, why], '$1 scanned · $2 sent · $3 not delivered ($4)'),
+    };
+  }
+  const text = tr('resultCounts', [scanned, totalNew], '$1 scanned · $2 new');
+  if (reportsFailed > 0) {
+    return { failed: true, text: `${text} · ${tr('resultReportsFailed', [reportsFailed, why], '$1 scan reports not delivered ($2)')}` };
+  }
+  return { failed: false, text };
+}
+
 // The stored outcome of the last round (manual or scheduled), under the result line.
 function renderLastOutcome(last) {
   const el = $('lastOutcome');
@@ -236,9 +268,17 @@ function renderLastOutcome(last) {
     el.hidden = true;
     return;
   }
-  const what = reasonText(last.reason)
-    || tr('resultCounts', [Number(last.beaconsScanned) || 0, Number(last.totalNew) || 0], '$1 scanned · $2 new');
-  el.textContent = tr('popupLastOutcome', [relativeTime(last.at), what], 'Last round $1: $2');
+  const reason = reasonText(last.reason);
+  const counts = reason ? { failed: false, text: reason } : countsText({
+    scanned: Number(last.beaconsScanned) || 0,
+    totalNew: Number(last.totalNew) || 0,
+    sent: Number(last.sent) || 0,
+    undelivered: Number(last.undelivered) || 0,
+    reportsFailed: Number(last.reportsFailed) || 0,
+    problem: last.problem,
+  });
+  el.textContent = tr('popupLastOutcome', [relativeTime(last.at), counts.text], 'Last round $1: $2');
+  el.classList.toggle('is-warn', counts.failed);
   el.hidden = false;
 }
 
@@ -246,6 +286,26 @@ function showResult(text, isError = false) {
   const el = $('resultLine');
   el.textContent = text;
   el.className = `result${isError ? ' is-error' : ''}`;
+}
+
+// The result line of Check now; `failed` marks it as a problem to fix.
+function summaryResult(summary) {
+  const s = summary || {};
+  const delivery = countsText({
+    scanned: Number(s.beaconsScanned) || 0,
+    totalNew: Number(s.totalNew) || 0,
+    sent: Number(s.totalSent) || 0,
+    undelivered: Number(s.undelivered) || 0,
+    reportsFailed: Number(s.reportsFailed) || 0,
+    problem: s.deliveryProblem,
+  });
+  if (!s.skipped && !reasonText(s.reason) && Number(s.beaconsScanned) && delivery.failed) {
+    const errors = Number(s.errors) || 0;
+    const parts = [delivery.text];
+    if (errors) parts.push(tr('resultErrors', errors, '$1 errors'));
+    return { text: parts.join(' · '), failed: true };
+  }
+  return { text: summaryText(s), failed: Boolean(s.reason && s.reason !== 'paused') };
 }
 
 function summaryText(summary) {
@@ -279,9 +339,10 @@ async function checkNow() {
     } else if (!answer || answer.ok === false) {
       showResult(tr('resultFailed', (answer && answer.error) || '?', 'Failed: $1'), true);
     } else {
-      const s = answer.summary || {};
-      // A round that stopped early is a problem to fix, shown as such.
-      showResult(summaryText(s), Boolean(s.reason && s.reason !== 'paused'));
+      // A round that stopped early, or whose offers did not reach the bot,
+      // is a problem to fix, shown as such.
+      const result = summaryResult(answer.summary);
+      showResult(result.text, result.failed);
     }
   } catch (e) {
     showResult(tr('resultFailed', (e && e.message) || String(e), 'Failed: $1'), true);

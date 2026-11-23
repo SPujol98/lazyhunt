@@ -6,6 +6,7 @@ import { PORTALS, portalFor } from '../portals/registry.js';
 import { legacyEnabledPortals } from '../searches.js';
 import { DEFAULT_SETTINGS, RETIRED_SETTING_FIELDS } from './constants.js';
 import { readKeys, writeKeys, removeKeys, isPlainObject } from './storage.js';
+import { healedBridgeUrl } from '../bridge_url.js';
 
 // Before the rename, manual beacons lived under `searches`. D1: only entries
 // with a `url` are legacy beacons; auto searches stay where they are.
@@ -31,6 +32,15 @@ async function dropRetiredSettings() {
   await writeKeys({ settings: kept });
 }
 
+// beta4-polish S4: a bridge URL stored with trailing punctuation (".../bridge.")
+// is rewritten in its clean form; a value that is not a bridge URL is kept.
+async function healBridgeUrl() {
+  const { settings } = await readKeys(['settings']);
+  if (!isPlainObject(settings) || typeof settings.bridgeUrl !== 'string') return;
+  const healed = healedBridgeUrl(settings.bridgeUrl);
+  if (healed !== settings.bridgeUrl) await writeKeys({ settings: { ...settings, bridgeUrl: healed } });
+}
+
 async function writeInstallDefaults() {
   const { settings, beacons } = await readKeys(['settings', 'beacons']);
   const values = {};
@@ -50,6 +60,7 @@ async function deriveEnabledPortals() {
 export async function migrateStorage({ installed }) {
   await moveLegacyBeacons();
   await dropRetiredSettings();
+  await healBridgeUrl();
   if (installed) await writeInstallDefaults();
   await deriveEnabledPortals();
 }

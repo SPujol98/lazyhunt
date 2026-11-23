@@ -558,6 +558,17 @@ async function areaImport() {
   check('title filters kept', [a.titleFilter, a.titleFilterBackend], [STORE_B.titleFilter, STORE_B.titleFilterBackend]);
   check('bridge URL cleared when the file has none', a.settings && a.settings.bridgeUrl, '');
 
+  // beta4-polish S4: the file's bridge URL is stored clean, or not at all.
+  setScenario('import: a bridge URL with trailing punctuation is stored clean');
+  res = await importInto(STORE_B, JSON.stringify({ format: FORMAT, version: 1, settings: { intervalMinutes: 30, bridgeUrl: ' http://127.0.0.1:8765/bridge/. ' }, beacons: [] }));
+  a = res.fed[0] ? res.fed[0].after : {};
+  check('stored clean', a.settings && a.settings.bridgeUrl, 'http://127.0.0.1:8765/bridge');
+
+  setScenario('import: a URL that is not a bridge keeps the current one');
+  res = await importInto(STORE_B, JSON.stringify({ format: FORMAT, version: 1, settings: { intervalMinutes: 30, bridgeUrl: 'http://example.com/bridge' }, beacons: [] }));
+  a = res.fed[0] ? res.fed[0].after : {};
+  check('current URL kept', a.settings && a.settings.bridgeUrl, STORE_B.settings.bridgeUrl);
+
   setScenario('import: a file of another format is rejected');
   res = await importInto(STORE_B, JSON.stringify({ format: 'something-else', beacons: [] }));
   check('storage unchanged', res.fed.length === 1 && sameJson(res.fed[0].after, STORE_B), true);

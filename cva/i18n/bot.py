@@ -47,6 +47,10 @@ EN: Final[dict[str, str]] = {
         "/help — this message"
     ),
     # --- owner claim (beta3-ux T1): no owner_telegram_id yet ------------------
+    "bot.token_rejected": (
+        "Telegram rejected the bot token. Check CVA_TELEGRAM_TOKEN in .env — "
+        "it must be the token @BotFather gave you."
+    ),
     "bot.claim.terminal": (
         "lazyhunt has no owner yet. To become its owner, send this message to "
         "your bot in Telegram:\n\n    /start {code}\n\n"
@@ -299,6 +303,10 @@ ES: Final[dict[str, str]] = {
         "/help — este mensaje"
     ),
     # --- owner claim (beta3-ux T1): no owner_telegram_id yet ------------------
+    "bot.token_rejected": (
+        "Telegram ha rechazado el token del bot. Revisa CVA_TELEGRAM_TOKEN en "
+        ".env: debe ser el token que te dio @BotFather."
+    ),
     "bot.claim.terminal": (
         "lazyhunt aún no tiene dueño. Para ser su dueño, envía este mensaje a "
         "tu bot en Telegram:\n\n    /start {code}\n\n"

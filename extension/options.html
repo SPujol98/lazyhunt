@@ -126,24 +126,16 @@
             <p class="hint" data-i18n="connectionIntro">New offers go to the local bot through the bridge; the bot sends the notifications.</p>
           </div>
         </div>
-        <div class="grid-3">
+        <div class="grid-2">
           <label class="field">
             <span class="field-label" data-i18n="intervalLabel">Minutes between rounds</span>
             <input id="intervalInput" class="input" type="number" min="1" max="1440" step="1" inputmode="numeric">
             <span id="intervalWarning" class="hint hint-warn" data-i18n="intervalWarning" hidden>Under 30 minutes portals may throttle or block you.</span>
           </label>
-          <label class="field">
-            <span class="field-label" data-i18n="bridgeUrlLabel">Bridge URL</span>
-            <input id="bridgeUrlInput" class="input" type="url" placeholder="http://127.0.0.1:8765/bridge" spellcheck="false" autocomplete="off">
-          </label>
-          <label class="field">
-            <span class="field-label" data-i18n="bridgeSecretLabel">Bridge secret</span>
-            <span class="input-group">
-              <input id="bridgeSecretInput" class="input" type="password" spellcheck="false" autocomplete="off">
-              <button id="toggleSecretBtn" type="button" class="btn btn-sm btn-ghost" aria-pressed="false" data-i18n="secretShow">Show</button>
-            </span>
-            <span class="hint" data-i18n="bridgeSecretHint">Never included in exported files.</span>
-          </label>
+          <div class="field">
+            <span class="field-label" data-i18n="connectionStateLabel">Connection</span>
+            <p id="connectionState" class="conn-state" role="status" aria-live="polite"></p>
+          </div>
         </div>
         <div class="field pair-field">
           <span class="field-label" data-i18n="pairLabel">Pair with code</span>
@@ -153,6 +145,25 @@
           </span>
           <span id="pairHint" class="hint" data-i18n="pairHint">Send /connect to the bot and type the code it answers: the bridge URL and secret are filled in for you. Typing the secret by hand still works.</span>
         </div>
+        <details id="bridgeAdvanced" class="advanced">
+          <summary data-i18n="advancedLabel">Advanced</summary>
+          <div class="grid-2">
+            <label class="field">
+              <span class="field-label" data-i18n="bridgeUrlLabel">Bridge URL</span>
+              <input id="bridgeUrlInput" class="input" type="url" placeholder="http://127.0.0.1:8765/bridge" spellcheck="false" autocomplete="off" aria-describedby="bridgeUrlError">
+              <span id="bridgeUrlError" class="hint hint-warn" role="alert" hidden></span>
+              <span class="hint" data-i18n="bridgeUrlHint">The same on every install: change it only if you changed bridge_port in the bot.</span>
+            </label>
+            <label class="field">
+              <span class="field-label" data-i18n="bridgeSecretLabel">Bridge secret</span>
+              <span class="input-group">
+                <input id="bridgeSecretInput" class="input" type="password" spellcheck="false" autocomplete="off">
+                <button id="toggleSecretBtn" type="button" class="btn btn-sm btn-ghost" aria-pressed="false" data-i18n="secretShow">Show</button>
+              </span>
+              <span class="hint" data-i18n="bridgeSecretHint">Never included in exported files.</span>
+            </label>
+          </div>
+        </details>
         <p id="bridgeMissingHint" class="hint hint-warn" data-i18n="bridgeMissingHint" hidden>Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost.</p>
         <p id="botInfo" class="hint" hidden></p>
       </section>

@@ -709,9 +709,14 @@ async function areaNoBridge() {
 
       setScenario(`nobridge (${lang}, ${label}): Options highlights the missing fields`);
       await loadPage(OPTIONS, noBridge, scenario);
-      check('status chip and banner', [$('statusChip').textContent, $('statusDetail').textContent, $('statusDetail').hidden], [msg('statusNoBridge'), msg('statusNoBridgeDetail'), false]);
-      check('missing fields highlighted', [isMissing('bridgeUrlInput'), isMissing('bridgeSecretInput')], ['bridgeUrl' in missing, 'bridgeSecret' in missing]);
-      ok('the connection section is marked', $('connection').classList.contains('needs-bridge'), $('connection').getAttribute('class'));
+      // Changed by beta4-polish S4: a blank URL is prefilled with the default,
+      // so only a missing secret is left to fill in.
+      check('the URL field shows the default', $('bridgeUrlInput').value, BRIDGE);
+      check('missing fields highlighted', [isMissing('bridgeUrlInput'), isMissing('bridgeSecretInput')], [false, 'bridgeSecret' in missing]);
+      if ('bridgeSecret' in missing) {
+        check('status chip and banner', [$('statusChip').textContent, $('statusDetail').textContent, $('statusDetail').hidden], [msg('statusNoBridge'), msg('statusNoBridgeDetail'), false]);
+        ok('the connection section is marked', $('connection').classList.contains('needs-bridge'), $('connection').getAttribute('class'));
+      }
     }
 
     setScenario(`nobridge (${lang}): nothing to scan still shows the bridge call first`);
@@ -1072,7 +1077,160 @@ async function areaSearchGuide() {
   check('options empty row', $('searchEmpty').textContent, 'No searches yet: press Suggest from my profile to get searches from your profile, or Add search.');
 }
 
+// --- bridge URL, connection state and delivery failures (beta4-polish S4) -------------
+
+async function areaBridge() {
+  const store = {
+    settings: { intervalMinutes: 45, paused: false, bridgeUrl: BRIDGE, bridgeSecret: 's' },
+    beacons: [], searches: [], enabledPortals: ['linkedin'],
+  };
+  const configFetch = (answer) => async (url, init = {}) => {
+    if (String(url).endsWith('/config')) {
+      b.calls.fetches.push({ url: String(url), method: 'GET', headers: init.headers || {} });
+      if (answer === 'throw') throw new TypeError('Failed to fetch');
+      return { ok: answer < 300, status: answer, json: async () => ({ paused: false, enabledPortals: null }) };
+    }
+    return b.fetch(url, init);
+  };
+  const isMissing = (id) => $(id).classList.contains('is-missing');
+
+  setScenario('bridge: a fresh install shows the default URL under Advanced');
+  await loadPage(OPTIONS, { ...store, settings: { intervalMinutes: 60, paused: false, bridgeUrl: '', bridgeSecret: '' } });
+  check('the URL field is prefilled', $('bridgeUrlInput').value, BRIDGE);
+  check('URL and secret live under Advanced', [$('bridgeUrlInput'), $('bridgeSecretInput')].map((n) => {
+    let p = n.parentNode;
+    while (p && p.getAttribute && p.getAttribute('id') !== 'bridgeAdvanced') p = p.parentNode;
+    return Boolean(p && p.localName === 'details');
+  }), [true, true]);
+  check('the disclosure is labelled Advanced', $('bridgeAdvanced').querySelector('summary').textContent, 'Advanced');
+  check('the secret stays masked with show/hide', [$('bridgeSecretInput').type, $('toggleSecretBtn').textContent], ['password', 'Show']);
+  check('not connected: the state says how to pair', $('connectionState').textContent, 'Not connected — send /connect to the bot and paste the code here');
+  check('the pairing code input is right there', $('pairCodeInput').hidden, false);
+  await type($('bridgeSecretInput'), 'typed');
+  await click($('saveBtn'));
+  check('Save stores the default URL', b.store.settings.bridgeUrl, BRIDGE);
+
+  for (const typed of [`${BRIDGE}.`, ` ${BRIDGE}/ `, `"${BRIDGE}",`, `${BRIDGE});`, `(${BRIDGE}).`]) {
+    setScenario(`bridge: Save normalizes ${JSON.stringify(typed)}`);
+    await loadPage(OPTIONS, store);
+    await type($('bridgeUrlInput'), typed);
+    check('no field error', [$('bridgeUrlError').hidden, isMissing('bridgeUrlInput')], [true, false]);
+    await click($('saveBtn'));
+    check('stored clean', b.store.settings.bridgeUrl, BRIDGE);
+    check('the field shows it clean', $('bridgeUrlInput').value, BRIDGE);
+  }
+  for (const typed of ['http://localhost:9999/bridge', 'http://[::1]:8765/bridge', 'https://127.0.0.1:8765/bridge']) {
+    setScenario(`bridge: a valid URL is kept as it is (${typed})`);
+    await loadPage(OPTIONS, store);
+    await type($('bridgeUrlInput'), typed);
+    await click($('saveBtn'));
+    check('stored unchanged', b.store.settings.bridgeUrl, typed);
+  }
+
+  for (const [typed, text] of [
+    ['http://example.com/bridge', 'The bridge URL must point to this computer (127.0.0.1, localhost or [::1]).'],
+    ['http://127.0.0.1:8765/bridges', 'The bridge URL must end in /bridge, for example http://127.0.0.1:8765/bridge.'],
+    ['http://127.0.0.1:8765/', 'The bridge URL must end in /bridge, for example http://127.0.0.1:8765/bridge.'],
+    ['ftp://127.0.0.1/bridge', 'The bridge URL must look like http://127.0.0.1:8765/bridge.'],
+    ['not a url', 'The bridge URL must look like http://127.0.0.1:8765/bridge.'],
+  ]) {
+    setScenario(`bridge: ${typed} is refused with a field error`);
+    await loadPage(OPTIONS, store);
+    await type($('bridgeUrlInput'), typed);
+    check('field error shown', [$('bridgeUrlError').hidden, $('bridgeUrlError').textContent, isMissing('bridgeUrlInput')], [false, text, true]);
+    await click($('saveBtn'));
+    check('nothing stored', b.store.settings, store.settings);
+    check('the error is the toast too, Advanced opened', [$('toast').textContent, $('bridgeAdvanced').hasAttribute('open')], [text, true]);
+  }
+
+  setScenario('bridge: a stored URL with a trailing dot self-heals on load');
+  await loadPage(OPTIONS, { ...store, settings: { ...store.settings, bridgeUrl: `${BRIDGE}.` } });
+  check('the field shows it clean, no error', [$('bridgeUrlInput').value, $('bridgeUrlError').hidden], [BRIDGE, true]);
+  await click($('saveBtn'));
+  check('Save stores it clean', b.store.settings.bridgeUrl, BRIDGE);
+
+  setScenario('bridge: pairing with a broken URL stores it clean');
+  const pairFetch = async (url, init = {}) => {
+    if (String(url).endsWith('/pair')) return { ok: true, status: 200, json: async () => ({ secret: 'paired' }) };
+    return configFetch(200)(url, init);
+  };
+  await loadPage(OPTIONS, { ...store, settings: { ...store.settings, bridgeUrl: '', bridgeSecret: '' } }, { fetch: pairFetch });
+  await type($('bridgeUrlInput'), `${BRIDGE}.`);
+  await type($('pairCodeInput'), 'ABCD-EFGH');
+  await click($('pairBtn'));
+  check('URL and secret stored', [b.store.settings.bridgeUrl, b.store.settings.bridgeSecret], [BRIDGE, 'paired']);
+  check('connected', $('connectionState').textContent, '✅ Connected to your bot');
+
+  setScenario('bridge: pairing refuses a URL that is not a bridge');
+  await loadPage(OPTIONS, { ...store, settings: { ...store.settings, bridgeUrl: '', bridgeSecret: '' } }, { fetch: pairFetch });
+  await type($('bridgeUrlInput'), 'http://example.com/bridge');
+  await type($('pairCodeInput'), 'ABCD-EFGH');
+  await click($('pairBtn'));
+  check('nothing stored, the field error shown', [b.store.settings.bridgeSecret, $('bridgeUrlError').hidden], ['', false]);
+
+  for (const [label, answer, text] of [
+    ['connected', 200, '✅ Connected to your bot'],
+    ['secret rejected', 401, '⚠️ Secret rejected — send /connect for a new code'],
+    ['bot down', 'throw', 'Bot not reachable — is `uv run bot.py` running?'],
+  ]) {
+    setScenario(`bridge: connection state, ${label}`);
+    await loadPage(OPTIONS, store, { fetch: configFetch(answer) });
+    check('state', $('connectionState').textContent, text);
+    check('asked GET /config with the secret', b.calls.fetches.filter((f) => f.url.endsWith('/config')).map((f) => f.headers['X-CVA-Bridge-Secret']), ['s']);
+  }
+
+  setScenario('bridge: connection state in Spanish');
+  await loadPage(OPTIONS, store, { lang: 'es', fetch: configFetch(401) });
+  check('rejected (es)', $('connectionState').textContent, '⚠️ Secreto rechazado — envía /conectar para obtener un código nuevo');
+  await loadPage(OPTIONS, { ...store, settings: { ...store.settings, bridgeSecret: '' } }, { lang: 'es' });
+  check('not connected (es)', $('connectionState').textContent, 'Sin conectar — envía /conectar al bot y pega aquí el código');
+  check('Advanced (es)', $('bridgeAdvanced').querySelector('summary').textContent, 'Avanzado');
+
+  // Popup: offers that did not reach the bot are not "new".
+  const search = { id: 's1', name: 'X', keywords: 'x', location: '', filterProfile: 'ai', portals: ['linkedin'], titleFilter: 'on' };
+  const failed = { at: Date.now() - 2 * 60000, reason: null, beaconsScanned: 8, totalNew: 200, errors: 0, sent: 0, undelivered: 200, reportsFailed: 0, problem: { code: 'http', status: 404 } };
+  const fixHint = '(bot answered 404 — check the bridge URL in Options › Advanced)';
+
+  setScenario('bridge: the popup shows undelivered offers');
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: failed });
+  check('last round line', $('lastOutcome').textContent, `Last round 2m ago: 8 scanned · 0 sent · 200 not delivered ${fixHint}`);
+  ok('shown as a warning', $('lastOutcome').classList.contains('is-warn'), $('lastOutcome').getAttribute('class'));
+
+  for (const [problem, why] of [
+    [{ code: 'unreachable' }, '(the bot is not reachable — is it running?)'],
+    [{ code: 'http', status: 401 }, '(bot answered 401 — send /connect for a new code)'],
+    [{ code: 'http', status: 500 }, '(bot answered 500)'],
+  ]) {
+    setScenario(`bridge: the popup explains ${JSON.stringify(problem)}`);
+    await loadPage(POPUP, { ...store, searches: [search], lastRound: { ...failed, sent: 3, undelivered: 5, problem } });
+    check('line', $('lastOutcome').textContent, `Last round 2m ago: 8 scanned · 3 sent · 5 not delivered ${why}`);
+  }
+
+  setScenario('bridge: failed scan reports are shown');
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: { ...failed, totalNew: 2, sent: 2, undelivered: 0, reportsFailed: 8 } });
+  check('line', $('lastOutcome').textContent, `Last round 2m ago: 8 scanned · 2 new · 8 scan reports not delivered ${fixHint}`);
+
+  setScenario('bridge: a healthy last round is unchanged');
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: { ...failed, totalNew: 3, sent: 3, undelivered: 0, problem: null } });
+  check('line', [$('lastOutcome').textContent, $('lastOutcome').classList.contains('is-warn')], ['Last round 2m ago: 8 scanned · 3 new', false]);
+
+  setScenario('bridge: Check now shows undelivered offers');
+  await loadPage(POPUP, { ...store, searches: [search] }, { messageHandler: () => ({ ok: true, summary: { skipped: false, reason: undefined, beaconsScanned: 8, totalNew: 200, firstScans: 1, errors: 0, filteredOut: 0, totalSent: 0, undelivered: 200, reportsFailed: 0, deliveryProblem: { code: 'http', status: 404 } } }) });
+  await click($('checkNowBtn'));
+  check('result', [$('resultLine').textContent, $('resultLine').classList.contains('is-error')], [`8 scanned · 0 sent · 200 not delivered ${fixHint}`, true]);
+
+  setScenario('bridge: the popup in Spanish');
+  await loadPage(POPUP, { ...store, searches: [search], lastRound: failed }, { lang: 'es' });
+  ok('undelivered (es)', /200 sin entregar \(el bot respondió 404 — revisa la URL del puente en Opciones › Avanzado\)/.test($('lastOutcome').textContent), $('lastOutcome').textContent);
+
+  setScenario('bridge: a beacon whose offers did not reach the bot warns');
+  await loadPage(POPUP, { ...store, searches: [search], lastCheck: { 'auto:s1:linkedin': { at: Date.now() - 5 * 60000, status: 'ok', jobsFound: 25, newJobs: 25, filteredOut: 0, sent: 0, undelivered: 25 } } });
+  const state = $('watchList').children[0].querySelector('.beacon-state');
+  check('state', [state.textContent, state.classList.contains('is-warn')], ['25 not delivered · 5m ago', true]);
+}
+
 const AREAS = {
+  bridge: areaBridge,
   pair: areaPair,
   searchguide: areaSearchGuide,
   language: areaLanguage,

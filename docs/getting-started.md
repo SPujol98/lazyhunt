@@ -2,8 +2,8 @@
 
 From a fresh clone to the first judged offer in Telegram. Allow about 20
 minutes. You do not write profile files by hand: a short terminal wizard
-sets up the bot (step 3), and the bot then asks about you in Telegram
-(step 5, about 10 minutes).
+sets up the bot (step 4), and the bot then asks about you in Telegram
+(step 6, about 10 minutes).
 
 ## Before you start
 
@@ -59,7 +59,22 @@ git clone <this repository> lazyhunt && cd lazyhunt
 uv sync
 ```
 
-## 3. Run the setup wizard
+## 3. Create your Telegram bot
+
+Do this once, in the Telegram app, before the wizard:
+
+1. Search for [@BotFather](https://t.me/BotFather) (blue check mark) and
+   open it.
+2. Send `/newbot`.
+3. Type a name for your bot (any name, e.g. `My job hunter`).
+4. Type a username that ends in `bot` (e.g. `myjobhunter_bot`).
+5. BotFather replies with a token like `1234567890:AAH…`: copy the **whole**
+   token and keep it private.
+
+Already have a bot? In @BotFather send `/mybots`, pick your bot and tap
+**API Token**.
+
+## 4. Run the setup wizard
 
 ```bash
 uv run cli.py init
@@ -97,16 +112,15 @@ of the wizard speaks the language you choose.
      and Enter sets the placeholder `local`.
 
    On a re-run, Enter keeps every current value, including the key.
-4. **Telegram.** Create a bot: in Telegram open
-   [@BotFather](https://t.me/BotFather), send `/newbot`, type a name and then
-   a username ending in `bot`. It replies with a token like
-   `1234567890:AAH…`: paste the whole token (the input is hidden, nothing
-   appears while you paste). Your numeric user id is **not** asked: the bot
-   pairs with you through a one-time code when it starts (step 4). If you
+4. **Telegram.** Paste the whole token from step 3 (the input is hidden,
+   nothing appears while you paste). The wizard asks again if the value is
+   not a bot token (for example your AI key) and shows only its last 4
+   characters. Your numeric user id is **not** asked: the bot
+   pairs with you through a one-time code when it starts (step 5). If you
    already know it, `uv run cli.py init --owner-id <id>` writes it.
 5. **Bridge secret.** A long random secret is generated for the extension.
    You never copy it: the bot gives the extension a one-time pairing code
-   (`/connect`, step 6).
+   (`/connect`, step 7).
 6. **Profile directory.** Default `profiles/me` (gitignored). Choose an
    empty profile (the default and the recommended choice: the bot starts in
    setup mode and builds the profile with you through `/setup`), a skeleton
@@ -126,7 +140,7 @@ Both files are gitignored. Secrets are read from the environment only;
 values put in TOML files are ignored. Manual setup is still possible: copy
 `.env.example` and `config.example.toml` and edit them.
 
-## 4. Start the bot
+## 5. Start the bot
 
 ```bash
 uv run bot.py
@@ -150,7 +164,7 @@ The bot runs as long as that terminal stays open. To keep it running in the
 background or start it when you log in (systemd, launchd or Task Scheduler),
 see [running.md](running.md).
 
-## 5. Answer `/setup` in Telegram
+## 6. Answer `/setup` in Telegram
 
 Send `/setup` (`/configurar` in Spanish). The bot asks one question per
 message, with buttons wherever the answer is a choice. It takes about 10
@@ -166,7 +180,7 @@ minutes:
 7. your years of experience, last role and company;
 8. your highest education;
 9. work modes (remote, hybrid, on-site), the city and the country you want
-   to work in;
+   to work in (the city's country is proposed as one tap);
 10. a minimum gross annual salary (optional);
 11. the languages an offer may be written in;
 12. the portals to enable, each with its terms warning;
@@ -181,7 +195,7 @@ again once the cause is fixed. It writes `preferences.toml`, `profile.toml`,
 a minimal `claims.json` with only what you stated, the judge files and your
 base CVs; it activates the portals you chose in `config.local.toml`; and the
 bot switches to normal mode right after Confirm, with no restart. The reply ends with
-the next step: suggesting searches in the extension (step 6). Every question,
+the next step: suggesting searches in the extension (step 7). Every question,
 file and limit: [onboarding.md](onboarding.md).
 
 **Change your profile later** with `/setup <section>` (for example
@@ -195,7 +209,7 @@ file; role families are in [role-families.md](role-families.md). To try the
 bot before answering anything, choose the demo profile in the wizard (or set
 `profile_dir = "profiles/demo"`).
 
-## 6. Load the extension
+## 7. Load the extension
 
 1. Open `chrome://extensions`, turn on **Developer mode**, click **Load
    unpacked** and select the `extension/` directory.
@@ -215,7 +229,7 @@ bot before answering anything, choose the demo profile in the wizard (or set
    when you accept remote work. Tick the ones you want, or add your own.
    Until you have a search, the popup says "No searches yet" and points here.
 
-## 7. Get your first offer
+## 8. Get your first offer
 
 Click **Check now** in the extension's toolbar popup to run a round
 immediately (when it cannot scan it says why at once: bot not reachable,

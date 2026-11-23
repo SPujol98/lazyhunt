@@ -4,6 +4,7 @@
 import {
   DEFAULT_SETTINGS, DEFAULT_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES,
 } from './constants.js';
+import { healedBridgeUrl } from '../bridge_url.js';
 
 const area = () => chrome.storage.local;
 
@@ -24,10 +25,13 @@ export function isPlainObject(value) {
 }
 
 // The stored settings over the defaults: an install without `settings`
-// behaves as if it held the defaults. Nothing is written back.
+// behaves as if it held the defaults. A bridge URL saved with trailing
+// punctuation is used in its clean form (beta4-polish S4). Nothing is
+// written back.
 export async function readSettings() {
   const { settings } = await readKeys(['settings']);
-  return { ...DEFAULT_SETTINGS, ...(isPlainObject(settings) ? settings : {}) };
+  const merged = { ...DEFAULT_SETTINGS, ...(isPlainObject(settings) ? settings : {}) };
+  return { ...merged, bridgeUrl: healedBridgeUrl(merged.bridgeUrl) };
 }
 
 // D2: missing or invalid (NaN, 0) -> 60; otherwise rounded and clamped to

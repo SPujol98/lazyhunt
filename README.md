@@ -114,7 +114,19 @@ uv sync
 
 `uv sync` creates a virtual environment and installs everything; you do not need to activate anything, just prefix commands with `uv run`.
 
-### 2. Run the setup wizard
+### 2. Create your Telegram bot
+
+Do this once, in the Telegram app, before the wizard:
+
+1. Search for [@BotFather](https://t.me/BotFather) (blue check mark) and open it.
+2. Send `/newbot`.
+3. Type a name for your bot (any name, e.g. `My job hunter`).
+4. Type a username that ends in `bot` (e.g. `myjobhunter_bot`).
+5. BotFather replies with a token like `1234567890:AAH…`: copy the **whole** token. Keep it private.
+
+Already have a bot? In @BotFather send `/mybots`, pick your bot and tap **API Token**.
+
+### 3. Run the setup wizard
 
 ```bash
 uv run cli.py init
@@ -125,8 +137,8 @@ The wizard only sets up the bot itself; everything about you comes later, in Tel
 1. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`, and the wizard itself continues in that language.
 2. **Prerequisites.** Checks Python, `uv`, that `claude` is installed and logged in (only the yes/no is read) and whether `codex` is installed. If something is missing it tells you how to fix it and carries on.
 3. **AI provider.** `claude_code` (default), `codex_cli`, `anthropic` or `openai_compatible`. The two CLIs use your own login and need no key. For `anthropic` it asks your API key (hidden). For `openai_compatible` it offers presets (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, or another URL), then the model (filled in from the preset) and the API key (hidden; for a local Ollama or LM Studio server any value works, and Enter sets a placeholder).
-4. **Telegram.** In Telegram open [@BotFather](https://t.me/BotFather), send `/newbot`, type a name and then a username ending in `bot`; it replies with a token like `1234567890:AAH…`. Paste the whole token (the input is hidden: nothing appears while you paste). You do **not** need your numeric user id: when the bot starts it prints a one-time code, and whoever sends `/start <code>` to the bot first becomes its only owner (see step 3). Already know your id? `uv run cli.py init --owner-id <id>` writes it.
-5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot. You never copy it: the bot gives the extension a one-time pairing code (step 5).
+4. **Telegram.** Paste the whole bot token from step 2 (the input is hidden: nothing appears while you paste). The wizard repeats the @BotFather steps, asks again if the value is not a bot token (for example your AI key) and shows only its last 4 characters. You do **not** need your numeric user id: when the bot starts it prints a one-time code, and whoever sends `/start <code>` to the bot first becomes its only owner (see step 4). Already know your id? `uv run cli.py init --owner-id <id>` writes it.
+5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot. You never copy it: the bot gives the extension a one-time pairing code (step 6).
 6. **Profile directory.** Creates `profiles/me` (gitignored). Choose **empty** (the default and the recommended choice): the bot then starts in *setup mode* and builds the profile with you through `/setup`. The other choices are a skeleton with placeholders to fill in by hand, or a copy of the fictional demo profile to try things first.
 7. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
 
@@ -141,11 +153,13 @@ Where things end up:
 > [!TIP]
 > Want to look around before answering anything about yourself? Pick the demo profile in the wizard (or set `profile_dir = "profiles/demo"`). It belongs to a fictional person and shows the format of every file.
 
-### 3. Start the bot
+### 4. Start the bot
 
 ```bash
 uv run bot.py
 ```
+
+It first checks the bot token with Telegram. If Telegram rejects it, the bot prints one line and stops (`Telegram rejected the bot token. Check CVA_TELEGRAM_TOKEN in .env — it must be the token @BotFather gave you.`); the token itself is never printed or logged.
 
 **The first time**, the terminal shows a one-time code (and a `t.me` link that sends it for you):
 
@@ -161,7 +175,7 @@ Then send `/help`. With an empty profile it answers in **setup mode**: only `/he
 
 The bot runs as long as that terminal stays open. To keep it running in the background, or to start it when you log in (systemd on Linux, launchd on macOS, Task Scheduler on Windows), see [docs/running.md](docs/running.md).
 
-### 4. Answer `/setup` in Telegram
+### 5. Answer `/setup` in Telegram
 
 Send `/setup` (`/configurar` in Spanish). The bot asks one question per message, with buttons wherever the answer is a choice; it takes about 10 minutes:
 
@@ -175,7 +189,7 @@ Every step has **Back** and **Cancel**, and nothing is saved until you press **C
 
 **Change your profile later** with `/setup <section>` (for example `/setup salary`), which re-asks only that part prefilled with your current answers, or in the extension's **Options › Profile** tab. For advanced, hand-written profiles (projects, cover-letter base, voice sample, role families), see [profiles/README.md](profiles/README.md).
 
-### 5. Load the extension
+### 6. Load the extension
 
 1. Open `chrome://extensions` (Brave: `brave://extensions`), turn on **Developer mode**, click **Load unpacked** and select the `extension/` folder of this repository. The extension is not in a store; you load it straight from the code you can read.
 2. Send `/connect` (`/conectar`) to the bot: it answers a one-time pairing code. In the extension's **Options › Schedule and bot**, type it under **Pair with code** and press **Pair**: the bridge URL (`http://127.0.0.1:8765/bridge` by default) and the secret are filled in and saved for you. The code works once, for 10 minutes; send `/connect` again for a new one. (Typing the secret by hand still works: it is `CVA_BRIDGE_SECRET` in `.env`, and the wizard can show it once at the end.)
@@ -194,7 +208,7 @@ Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Man
   <sub>Options › Profile: change what you answered in <code>/setup</code> at any time. (Demo data.)</sub>
 </p>
 
-### 6. Get your first offer
+### 7. Get your first offer
 
 You do not have to wait for the schedule:
 
@@ -213,7 +227,7 @@ A card arrives with the score, the verdict, what you match and what you do not, 
   <sub>An offer card. (Illustration of a real bot message, demo data.)</sub>
 </p>
 
-### 7. Generate a CV and a cover letter
+### 8. Generate a CV and a cover letter
 
 On an offer card (button names are shown in English here; with `ui_language = "es"` the bot shows the Spanish name in brackets):
 
@@ -223,7 +237,7 @@ On an offer card (button names are shown in English here; with `ui_language = "e
 - **✅ Mark as sent** (*Marcar enviada*, or `/sent 42`) records that you applied.
 - **🔎 On LinkedIn / On Google / On InfoJobs** (*En …*), the card's last row, open a search for the same offer (title + company) on another site, so you can apply there instead; the offer's own portal is left out (an InfoJobs offer gets Indeed instead).
 
-### 8. Day to day
+### 9. Day to day
 
 - Let rounds run in the background; review the cards that arrive.
 - When a company answers, use `/outcome <id>` to record progress. Interviews and rejections you record can become **calibration examples** (`/calibration`), so the score learns what actually works for you.
@@ -343,7 +357,7 @@ Settings are layered: code defaults, then `config.toml`, then `config.local.toml
 | `llm_provider` | `claude_code` | `claude_code`, `codex_cli`, `anthropic` or `openai_compatible` ([docs/providers.md](docs/providers.md)) |
 | `profile_dir` | unset | Directory with your claims, base CVs, voice and preferences |
 | `enabled_portals` | unset | Restrict which portals the bot accepts; unset lets the extension decide |
-| `match_mode` | `keyword` | `hybrid` lets the AI judge drive notifications |
+| `match_mode` | `keyword` (`cli.py init` writes `hybrid`) | `hybrid`: the AI judge scores each offer and decides what reaches Telegram (recommended; `cli.py init` sets it on a new install). `keyword`: offline keyword scoring with no AI, a fallback that rarely reaches the threshold |
 | `threshold` | `65` | Minimum score for the top-choice badge |
 | `gmail_enabled` | `false` | Optional read-only Gmail sync ([docs/gmail.md](docs/gmail.md)) |
 | `paused` | `false` | Initial state of the kill switch until `/pause` or `/resume` is used |
@@ -472,7 +486,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.3`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.4`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

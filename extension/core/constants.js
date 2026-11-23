@@ -2,12 +2,16 @@
 // alarm name are a contract with the pages and the stored data of existing
 // installs (docs/extension-spec.md sections 2 and 4.1): never rename them.
 
+import { DEFAULT_BRIDGE_URL } from '../bridge_url.js';
+
 export const ALARM_NAME = 'check-jobs';
 
+// beta4-polish S4: the bridge URL is the same on every install unless the
+// owner changes `bridge_port`, so a fresh install starts with it.
 export const DEFAULT_SETTINGS = Object.freeze({
   intervalMinutes: 60,
   paused: false,
-  bridgeUrl: '',
+  bridgeUrl: DEFAULT_BRIDGE_URL,
   bridgeSecret: '',
 });
 
@@ -32,6 +36,9 @@ export const BETWEEN_BEACONS_MS = [2500, 6000];
 export const BEFORE_DETAIL_MS = [1500, 3000];
 
 export const BADGE_COLOR = '#1b5e20';
+// A round whose offers or scan reports did not reach the bot (beta4-polish S4).
+export const BADGE_WARN_COLOR = '#b26a00';
+export const BADGE_WARN_TEXT = '!';
 export const NOTIFICATION_ICON = 'icons/icon128.png';
 
 // Message of the error that marks a login wall; scan_report.js classifies

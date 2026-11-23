@@ -386,6 +386,54 @@ _KNOWN_PLACES: Final[frozenset[str]] = (
 )
 
 
+# Big foreign cities and their country (beta4 S3: the /setup country step
+# proposes the work city's country); Spanish places come from the tables above.
+_CITY_COUNTRY_NAMES: Final[dict[str, str]] = {
+    "portugal": "Lisbon, Lisboa, Porto, Oporto",
+    "france": "Paris, París, Lyon, Marseille, Marsella, Toulouse",
+    "germany": (
+        "Berlin, Berlín, Munich, München, Múnich, Hamburg, Hamburgo, Frankfurt, "
+        "Fráncfort, Cologne, Stuttgart, Düsseldorf, Dusseldorf"
+    ),
+    "italy": "Rome, Roma, Milan, Milano, Milán, Turin, Turín",
+    "uk": "London, Londres, Manchester, Edinburgh, Edimburgo, Birmingham",
+    "ireland": "Dublin, Dublín",
+    "netherlands": "Amsterdam, Ámsterdam, Rotterdam, Eindhoven",
+    "belgium": "Brussels, Bruselas",
+    "switzerland": "Zurich, Zúrich, Geneva, Ginebra",
+    "austria": "Vienna, Viena",
+    "poland": "Warsaw, Varsovia, Krakow, Cracovia",
+    "usa": (
+        "New York, Nueva York, San Francisco, Boston, Seattle, Chicago, Los Angeles"
+    ),
+    "canada": "Toronto, Vancouver",
+    "mexico": "Mexico City, Ciudad de México",
+    "argentina": "Buenos Aires",
+    "colombia": "Bogotá, Medellín",
+    "chile": "Santiago de Chile",
+}
+_CITY_COUNTRIES: Final[dict[str, frozenset[str]]] = {
+    key: _names(csv) for key, csv in _CITY_COUNTRY_NAMES.items()
+}
+
+
+def country_of_city(city: str | None) -> str | None:
+    """The :data:`COUNTRY_ALIASES` id of the country ``city`` is in, from the
+    shipped place tables ("Barcelona" -> ``"spain"``), or ``None`` when the
+    city is not listed (no guess). A country name is its own country."""
+    name = _home_name(city)
+    if name is None:
+        return None
+    folded = _names(name)
+    if folded & _SPAIN_PLACES:
+        return "spain"
+    for table in (_CITY_COUNTRIES, COUNTRY_ALIASES):
+        for country, places in table.items():
+            if folded & places:
+                return country
+    return None
+
+
 def _home_name(text: str | None) -> str | None:
     """``"Madrid, España"`` -> ``"Madrid"``; blank -> None."""
     name = (text or "").split(",")[0].strip()

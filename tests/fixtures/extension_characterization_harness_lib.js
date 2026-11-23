@@ -181,7 +181,7 @@ function makeBrowser() {
   const store = {};
   const calls = {
     tabsCreate: [], tabsUpdate: [], tabsRemove: [], tabsGet: [],
-    alarmsCreate: [], alarmsClear: [], badgeText: [], notifications: [],
+    alarmsCreate: [], alarmsClear: [], badgeText: [], badgeColor: [], notifications: [],
     permissionsContains: [], permissionsRequest: [], permissionsRemove: [],
     executeScript: [], messagesSent: [], openOptionsPage: 0, fetches: [],
   };
@@ -408,7 +408,7 @@ function makeBrowser() {
     },
     action: {
       async setBadgeText({ text }) { calls.badgeText.push(text); },
-      async setBadgeBackgroundColor() {},
+      async setBadgeBackgroundColor({ color }) { calls.badgeColor.push(color); },
       async setTitle() {},
     },
     notifications: {

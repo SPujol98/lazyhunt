@@ -109,7 +109,8 @@ async function areaAlarm() {
   check('fresh install period is 60 minutes', a && a.periodInMinutes, 60);
   ok('first round about 30 s after scheduling', a && a.scheduledTime >= before + 20000 && a.scheduledTime <= Date.now() + 40000, a);
   const s = b.store.settings || {};
-  check('default settings are written', [s.intervalMinutes, s.paused, s.bridgeUrl, s.bridgeSecret], [60, false, '', '']);
+  // Changed by beta4-polish S4: the bridge URL is prefilled with the default.
+  check('default settings are written', [s.intervalMinutes, s.paused, s.bridgeUrl, s.bridgeSecret], [60, false, BRIDGE, '']);
   check('an empty manual beacon list is written', b.store.beacons, []);
   check('fresh install enables no portal', b.store.enabledPortals, []);
 
@@ -384,7 +385,8 @@ async function areaMsg() {
   await boot('msg: set-paused without stored settings', {});
   await send({ type: 'set-paused', paused: true });
   const st = b.store.settings || {};
-  check('settings created from the defaults, paused', [st.paused, st.intervalMinutes, st.bridgeUrl, st.bridgeSecret], [true, 60, '', '']);
+  // Changed by beta4-polish S4: the default bridge URL comes with the defaults.
+  check('settings created from the defaults, paused', [st.paused, st.intervalMinutes, st.bridgeUrl, st.bridgeSecret], [true, 60, BRIDGE, '']);
 
   await boot('msg: paused run-now scans nothing', roundStore([beacon('b1', LI_A)], { settings: { ...SETTINGS, paused: true } }), { pages: page });
   const rp = await send({ type: 'run-now' });
@@ -665,7 +667,70 @@ async function areaStops() {
   await idle();
 }
 
+
+// ------------------------------------------------------------------------------------------
+// beta4-polish S4: the owner's bridge URL was saved as ".../bridge." (trailing
+// dot): every offers POST got 404 and no scan report arrived, while the popup
+// said "200 new" with a "200" badge. Delivery failures are now counted and
+// shown, a 404/405 on the offers endpoint is a configuration problem (retried,
+// no per-offer attempt burnt) and the stored URL self-heals.
+async function areaDelivery() {
+  const two = [{ id: '301', title: 'AI Engineer' }, { id: '302', title: 'ML Engineer' }];
+  const page = { [LI_A]: liPage(two) };
+  const lastRound = () => b.store.lastRound || {};
+
+  for (const status of [404, 405]) {
+    await boot(`delivery: the bot answers ${status} to the offers`, roundStore([beacon('b1', LI_A)]), { pages: page, bridgeStatus: status });
+    const r = await send({ type: 'run-now' });
+    check('the round says nothing was sent and why', [r.summary.totalSent, r.summary.undelivered, r.summary.deliveryProblem], [0, 2, { code: 'http', status }]);
+    check('stored for the popup', [lastRound().sent, lastRound().undelivered, lastRound().problem], [0, 2, { code: 'http', status }]);
+    check('lastCheck counts them as not delivered', [b.store.lastCheck.b1.sent, b.store.lastCheck.b1.undelivered], [0, 2]);
+    check('offers kept unseen, no attempt burnt (an outage)', [b.store.seenJobs.b1, b.store.detailAttempts], [[], {}]);
+    check('the badge warns instead of counting', [b.calls.badgeText.slice(-1), b.calls.badgeColor.slice(-1)], [['!'], ['#b26a00']]);
+    b.scenario.bridgeStatus = 200;
+    b.calls.fetches.length = 0;
+    const again = await send({ type: 'run-now' });
+    check('retried next round once fixed', bridgedIds(), ['301', '302']);
+    check('then sent and seen, badge back to the count', [again.summary.totalSent, again.summary.undelivered, b.store.seenJobs.b1, b.calls.badgeText.slice(-1)], [2, 0, ['301', '302'], ['2']]);
+  }
+
+  await boot('delivery: a real rejection (422) still burns one attempt per offer', roundStore([beacon('b1', LI_A)]), { pages: page, bridgeStatus: 422 });
+  const rj = await send({ type: 'run-now' });
+  check('attempts counted, unseen', [b.store.detailAttempts.b1, b.store.seenJobs.b1], [{ 301: 1, 302: 1 }, []]);
+  check('reported as not delivered', [rj.summary.undelivered, rj.summary.deliveryProblem], [2, { code: 'http', status: 422 }]);
+
+  await boot('delivery: the bot is unreachable for the offers', roundStore([beacon('b1', LI_A)]), { pages: page, bridgeThrow: true });
+  const ru = await send({ type: 'run-now' });
+  check('unreachable', [ru.summary.totalSent, ru.summary.undelivered, ru.summary.deliveryProblem, lastRound().problem], [0, 2, { code: 'unreachable' }, { code: 'unreachable' }]);
+
+  await boot('delivery: a failed scan report is counted', roundStore([beacon('b1', LI_A)]), { pages: page, reportStatus: 404 });
+  const rr = await send({ type: 'run-now' });
+  check('offers sent, report failure counted', [rr.summary.totalSent, rr.summary.undelivered, rr.summary.reportsFailed, rr.summary.deliveryProblem], [2, 0, 1, { code: 'http', status: 404 }]);
+  check('the badge warns', b.calls.badgeText.slice(-1), ['!']);
+
+  await boot('delivery: a healthy round is unchanged', roundStore([beacon('b1', LI_A)]), { pages: page });
+  const rh = await send({ type: 'run-now' });
+  check('counts', [rh.summary.totalNew, rh.summary.totalSent, rh.summary.undelivered, rh.summary.reportsFailed, rh.summary.deliveryProblem], [2, 2, 0, 0, null]);
+  check('badge counts the new offers in green', [b.calls.badgeText.slice(-1), b.calls.badgeColor.slice(-1)], [['2'], ['#1b5e20']]);
+
+  const broken = `${BRIDGE}.`;
+  await boot('delivery: a stored URL with a trailing dot self-heals on read', roundStore([beacon('b1', LI_A)], { settings: { ...SETTINGS, bridgeUrl: broken } }), { pages: page });
+  const rs = await send({ type: 'run-now' });
+  check('offers posted to /bridge', [bridged().map((f) => f.url), rs.summary.totalSent], [[BRIDGE], 2]);
+  ok('scan report sent', b.calls.fetches.some((f) => f.url === 'http://127.0.0.1:8765/scan-report'));
+
+  for (const event of ['onInstalled', 'onStartup']) {
+    await boot(`delivery: the stored URL is repaired on ${event}`, { settings: { ...SETTINGS, bridgeUrl: ` ${BRIDGE}/". ` }, beacons: [] });
+    await fire(b.chrome.runtime[event], { reason: 'update' });
+    check('normalized, the rest kept', b.store.settings, { ...SETTINGS });
+  }
+  await boot('delivery: a URL that is not a bridge is left as it is', { settings: { ...SETTINGS, bridgeUrl: 'http://example.com/bridge' }, beacons: [] });
+  await fire(b.chrome.runtime.onStartup);
+  check('kept', b.store.settings.bridgeUrl, 'http://example.com/bridge');
+}
+
 const AREAS = {
+  delivery: areaDelivery,
   stops: areaStops,
   alarm: areaAlarm, tab: areaTab, migrate: areaMigrate, seen: areaSeen, msg: areaMsg, round: areaRound,
   families: areaFamilies,

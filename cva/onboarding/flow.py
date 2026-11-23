@@ -76,6 +76,7 @@ from cva.cvgen.master import CvgenError
 from cva.cvgen.starter import TEMPLATES, Template
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES
 from cva.i18n import Lang, join_list, t
+from cva.match.locations import country_of_city
 from cva.match.salary_reference import (
     ReferenceRange,
     city_label,
@@ -398,6 +399,56 @@ def _work_city_action(state: State, action: str, arg: str) -> Outcome:
         _answers(state)["work_city"] = city
         return Outcome(advance=True)
     return Outcome()
+
+
+def _country_default(state: State, lang: Lang) -> tuple[str, str] | None:
+    """``(country, city)`` proposed by the country step: the country of the
+    work city (else the home city) from the shipped place tables; ``None``
+    for an unknown city or when a country is already answered (a re-run
+    keeps it)."""
+    if _answers(state).get("country"):
+        return None
+    city = _work_city_value(state)
+    country = country_of_city(city)
+    if country is None or city is None:
+        return None
+    return t(f"onboarding.country.{country}", lang), city
+
+
+def _country_render(state: State, lang: Lang) -> Screen:
+    if state.get("country_other"):
+        return Screen(_q("country_other", lang))
+    proposed = _country_default(state, lang)
+    if proposed is None:
+        return Screen(_q("country", lang), [_keep_row(state, "country", lang)])
+    country, city = proposed
+    state["country_default"] = country
+    label = t("onboarding.btn.country_from", lang, country=country, city=city)
+    return Screen(
+        _q("country", lang),
+        [[(label, "default")], [(t("onboarding.btn.country_other", lang), "other")]],
+    )
+
+
+def _country_action(state: State, action: str, arg: str) -> Outcome:
+    if action == "keep":
+        return _keep(state, "country")
+    if action == "default" and state.get("country_default"):
+        _answers(state)["country"] = state.pop("country_default")
+        return Outcome(advance=True)
+    if action == "other":
+        state["country_other"] = True
+    return Outcome()
+
+
+def _country_text(state: State, text: str) -> Outcome:
+    country = A.clean_text(text)
+    if country is None:
+        return Outcome(error="onboarding.err.text")
+    _answers(state)["country"] = country
+    state.pop("country_other", None)
+    state.pop("country_default", None)
+    return Outcome(advance=True)
 
 
 def _salary_text(state: State, text: str) -> Outcome:
@@ -1138,7 +1189,7 @@ CORE_STEPS: Final[tuple[Step, ...]] = (
         _work_city_action,
         _text_step("work_city", A.clean_text, "onboarding.err.text").on_text,
     ),
-    _text_step("country", A.clean_text, "onboarding.err.text"),
+    Step("country", _country_render, _country_action, _country_text),
     Step("salary", _salary_render, _salary_action, _salary_text),
     Step(
         "currency",

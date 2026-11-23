@@ -110,7 +110,7 @@
     "message": "none"
   },
   "bridgeMissingHint": {
-    "message": "Fill in the bridge URL and secret: until then the extension scans nothing, so no offer is lost."
+    "message": "Pair with the code the bot sends for /connect: until then the extension scans nothing, so no offer is lost."
   },
   "bridgeSecretHint": {
     "message": "Never included in exported files."
@@ -1030,7 +1030,7 @@
     "message": "Pair"
   },
   "pairHint": {
-    "message": "Send /connect to the bot and type the code it answers: the bridge URL and secret are filled in for you. Typing the secret by hand still works."
+    "message": "Send /connect to the bot and type the code it answers: the bridge URL and secret are filled in for you. Typing the secret by hand still works (under Advanced)."
   },
   "pairDone": {
     "message": "Paired: the bridge secret is saved."
@@ -1043,5 +1043,121 @@
   },
   "pairNeedsUrl": {
     "message": "Type a valid bridge URL first, for example http://127.0.0.1:8765/bridge."
+  },
+  "connectionStateLabel": {
+    "message": "Connection"
+  },
+  "advancedLabel": {
+    "message": "Advanced"
+  },
+  "bridgeUrlHint": {
+    "message": "The same on every install: change it only if you changed bridge_port in the bot."
+  },
+  "bridgeUrlNotLoopback": {
+    "message": "The bridge URL must point to this computer (127.0.0.1, localhost or [::1])."
+  },
+  "bridgeUrlNotBridge": {
+    "message": "The bridge URL must end in /bridge, for example http://127.0.0.1:8765/bridge."
+  },
+  "bridgeUrlInvalid": {
+    "message": "The bridge URL must look like http://127.0.0.1:8765/bridge."
+  },
+  "connStateOk": {
+    "message": "✅ Connected to your bot"
+  },
+  "connStateRejected": {
+    "message": "⚠️ Secret rejected — send /connect for a new code"
+  },
+  "connStateUnreachable": {
+    "message": "Bot not reachable — is `uv run bot.py` running?"
+  },
+  "connStateHttp": {
+    "message": "The bot answered with HTTP $p1$ — check the bridge URL under Advanced.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "connStateBadUrl": {
+    "message": "The bridge URL is not valid — fix it under Advanced."
+  },
+  "connStateChecking": {
+    "message": "Checking the connection…"
+  },
+  "connStateNone": {
+    "message": "Not connected — send /connect to the bot and paste the code here"
+  },
+  "importBridgeUrlKept": {
+    "message": "The bridge URL of the file is not valid: the current one was kept."
+  },
+  "beaconUndelivered": {
+    "message": "$p1$ not delivered · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "problemUnreachable": {
+    "message": "the bot is not reachable — is it running?"
+  },
+  "problemBadUrl": {
+    "message": "the bridge URL is not valid — check it in Options › Advanced"
+  },
+  "problemWrongUrl": {
+    "message": "bot answered $p1$ — check the bridge URL in Options › Advanced",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "problemSecret": {
+    "message": "bot answered $p1$ — send /connect for a new code",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "problemHttp": {
+    "message": "bot answered $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultUndelivered": {
+    "message": "$p1$ scanned · $p2$ sent · $p3$ not delivered ($p4$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      },
+      "p4": {
+        "content": "$4"
+      }
+    }
+  },
+  "resultReportsFailed": {
+    "message": "$p1$ scan reports not delivered ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
   }
 }

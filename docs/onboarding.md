@@ -117,7 +117,11 @@ CVs stay in `/setup <section>`.
    an entry has a comma (`BSc Computer Science, UPV`). Each entry, at most
    100 characters, becomes its own claim.
 9. Work modes (remote, hybrid, on-site), then the city you want to work in
-   (your city from step 2 is offered) and the country
+   (your city from step 2 is offered) and the country: when the city is a
+   known place (every Spanish city and region, and a few big foreign cities)
+   its country is one tap ("Spain (from Barcelona)"), with "Other…" to type
+   another; an unknown city proposes nothing, and a re-run keeps the saved
+   country
 10. Minimum gross annual salary (or Skip). When the profile's
     `salary_reference.toml` has a range for one of your positions, your
     level (junior or mid) and your work city (Barcelona, Madrid, or another

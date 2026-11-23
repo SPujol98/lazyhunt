@@ -72,7 +72,21 @@ uv sync
 `uv sync` crea un entorno virtual e instala todo. No tienes que activarlo:
 basta con poner `uv run` delante de cada comando.
 
-## 4. El asistente del terminal: `uv run cli.py init`
+## 4. Crea tu bot de Telegram
+
+Hazlo una vez, en la app de Telegram, antes del asistente:
+
+1. Busca [@BotFather](https://t.me/BotFather) (con la marca azul) y ábrelo.
+2. Envía `/newbot`.
+3. Escribe un nombre para tu bot (el que quieras, p. ej. `Mi buscador`).
+4. Escribe un nombre de usuario que acabe en `bot` (p. ej. `mibuscador_bot`).
+5. BotFather te responde con un token como `1234567890:AAH…`: copia el token
+   **entero** y no lo compartas.
+
+¿Ya tienes un bot? En @BotFather envía `/mybots`, elige tu bot y pulsa
+**API Token**.
+
+## 5. El asistente del terminal: `uv run cli.py init`
 
 ```bash
 uv run cli.py init
@@ -94,15 +108,15 @@ confirmas el resumen y puedes repetirlo cuando quieras.
 3. **Proveedor de IA.** Pulsa Intro para `claude_code`, o elige otra IA (puedes
    escribir el nombre o su número): `codex_cli`, `anthropic` u
    `openai_compatible`. Mira [¿Otra IA?](#otra-ia) más abajo.
-4. **Telegram.** En Telegram busca [@BotFather](https://t.me/BotFather),
-   envía `/newbot`, escribe un nombre y luego un usuario que acabe en `bot`.
-   Te responde con un token como `1234567890:AAH…`: pega la línea entera; no
-   se ve mientras la pegas (es normal). **No hace falta tu id numérico**: al
-   arrancar, el bot te da un código de un solo uso (paso 5). Si ya lo sabes,
+4. **Telegram.** Pega el token entero del paso 4; no se ve mientras lo
+   pegas (es normal). Si lo que pegas no es un token de bot (por ejemplo tu
+   API key de la IA), el asistente te lo dice y lo vuelve a pedir; solo
+   muestra sus 4 últimos caracteres. **No hace falta tu id numérico**: al
+   arrancar, el bot te da un código de un solo uso (paso 6). Si ya lo sabes,
    `uv run cli.py init --owner-id <id>` lo escribe.
 5. **Secreto del puente.** Genera un secreto aleatorio largo que la extensión
    usa para hablar con el bot. No tienes que copiarlo: el bot le da a la
-   extensión un código de emparejamiento (`/conectar`, paso 7).
+   extensión un código de emparejamiento (`/conectar`, paso 8).
 6. **Carpeta del perfil.** Deja `profiles/me` y, en `Empezar con [3]`, pulsa
    Intro: la opción **3, un perfil vacío**, es la recomendada. El bot arranca
    en *modo configuración* y crea el perfil contigo con `/configurar`.
@@ -137,7 +151,7 @@ por API no tienen esa herramienta, así que esa búsqueda aparece como no
 disponible en vez de inventarse. Para cambiar de IA, vuelve a ejecutar `uv run cli.py init`: con Intro
 conservas todo lo demás. Detalles: [providers.md](providers.md).
 
-## 5. Arrancar el bot
+## 6. Arrancar el bot
 
 ```bash
 uv run bot.py
@@ -170,7 +184,7 @@ tareas de Windows), mira [running.md](running.md). La opción más rápida en
 Linux o macOS es `tmux new -s lazyhunt 'uv run bot.py'` y salir con
 `Ctrl+B` y luego `D`.
 
-## 6. `/configurar` en Telegram
+## 7. `/configurar` en Telegram
 
 Envía `/configurar` (o `/setup`, funcionan los dos). El bot hace una pregunta
 por mensaje, con botones cuando hay que elegir. Tarda unos **10 minutos**:
@@ -185,7 +199,8 @@ por mensaje, con botones cuando hay que elegir. Tarda unos **10 minutos**:
 7. años de experiencia, último puesto y empresa;
 8. tu formación más alta;
 9. modalidades (Remoto, Híbrido, Presencial), la ciudad y el país donde
-   quieres trabajar;
+   quieres trabajar (el país de tu ciudad sale con un toque, p. ej.
+   «España (por Barcelona)»);
 10. un sueldo mínimo bruto anual (opcional);
 11. los idiomas en que puede estar una oferta (las demás se descartan);
 12. los portales que quieres activar; cada uno muestra antes su aviso sobre
@@ -215,7 +230,7 @@ elegiste y pasa a modo normal sin reiniciar. La respuesta termina con el
 siguiente paso: abrir la extensión y sugerir búsquedas. Todas las preguntas y
 archivos: [onboarding.md](onboarding.md).
 
-## 7. La extensión
+## 8. La extensión
 
 La extensión no está en ninguna tienda: la cargas desde el código del
 repositorio. Sus textos siguen el idioma de tu navegador.
@@ -272,7 +287,7 @@ debajo de tu mínimo*. No descartan la oferta: decides tú.
 `/reanudar` lo vuelve a activar. La ventana de la extensión tiene el botón
 **Pausar**.
 
-## 8. Cambiar tu perfil después
+## 9. Cambiar tu perfil después
 
 Con `/configurar <sección>` el bot vuelve a preguntar solo esa parte, con tus
 respuestas actuales ya puestas (botón **Mantener …**). Por ejemplo
@@ -294,11 +309,13 @@ También puedes hacerlo en la extensión: **Opciones › Perfil › Cargar desde
 bot**, cambiar lo que quieras y pulsar **Guardar** en cada parte. Los datos de
 contacto, los portales y los CV solo se cambian con `/configurar <sección>`.
 
-## 9. Problemas frecuentes
+## 10. Problemas frecuentes
 
 **El bot no contesta en Telegram.**
 Comprueba que sigue en marcha (el terminal o tu servicio). `CVA_TELEGRAM_TOKEN`
-en `.env` debe ser el token de BotFather. Si aún no tiene dueño
+en `.env` debe ser el token de BotFather. Si Telegram lo rechaza, el bot lo
+dice en una línea al arrancar («Telegram ha rechazado el token del bot…») y
+se para, sin mostrar el token. Si aún no tiene dueño
 (`owner_telegram_id` sin definir o `0`), solo atiende `/start <código>` con el
 código que muestra su terminal; tras 5 códigos incorrectos o 30 minutos,
 reinícialo para obtener otro. Ya emparejado, solo contesta al id guardado. `uv run cli.py check` carga tu configuración sin Telegram y
@@ -341,7 +358,7 @@ Límites de cada portal: [portals.md](portals.md).
 
 Más casos: [Troubleshooting](../README.md#troubleshooting) del README.
 
-## 10. Actualizar, desinstalar y privacidad
+## 11. Actualizar, desinstalar y privacidad
 
 **Actualizar:** `git pull` y `uv sync` en la carpeta `lazyhunt`, reinicia el
 bot y pulsa el botón de recargar de lazyhunt en `chrome://extensions`. Tu

@@ -60,19 +60,37 @@ export async function fetchBotConfig(settings) {
   }
 }
 
-// Best effort: a failed report is logged and never affects the round.
+// What went wrong with a request to the bot, for the popup (beta4-polish S4):
+// {code: 'http', status} for an HTTP error answer, {code: 'unreachable'} for
+// no answer, {code: 'badUrl'} when the bridge URL gives no endpoint.
+export const httpProblem = (status) => ({ code: 'http', status });
+export const UNREACHABLE = Object.freeze({ code: 'unreachable' });
+export const BAD_URL = Object.freeze({ code: 'badUrl' });
+
+// Best effort: a failed report never stops the round. Answers null when the
+// bot recorded it, else the problem (counted and shown by the popup).
 export async function reportScan(settings, beacon, outcome) {
-  const url = scanReportUrl(settings.bridgeUrl);
   const secret = bridgeSecret(settings);
-  if (!url || !secret) return;
+  if (!secret) return null;
+  const url = scanReportUrl(settings.bridgeUrl);
+  if (!url) {
+    warn(`scan report for "${beacon.name}" not sent: the bridge URL does not end in /bridge`);
+    return { ...BAD_URL };
+  }
   try {
-    await fetchBounded(url, {
+    const response = await fetchBounded(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', [SECRET_HEADER]: secret },
       body: JSON.stringify(buildScanReport(beacon, outcome, Date.now())),
     });
+    if (response && response.ok === false) {
+      warn(`scan report for "${beacon.name}" answered HTTP ${response.status}`);
+      return httpProblem(response.status);
+    }
+    return null;
   } catch (error) {
     warn(`scan report for "${beacon.name}" failed:`, String(error));
+    return { ...UNREACHABLE };
   }
 }
 
@@ -87,9 +105,14 @@ const payloadProfile = (value) => (typeof value === 'string' && FAMILY_ID_RE.tes
 
 const orNull = (value) => (value === undefined || value === null || value === '' ? null : value);
 
-// `offers` are [{card, text}]. Answers BRIDGE_ACCEPTED (2xx), BRIDGE_REJECTED
-// (4xx: a deterministic refusal) or BRIDGE_OUTAGE (network error, 5xx, the
-// bot's pause, anything else: retried later at no cost).
+// A wrong bridge URL answers 404/405 for every offer: a configuration
+// problem, retried at no cost like an outage, never an offer's fault.
+const MISCONFIGURED_STATUSES = new Set([404, 405]);
+
+// `offers` are [{card, text}]. Answers {outcome, problem}: outcome is
+// BRIDGE_ACCEPTED (2xx), BRIDGE_REJECTED (any other 4xx: a deterministic
+// refusal) or BRIDGE_OUTAGE (network error, 404/405, 5xx, the bot's pause,
+// anything else: retried later at no cost); problem is null when accepted.
 export async function postOffers(settings, beacon, offers) {
   if (!bridgeConfigured(settings)) throw new Error('bridge not configured');
   const body = JSON.stringify({
@@ -114,13 +137,18 @@ export async function postOffers(settings, beacon, offers) {
     }, OFFERS_POST_TIMEOUT_MS);
   } catch (error) {
     warn(`bridge unreachable for "${beacon.name}":`, String(error));
-    return BRIDGE_OUTAGE;
+    return { outcome: BRIDGE_OUTAGE, problem: { ...UNREACHABLE } };
   }
-  if (response.ok) return BRIDGE_ACCEPTED;
+  if (response.ok) return { outcome: BRIDGE_ACCEPTED, problem: null };
+  const problem = httpProblem(response.status);
+  if (MISCONFIGURED_STATUSES.has(response.status)) {
+    warn(`bridge answered HTTP ${response.status} for "${beacon.name}": check the bridge URL; offers kept for the next round`);
+    return { outcome: BRIDGE_OUTAGE, problem };
+  }
   if (response.status >= 400 && response.status < 500) {
     warn(`bridge rejected ${offers.length} offer(s) of "${beacon.name}" with HTTP ${response.status}`);
-    return BRIDGE_REJECTED;
+    return { outcome: BRIDGE_REJECTED, problem };
   }
   warn(`bridge answered HTTP ${response.status} for "${beacon.name}"; offers kept for the next round`);
-  return BRIDGE_OUTAGE;
+  return { outcome: BRIDGE_OUTAGE, problem };
 }

@@ -165,7 +165,7 @@ def test_declining_the_final_confirmation_writes_nothing(tmp_path: Path) -> None
 
 def test_existing_keys_are_not_overwritten_without_confirmation(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
-        "CVA_TELEGRAM_TOKEN=old-token\nCVA_BRIDGE_SECRET=old-secret-value\nOTHER=1\n",
+        "CVA_TELEGRAM_TOKEN=111111111:AAOldTokenForTestsOnly_abcdefghijklm\nCVA_BRIDGE_SECRET=old-secret-value\nOTHER=1\n",
         encoding="utf-8",
     )
     (tmp_path / "config.local.toml").write_text(
@@ -180,7 +180,7 @@ def test_existing_keys_are_not_overwritten_without_confirmation(tmp_path: Path) 
 
     env = read_env(tmp_path / ".env")
     assert env == {
-        "CVA_TELEGRAM_TOKEN": "old-token",
+        "CVA_TELEGRAM_TOKEN": "111111111:AAOldTokenForTestsOnly_abcdefghijklm",
         "CVA_BRIDGE_SECRET": "old-secret-value",
         "OTHER": "1",
     }
@@ -188,13 +188,14 @@ def test_existing_keys_are_not_overwritten_without_confirmation(tmp_path: Path) 
     assert local["owner_telegram_id"] == 111
     assert local["cv_mirror_dir"] == "x"
     assert local["profile_dir"] == "profiles/me"
-    assert "old-token" not in scripted.transcript
+    assert "111111111:AAOldTokenForTestsOnly_abcdefghijklm" not in scripted.transcript
     assert "old-secret-value" not in scripted.transcript
 
 
 def test_existing_keys_are_replaced_when_confirmed(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
-        "CVA_TELEGRAM_TOKEN=old-token\nOTHER=1\n", encoding="utf-8"
+        "CVA_TELEGRAM_TOKEN=111111111:AAOldTokenForTestsOnly_abcdefghijklm\nOTHER=1\n",
+        encoding="utf-8",
     )
     (tmp_path / "config.local.toml").write_text(
         "owner_telegram_id = 111\n", encoding="utf-8"
@@ -354,7 +355,7 @@ def test_spanish_wizard_speaks_spanish_after_the_language_question(
         "Paso 1/7 - Idioma del bot",
         "Paso 2/7 - Requisitos",
         "Proveedor [claude_code]",
-        "En Telegram, busca @BotFather",
+        "Primero crea tu bot de Telegram",
         "Token del bot (oculto",
         "Carpeta del perfil [profiles/me]",
         "Cambios previstos:",
@@ -479,12 +480,13 @@ def test_duplicate_env_keys_are_all_replaced(tmp_path: Path) -> None:
     """Verifier advisory 4: dotenv uses the last occurrence, so every
     occurrence of a confirmed key must get the new value."""
     (tmp_path / ".env").write_text(
-        "CVA_TELEGRAM_TOKEN=old1\nOTHER=1\nCVA_TELEGRAM_TOKEN=old2\n", encoding="utf-8"
+        "CVA_TELEGRAM_TOKEN=222222222:AAOldOneTokenForTestsOnly_abcdefghijk\nOTHER=1\nCVA_TELEGRAM_TOKEN=333333333:AAOldTwoTokenForTestsOnly_abcdefghijk\n",
+        encoding="utf-8",
     )
     scripted = ScriptedIO(["", "", "y", "", "1", "y", "n"], [TOKEN])
     assert wizard(tmp_path, scripted) == 0
     text = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "old1" not in text and "old2" not in text
+    assert "AAOldOneToken" not in text and "AAOldTwoToken" not in text
     assert text.count(f"CVA_TELEGRAM_TOKEN={TOKEN}") == 1
     assert "OTHER=1" in text
 

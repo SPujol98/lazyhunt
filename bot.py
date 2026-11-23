@@ -12,14 +12,16 @@ import io
 import logging
 import sys
 import time
+import traceback
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, NoReturn, TextIO
 
 from pydantic import ValidationError
 from telegram import BotCommand, Update
+from telegram.error import InvalidToken
 from telegram.ext import (
     Application,
     ApplicationHandlerStop,
@@ -140,6 +142,7 @@ from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
 from cva.service import JobService, OfferClosedError, ServiceError, display_result
+from cva.setup import telegram_token
 from cva.setup.pairing import (
     CLAIM_CODE_TTL_SECONDS,
     OneTimeCode,
@@ -2169,8 +2172,44 @@ def build_gmail_sync(settings: Settings, service: JobService) -> GmailSync | Non
 
 
 def main() -> None:
+    """Start the bot; a token Telegram rejects ends it with one plain line.
+
+    The token is checked (``getMe``) before anything is printed (the claim
+    code included) and is redacted from every log record; an
+    :class:`InvalidToken` raised later (a token revoked while running) is
+    reported the same way, never as a traceback that would show the token.
+    """
     configure_logging()
     settings = Settings()
+    token = settings.telegram_token.get_secret_value()
+    telegram_token.install_redaction(token)
+    lang = settings.ui_language
+    status = telegram_token.check_token(token)
+    if status == "rejected":
+        _token_rejected(lang)
+    if status == "unreachable":
+        _LOG.warning("could not reach Telegram to check the bot token; polling retries")
+    try:
+        _run(settings)
+    except InvalidToken:
+        _token_rejected(lang)
+    except Exception as exc:
+        text = "".join(traceback.format_exception(exc))
+        if not token or token not in text:
+            raise
+        # Last resort: the traceback would show the token; print it scrubbed.
+        sys.stderr.write(telegram_token.redact(text, token))
+        sys.stderr.flush()
+        raise SystemExit(1) from None
+
+
+def _token_rejected(lang: Lang) -> NoReturn:
+    sys.stderr.write(t("bot.token_rejected", lang) + "\n")
+    sys.stderr.flush()
+    raise SystemExit(1)
+
+
+def _run(settings: Settings) -> None:
     _LOG.info(describe_llm_setup(settings))
     service: JobService | None = None
     replay: list[Update] = []

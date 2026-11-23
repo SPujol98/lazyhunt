@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.4] - 2026-11-23
+
+Fourth pre-release for testers: fixes from a real end-to-end test.
+
+### Fixed
+
+- New installs now score offers with the AI judge (`match_mode = "hybrid"`). Before, a fresh install used keyword matching only, so almost no offer passed the threshold.
+- The extension's bridge URL is filled in by default and cleaned on save (a stray trailing dot or space used to break delivery silently); offers the bot does not accept are now shown as "not delivered" with the reason instead of being counted as new.
+- `init` only accepts a token shaped like @BotFather's and refuses your AI key pasted by mistake (also when it was already saved); the bot checks the token before showing the `/start` code, and a rejected token is reported in one line without ever printing it.
+
+### Changed
+
+- "Create your Telegram bot" is now an explicit step before `init` in the README and guides.
+- `/setup` proposes the country from your work city ("Spain (from Barcelona)").
+- Options shows the connection state ("Connected to your bot", "Not connected — send /connect…"); the bridge URL and the manual secret moved under "Advanced".
+- The example `config.local.toml` only points to public docs.
+
 ## [2.0.0-beta.3] - 2026-11-21
 
 Third pre-release for testers: a much shorter first run, based on the first real test.
@@ -162,7 +179,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...HEAD
+[2.0.0-beta.4]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...v2.0.0-beta.4
 [2.0.0-beta.3]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...v2.0.0-beta.3
 [2.0.0-beta.2]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...v2.0.0-beta.2
 [2.0.0-beta.1]: https://github.com/SPujol98/lazyhunt/compare/v0.5.0...v2.0.0-beta.1

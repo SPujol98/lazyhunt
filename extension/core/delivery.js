@@ -80,12 +80,14 @@ async function collectOffers({ tab, portal, beacon, passing, ledger }) {
   return offers;
 }
 
+// Answers what reached the bot (beta4-polish S4): `sent` offers accepted,
+// `undelivered` offers posted but not accepted and the `problem` why.
 async function sendOffers({ settings, beacon, offers, ledger }) {
   if (!offers.length || !bridgeConfigured(settings)) {
     offers.forEach(({ card }) => ledger.settle(String(card.id)));
-    return;
+    return { sent: 0, undelivered: 0, problem: null };
   }
-  const outcome = await postOffers(settings, beacon, offers);
+  const { outcome, problem } = await postOffers(settings, beacon, offers);
   for (const { card } of offers) {
     const id = String(card.id);
     if (outcome === BRIDGE_ACCEPTED) ledger.settle(id);
@@ -93,6 +95,8 @@ async function sendOffers({ settings, beacon, offers, ledger }) {
     else if (outcome === BRIDGE_OUTAGE) ledger.retry.add(id);
   }
   if (outcome !== BRIDGE_ACCEPTED) ledger.usedCounters = true;
+  const accepted = outcome === BRIDGE_ACCEPTED;
+  return { sent: accepted ? offers.length : 0, undelivered: accepted ? 0 : offers.length, problem };
 }
 
 function updatedSeen(seenList, cards, retry) {
@@ -115,8 +119,9 @@ function prunedAttempts(ledger, cards) {
   return Object.fromEntries(Object.entries(ledger.attempts).filter(([id]) => onPage.has(id)));
 }
 
-// Returns the counts for `lastCheck` and the beacon's next seen list and
-// attempt counters; `drained` says nothing was left to retry.
+// Returns the counts for `lastCheck` (`sent`/`undelivered`/`problem`: what
+// reached the bot) and the beacon's next seen list and attempt counters;
+// `drained` says nothing was left to retry.
 export async function deliver({ tab, portal, beacon, cards, settings, filters, seenList, attempts }) {
   const known = new Set(seenList);
   const fresh = cards.filter((card) => !known.has(String(card.id)));
@@ -127,10 +132,13 @@ export async function deliver({ tab, portal, beacon, cards, settings, filters, s
 
   const ledger = new Ledger(attempts);
   const offers = await collectOffers({ tab, portal, beacon, passing, ledger });
-  await sendOffers({ settings, beacon, offers, ledger });
+  const delivery = await sendOffers({ settings, beacon, offers, ledger });
 
   return {
     newJobs: fresh.length,
+    sent: delivery.sent,
+    undelivered: delivery.undelivered,
+    problem: delivery.problem,
     filteredOut,
     seenList: updatedSeen(seenList, cards, ledger.retry),
     attempts: prunedAttempts(ledger, cards),

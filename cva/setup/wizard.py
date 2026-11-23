@@ -44,13 +44,14 @@ temporary directory.
 
 import getpass as _getpass
 import json
+import os
 import re
 import secrets
 import shutil
 import subprocess
 import sys
 import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
@@ -59,6 +60,7 @@ from cva.config import system_ui_language
 from cva.fsutil import atomic_write
 from cva.i18n import Lang, t
 from cva.setup.prereq import check_codex
+from cva.setup.telegram_token import looks_like_token, tail
 
 Runner = Callable[[Sequence[str]], tuple[int, str]]
 Which = Callable[[str], str | None]
@@ -76,6 +78,13 @@ PROVIDERS: Final[tuple[str, ...]] = (
     "anthropic",
     "openai_compatible",
 )
+SHARED_TOML: Final[str] = "config.toml"
+# A fresh install scores offers with the AI judge (beta4 S6); ``keyword`` (the
+# code default) is the offline, no-AI fallback and is kept wherever it is set.
+MATCH_MODE_KEY: Final[str] = "match_mode"
+MATCH_MODE_ENV: Final[str] = "CVA_MATCH_MODE"
+DEFAULT_MATCH_MODE: Final[str] = "hybrid"
+_AI_KEYS: Final[tuple[str, ...]] = ("ANTHROPIC_API_KEY", "CVA_LLM_API_KEY")
 _PROVIDER_KEY: Final[dict[str, str]] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai_compatible": "CVA_LLM_API_KEY",
@@ -112,7 +121,6 @@ LOCAL_KEY_PLACEHOLDER: Final[str] = "local"
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 DEMO_PROFILE: Final[Path] = _REPO_ROOT / "profiles" / "demo"
 _MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
-_TOKEN_SHAPE: Final[re.Pattern[str]] = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
 _UNSET: Final[tuple[object, ...]] = (None, "", 0)
 # Answer of the profile-kind question -> what ``_create_profile`` makes.
 _PROFILE_KINDS: Final[dict[str, str]] = {"1": "skeleton", "2": "demo", "3": "empty"}
@@ -533,10 +541,13 @@ def _step_telegram(
     an id passed with ``--owner-id`` or already in the config is kept."""
     _step(io, lang, 4, "telegram")
     io.print(t("wizard.botfather", lang))
-    token = _ask_secret(io, t("wizard.token_prompt", lang))
-    if token:
-        if not _TOKEN_SHAPE.match(token):
-            io.print(t("wizard.token_shape", lang))
+    token = _ask_token(io, plan, existing_env, lang)
+    saved = existing_env.get(TOKEN_KEY, "")
+    if token and saved and not looks_like_token(saved):
+        # The saved value was never a bot token: replace it without asking.
+        plan.env[TOKEN_KEY] = token
+        plan.env_replaced.add(TOKEN_KEY)
+    elif token:
         if _propose(
             io,
             plan.env,
@@ -569,6 +580,64 @@ def _step_telegram(
         io.print(t("wizard.owner_kept", lang, owner=current))
     else:
         io.print(t("wizard.owner_claim", lang))
+
+
+def _step_match_mode(
+    plan: _Plan,
+    base_dir: Path,
+    existing_env: dict[str, str],
+    existing_toml: dict[str, object],
+    environ: Mapping[str, str],
+) -> None:
+    """Plan ``match_mode = "hybrid"`` only when no layer sets it yet (the
+    shared and local TOML, the environment, ``.env``): existing installs keep
+    whatever they chose."""
+    if MATCH_MODE_KEY in existing_toml:
+        return
+    try:
+        shared = _read_toml(base_dir / SHARED_TOML)
+    except tomllib.TOMLDecodeError:
+        return  # never guess over an unreadable shared config
+    if MATCH_MODE_KEY in shared:
+        return
+    names = {k.upper() for k in (*environ, *existing_env)}
+    if MATCH_MODE_ENV in names:
+        return
+    plan.toml[MATCH_MODE_KEY] = DEFAULT_MATCH_MODE
+
+
+def _ai_keys(plan: _Plan, existing_env: dict[str, str]) -> set[str]:
+    """The AI API keys of this run and of ``.env`` (a token must differ)."""
+    keys = {plan.env.get(k) or existing_env.get(k) for k in _AI_KEYS}
+    return {k for k in keys if k}
+
+
+def _ask_token(
+    io: WizardIO, plan: _Plan, existing_env: dict[str, str], lang: Lang
+) -> str:
+    """The pasted bot token, asked again until it has BotFather's shape and is
+    not the AI key; ``""`` when skipped. Only its last 4 characters are shown."""
+    ai_keys = _ai_keys(plan, existing_env)
+    saved = existing_env.get(TOKEN_KEY, "")
+    # A saved token that cannot be a bot token (e.g. an AI key pasted by
+    # mistake) is not kept silently: Enter would leave the bot unable to start.
+    saved_bad = bool(saved) and (saved in ai_keys or not looks_like_token(saved))
+    if saved_bad:
+        io.print(t("wizard.token_saved_invalid", lang))
+    while True:
+        token = _ask_secret(io, t("wizard.token_prompt", lang))
+        if not token:
+            if saved_bad:
+                io.print(t("wizard.token_invalid", lang))
+                continue
+            return ""
+        if token in ai_keys:
+            io.print(t("wizard.token_is_ai_key", lang))
+        elif not looks_like_token(token):
+            io.print(t("wizard.token_invalid", lang))
+        else:
+            io.print(t("wizard.token_saved", lang, tail=tail(token)))
+            return token
 
 
 def _step_bridge_secret(
@@ -1026,6 +1095,7 @@ def _run(
     spoken[0] = lang
     _check_prerequisites(io, runner, which, lang)
     provider = _step_provider(io, plan, existing_env, existing_toml, lang)
+    _step_match_mode(plan, base_dir, existing_env, existing_toml, os.environ)
     _step_telegram(io, plan, existing_env, existing_toml, lang, owner_id)
     _step_bridge_secret(io, plan, existing_env, lang)
     _step_profile(io, plan, base_dir, existing_toml, demo_profile, lang)

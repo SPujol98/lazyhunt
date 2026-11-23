@@ -567,3 +567,34 @@ body.options {
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
+
+/* beta4-polish S4: the connection state and the Advanced disclosure. */
+.conn-state {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.conn-state.is-ok {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.conn-state.is-warn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.advanced {
+  margin-top: 14px;
+}
+
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 10px;
+}

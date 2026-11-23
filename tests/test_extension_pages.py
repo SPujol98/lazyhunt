@@ -50,6 +50,7 @@ def _messages(lang: str) -> dict[str, dict]:
         "nobridge",
         "pair",  # beta3-ux T1
         "searchguide",  # beta3-ux T2
+        "bridge",  # beta4-polish S4
     ],
 )
 def test_pages_behaviour(area: str) -> None:

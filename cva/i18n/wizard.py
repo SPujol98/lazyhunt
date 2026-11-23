@@ -140,20 +140,32 @@ EN: Final[dict[str, str]] = {
     ),
     # --- telegram ----------------------------------------------------------------
     "wizard.botfather": (
-        "  Your bot's token, step by step:\n"
-        "    1. In Telegram, search for @BotFather (blue check mark) and open it.\n"
+        "  Create your Telegram bot first (2 minutes, in the Telegram app):\n"
+        "    1. Search for @BotFather (blue check mark) and open it.\n"
         "    2. Send /newbot.\n"
         "    3. Type a name for your bot (any name, e.g. My job hunter).\n"
         '    4. Type a username that ends in "bot" (e.g. myjobhunter_bot).\n'
         "    5. BotFather replies with a token like 1234567890:AAH...: copy the "
-        "whole line.\n"
+        "whole token.\n"
+        "  Already have a bot? @BotFather → /mybots → your bot → API Token.\n"
         "  Paste it below. It stays hidden while you paste (nothing appears): "
         "that is normal. Keep it private."
     ),
     "wizard.token_prompt": "  Bot token (hidden; Enter to skip): ",
-    "wizard.token_shape": (
-        "  Note: that does not look like a BotFather token; saving it anyway."
+    "wizard.token_saved_invalid": (
+        "  The token saved in .env does not look like a Telegram bot token "
+        "(was another key pasted?). Paste the @BotFather token to continue."
     ),
+    "wizard.token_invalid": (
+        "  This does not look like a Telegram bot token: copy it from "
+        "@BotFather (/mybots → your bot → API Token); it looks like "
+        "1234567890:AA…"
+    ),
+    "wizard.token_is_ai_key": (
+        "  That is your AI API key, not the Telegram bot token. Copy the "
+        "token from @BotFather (/mybots → your bot → API Token)."
+    ),
+    "wizard.token_saved": "  Bot token {tail} saved.",
     "wizard.token_kept": "  Keeping the token already in .env.",
     "wizard.token_skipped": "  Skipped: set {key} in .env before starting the bot.",
     "wizard.owner_claim": (
@@ -419,21 +431,32 @@ ES: Final[dict[str, str]] = {
         "  Saltado: añade {key}=<tu key> a .env antes de arrancar el bot."
     ),
     "wizard.botfather": (
-        "  El token de tu bot, paso a paso:\n"
-        "    1. En Telegram, busca @BotFather (con la marca azul) y ábrelo.\n"
+        "  Primero crea tu bot de Telegram (2 minutos, en la app de Telegram):\n"
+        "    1. Busca @BotFather (con la marca azul) y ábrelo.\n"
         "    2. Envía /newbot.\n"
         "    3. Escribe un nombre para tu bot (el que quieras, p. ej. Mi buscador).\n"
         '    4. Escribe un nombre de usuario que acabe en "bot" '
         "(p. ej. mibuscador_bot).\n"
-        "    5. BotFather responde con un token como 1234567890:AAH...: copia la "
-        "línea entera.\n"
+        "    5. BotFather responde con un token como 1234567890:AAH...: copia el "
+        "token entero.\n"
+        "  ¿Ya tienes un bot? @BotFather → /mybots → tu bot → API Token.\n"
         "  Pégalo abajo. No se ve mientras lo pegas (no aparece nada): es "
         "normal. No lo compartas."
     ),
     "wizard.token_prompt": "  Token del bot (oculto; Intro para saltar): ",
-    "wizard.token_shape": (
-        "  Aviso: no parece un token de BotFather; se guarda igualmente."
+    "wizard.token_saved_invalid": (
+        "  El token guardado en .env no parece un token de bot de Telegram "
+        "(¿se pegó otra clave?). Pega el token de @BotFather para seguir."
     ),
+    "wizard.token_invalid": (
+        "  Esto no parece un token de bot de Telegram: cópialo de @BotFather "
+        "(/mybots → tu bot → API Token); tiene esta forma: 1234567890:AA…"
+    ),
+    "wizard.token_is_ai_key": (
+        "  Esa es tu API key de IA, no el token del bot de Telegram. Copia el "
+        "token de @BotFather (/mybots → tu bot → API Token)."
+    ),
+    "wizard.token_saved": "  Token del bot {tail} guardado.",
     "wizard.token_kept": "  Se mantiene el token que ya hay en .env.",
     "wizard.token_skipped": (
         "  Saltado: define {key} en .env antes de arrancar el bot."

@@ -110,7 +110,7 @@
     "message": "ninguno"
   },
   "bridgeMissingHint": {
-    "message": "Rellena la URL y el secreto del puente: hasta entonces la extensión no escanea nada, así que no se pierde ninguna oferta."
+    "message": "Empareja con el código que envía el bot para /conectar: hasta entonces la extensión no escanea nada, así que no se pierde ninguna oferta."
   },
   "bridgeSecretHint": {
     "message": "Nunca se incluye en los archivos exportados."
@@ -1030,7 +1030,7 @@
     "message": "Emparejar"
   },
   "pairHint": {
-    "message": "Envía /conectar al bot y escribe el código que te responda: la URL y el secreto del puente se rellenan solos. Escribir el secreto a mano sigue funcionando."
+    "message": "Envía /conectar al bot y escribe el código que te responda: la URL y el secreto del puente se rellenan solos. Escribir el secreto a mano sigue funcionando (en Avanzado)."
   },
   "pairDone": {
     "message": "Emparejado: el secreto del puente está guardado."
@@ -1043,5 +1043,121 @@
   },
   "pairNeedsUrl": {
     "message": "Escribe primero una URL del puente válida, por ejemplo http://127.0.0.1:8765/bridge."
+  },
+  "connectionStateLabel": {
+    "message": "Conexión"
+  },
+  "advancedLabel": {
+    "message": "Avanzado"
+  },
+  "bridgeUrlHint": {
+    "message": "Es la misma en todas las instalaciones: cámbiala solo si cambiaste bridge_port en el bot."
+  },
+  "bridgeUrlNotLoopback": {
+    "message": "La URL del puente debe apuntar a este ordenador (127.0.0.1, localhost o [::1])."
+  },
+  "bridgeUrlNotBridge": {
+    "message": "La URL del puente debe terminar en /bridge, por ejemplo http://127.0.0.1:8765/bridge."
+  },
+  "bridgeUrlInvalid": {
+    "message": "La URL del puente debe tener la forma http://127.0.0.1:8765/bridge."
+  },
+  "connStateOk": {
+    "message": "✅ Conectado a tu bot"
+  },
+  "connStateRejected": {
+    "message": "⚠️ Secreto rechazado — envía /conectar para obtener un código nuevo"
+  },
+  "connStateUnreachable": {
+    "message": "No se puede contactar con el bot — ¿está en marcha `uv run bot.py`?"
+  },
+  "connStateHttp": {
+    "message": "El bot respondió con HTTP $p1$ — revisa la URL del puente en Avanzado.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "connStateBadUrl": {
+    "message": "La URL del puente no es válida — corrígela en Avanzado."
+  },
+  "connStateChecking": {
+    "message": "Comprobando la conexión…"
+  },
+  "connStateNone": {
+    "message": "Sin conectar — envía /conectar al bot y pega aquí el código"
+  },
+  "importBridgeUrlKept": {
+    "message": "La URL del puente del archivo no es válida: se ha mantenido la actual."
+  },
+  "beaconUndelivered": {
+    "message": "$p1$ sin entregar · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "problemUnreachable": {
+    "message": "no se puede contactar con el bot — ¿está en marcha?"
+  },
+  "problemBadUrl": {
+    "message": "la URL del puente no es válida — revísala en Opciones › Avanzado"
+  },
+  "problemWrongUrl": {
+    "message": "el bot respondió $p1$ — revisa la URL del puente en Opciones › Avanzado",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "problemSecret": {
+    "message": "el bot respondió $p1$ — envía /conectar para obtener un código nuevo",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "problemHttp": {
+    "message": "el bot respondió $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "resultUndelivered": {
+    "message": "$p1$ escaneadas · $p2$ enviadas · $p3$ sin entregar ($p4$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      },
+      "p4": {
+        "content": "$4"
+      }
+    }
+  },
+  "resultReportsFailed": {
+    "message": "$p1$ informes de escaneo sin entregar ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
   }
 }

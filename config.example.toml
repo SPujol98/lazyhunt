@@ -59,4 +59,8 @@ cv_font = "carlito"
 
 # --- Matching ---------------------------------------------------------------
 threshold = 65
-match_mode = "keyword"       # "hybrid" adds the LLM judge (spends model calls)
+# "hybrid": the AI judge scores each offer and decides what reaches Telegram
+# (recommended; `cli.py init` writes it on a new install). "keyword": offline
+# keyword scoring with no AI, a fallback that rarely reaches the threshold.
+# The code default is "keyword" (existing installs); see docs/providers.md.
+match_mode = "hybrid"

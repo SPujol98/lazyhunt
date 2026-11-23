@@ -11,6 +11,23 @@ provider with `llm_provider` in `config.toml` / `config.local.toml`. Secrets
 | `openai_compatible` | any OpenAI-style `/chat/completions` endpoint | yes with Gemini (free-tier key); others at your own risk, see below |
 | `codex_cli` | your installed Codex CLI (`codex exec`) | with a fake CLI only; a real run is pending |
 
+## The AI judge scores the offers (`match_mode`)
+
+The provider is what scores each offer against your profile: with
+`match_mode = "hybrid"` the AI judge gives the 0–100 score and verdict that
+decide which offers reach Telegram (the keyword breakdown is kept on the card
+for transparency). `cli.py init` writes `match_mode = "hybrid"` on a new
+install; it never changes a `match_mode` you already set.
+
+`match_mode = "keyword"` (the code default, kept for existing installs) is an
+offline fallback that uses no AI: it only counts keywords, so its scores
+rarely reach `threshold` and few or no offers are notified. Use it only when
+no provider is available.
+
+```toml
+match_mode = "hybrid"
+```
+
 ## 1. Claude Code (default)
 
 cva runs your own, unmodified `claude` CLI in headless mode (`claude -p`),

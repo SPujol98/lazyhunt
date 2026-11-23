@@ -9,6 +9,7 @@ import pytest
 import cva.cvgen.engine as cvgen_engine
 import cva.profile_paths as profile_paths_module
 import cva.service as service_module
+import cva.setup.telegram_token as telegram_token_module
 from cva.profile_paths import ProfilePaths, resolve_profile_paths
 from tests.demo import DEMO_DIR
 
@@ -49,6 +50,9 @@ def _isolate_default_output_paths(
     monkeypatch.setattr(
         profile_paths_module, "resolve_profile_paths", _demo_default_paths
     )
+    # No test reaches Telegram: the bot's startup token check (beta4 S1)
+    # answers "ok"; tests of the check itself patch it back.
+    monkeypatch.setattr(telegram_token_module, "check_token", lambda token: "ok")
     # Test modules keep the real function (they exercise its contract).
     tests_dir = str(Path(__file__).parent)
     for module in list(sys.modules.values()):

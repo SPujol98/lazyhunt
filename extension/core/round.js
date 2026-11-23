@@ -14,7 +14,9 @@ import { ScrapeTab } from './scrape_tab.js';
 import {
   readKeys, writeKeys, readSettings, isPlainObject, bridgeConfigured,
 } from './storage.js';
-import { BADGE_COLOR, NOTIFICATION_ICON, BETWEEN_BEACONS_MS } from './constants.js';
+import {
+  BADGE_COLOR, BADGE_WARN_COLOR, BADGE_WARN_TEXT, NOTIFICATION_ICON, BETWEEN_BEACONS_MS,
+} from './constants.js';
 import { sleep, randomBetween, errorMessage, log, warn } from './util.js';
 
 let roundRunning = false;
@@ -32,6 +34,11 @@ function emptySummary(extra = {}) {
     firstScans: 0,
     errors: 0,
     filteredOut: 0,
+    // beta4-polish S4: what actually reached the bot.
+    totalSent: 0,
+    undelivered: 0,
+    reportsFailed: 0,
+    deliveryProblem: null,
     ...extra,
   };
 }
@@ -129,13 +136,29 @@ async function notifySessionExpired(portal) {
   }
 }
 
-async function updateBadge(lastCheck) {
+// A round whose offers or scan reports did not reach the bot shows a warning
+// instead of a success count (beta4-polish S4).
+async function updateBadge(lastCheck, summary) {
   const total = Object.values(lastCheck).reduce((sum, entry) => sum + (Number(entry && entry.newJobs) || 0), 0);
+  const failed = summary.undelivered > 0 || summary.reportsFailed > 0;
   try {
-    await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
-    await chrome.action.setBadgeText({ text: total ? String(total) : '' });
+    await chrome.action.setBadgeBackgroundColor({ color: failed ? BADGE_WARN_COLOR : BADGE_COLOR });
+    await chrome.action.setBadgeText({ text: failed ? BADGE_WARN_TEXT : (total ? String(total) : '') });
   } catch (error) {
     warn('could not update the badge:', String(error));
+  }
+}
+
+// The first problem of the round is the one the popup explains.
+function noteProblem(summary, problem) {
+  if (problem && !summary.deliveryProblem) summary.deliveryProblem = problem;
+}
+
+async function report(settings, beacon, outcome, summary) {
+  const problem = await reportScan(settings, beacon, outcome);
+  if (problem) {
+    summary.reportsFailed += 1;
+    noteProblem(summary, problem);
   }
 }
 
@@ -148,7 +171,7 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
   try {
     throwIfCancelled();
     const { cards, noResults } = await scanPage(tab, beacon.url, portal);
-    await reportScan(settings, beacon, { jobs: cards, noResults });
+    await report(settings, beacon, { jobs: cards, noResults }, summary);
     reported = true;
     const seenList = Array.isArray(state.seenJobs[beacon.id]) ? state.seenJobs[beacon.id].map(String) : [];
     const result = await deliver({
@@ -162,17 +185,26 @@ async function scanBeacon({ tab, beacon, settings, state, summary }) {
     else delete state.detailAttempts[beacon.id];
     if (result.drained) state.recovering.delete(beacon.id);
     state.lastCheck[beacon.id] = {
-      at: at(), status: 'ok', jobsFound: cards.length, newJobs: result.newJobs, filteredOut: result.filteredOut,
+      at: at(),
+      status: 'ok',
+      jobsFound: cards.length,
+      newJobs: result.newJobs,
+      filteredOut: result.filteredOut,
+      sent: result.sent,
+      undelivered: result.undelivered,
     };
     summary.beaconsScanned += 1;
     summary.totalJobsFound += cards.length;
     summary.totalNew += result.newJobs;
     summary.filteredOut += result.filteredOut;
+    summary.totalSent += result.sent;
+    summary.undelivered += result.undelivered;
+    noteProblem(summary, result.problem);
     if (!seenList.length) summary.firstScans += 1;
     return true;
   } catch (error) {
     if (error instanceof RoundCancelled) throw error; // Pause: not a scan error
-    if (!reported) await reportScan(settings, beacon, { error });
+    if (!reported) await report(settings, beacon, { error }, summary);
     summary.errors += 1;
     if (error instanceof SessionExpiredError) {
       warn(`"${beacon.name}": ${error.userMessage}; round stopped`);
@@ -253,7 +285,7 @@ async function runGatedRound() {
     lastCheck: state.lastCheck,
     stats: { ...stats, totalNotified: Number(stats.totalNotified) || 0, lastRoundAt: Date.now() },
   });
-  await updateBadge(state.lastCheck);
+  await updateBadge(state.lastCheck, summary);
   log('round done', JSON.stringify(summary));
   return summary;
 }
@@ -269,6 +301,10 @@ async function recordOutcome(summary) {
         beaconsScanned: summary.beaconsScanned,
         totalNew: summary.totalNew,
         errors: summary.errors,
+        sent: summary.totalSent,
+        undelivered: summary.undelivered,
+        reportsFailed: summary.reportsFailed,
+        problem: summary.deliveryProblem,
       },
     });
   } catch (error) {

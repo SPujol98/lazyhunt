@@ -20,6 +20,7 @@ import {
   pairUrl, parseBotConfig, parseSuggestions, resolveEnabledPortals, suggestionsUrl,
 } from './searches.js';
 import { mountProfileEditor, parseProfile, profileUrl } from './profile_editor.js';
+import { DEFAULT_BRIDGE_URL, healedBridgeUrl, parseBridgeUrl } from './bridge_url.js';
 
 const CONFIG_FORMAT = 'linkedin-beacons-config';
 const CONFIG_VERSION = 1;
@@ -29,7 +30,6 @@ const MAX_INTERVAL = 1440;
 const WARN_INTERVAL = 30;
 const FETCH_TIMEOUT_MS = 5000;
 const SECRET_HEADER = 'X-CVA-Bridge-Secret';
-const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:8765/bridge';
 const LOAD_KEYS = [
   'settings', 'beacons', 'searches', 'titleFilter', 'titleFilterBackend', 'profileTitleFilters',
   'profileFamilies', 'familyTitleFilters', 'enabledPortals', 'botConfig', 'lastCheck', 'uiLanguage',
@@ -130,8 +130,22 @@ function parseFilterDraft(d) {
 }
 
 function bridgeConfigured(url, secret) {
-  return Boolean(configUrl(url) && String(secret || '').trim());
+  return Boolean(parseBridgeUrl(url).url && String(secret || '').trim());
 }
+
+// beta4-polish S4: why a typed bridge URL cannot be saved; null when it can
+// (a blank field means the default URL).
+function bridgeUrlProblem(value) {
+  switch (parseBridgeUrl(value).error) {
+    case 'notLoopback': return tr('bridgeUrlNotLoopback', null, 'The bridge URL must point to this computer (127.0.0.1, localhost or [::1]).');
+    case 'notBridge': return tr('bridgeUrlNotBridge', null, 'The bridge URL must end in /bridge, for example http://127.0.0.1:8765/bridge.');
+    case 'invalid': return tr('bridgeUrlInvalid', null, 'The bridge URL must look like http://127.0.0.1:8765/bridge.');
+    default: return null;
+  }
+}
+
+// The URL to store for the typed value: clean, or the default when blank.
+const bridgeUrlToStore = (value) => parseBridgeUrl(value).url || DEFAULT_BRIDGE_URL;
 
 async function fetchWithTimeout(url, init) {
   const controller = new AbortController();
@@ -196,7 +210,8 @@ async function load() {
   const filters = resolveTitleFilters(data);
   state.draft = {
     interval: String(readInterval(settings.intervalMinutes)),
-    bridgeUrl: String(settings.bridgeUrl || ''),
+    // beta4-polish S4: prefilled with the default, a trailing "." healed.
+    bridgeUrl: healedBridgeUrl(settings.bridgeUrl) || DEFAULT_BRIDGE_URL,
     bridgeSecret: String(settings.bridgeSecret || ''),
     beacons: (Array.isArray(data.beacons) ? data.beacons : []).filter(isObject).map((b) => cleanBeacon(b)),
     searches: dedupeSearchIds(normalizeSearches(data.searches, state.families), newSearchId),
@@ -290,8 +305,11 @@ function renderStatus() {
 // S2: without the bridge the extension scans nothing, so the fields that
 // are missing (or an invalid URL) are highlighted with an explanation.
 function renderBridgeFields(bridgeOk) {
+  const urlProblem = bridgeUrlProblem(state.draft.bridgeUrl);
+  $('bridgeUrlError').textContent = urlProblem || '';
+  $('bridgeUrlError').hidden = !urlProblem;
   const missing = {
-    bridgeUrlInput: !configUrl(state.draft.bridgeUrl),
+    bridgeUrlInput: !parseBridgeUrl(state.draft.bridgeUrl).url,
     bridgeSecretInput: !String(state.draft.bridgeSecret || '').trim(),
   };
   for (const [id, isMissing] of Object.entries(missing)) {
@@ -593,6 +611,46 @@ function renderConnection() {
   $('bridgeUrlInput').value = state.draft.bridgeUrl;
   $('bridgeSecretInput').value = state.draft.bridgeSecret;
   renderIntervalWarning();
+  renderConnectionState();
+}
+
+// beta4-polish S4: instead of an empty secret field, what the bot answered
+// (GET /config with the stored secret); the manual secret is under Advanced.
+function renderConnectionState() {
+  const node = $('connectionState');
+  const connection = state.connection || { kind: 'none' };
+  let text;
+  let tone = 'warn';
+  switch (connection.kind) {
+    case 'ok':
+      text = tr('connStateOk', null, '✅ Connected to your bot');
+      tone = 'ok';
+      break;
+    case 'rejected':
+      text = tr('connStateRejected', null, '⚠️ Secret rejected — send /connect for a new code');
+      break;
+    case 'unreachable':
+      text = tr('connStateUnreachable', null, 'Bot not reachable — is `uv run bot.py` running?');
+      break;
+    case 'http':
+      text = tr('connStateHttp', connection.status, 'The bot answered with HTTP $1 — check the bridge URL under Advanced.');
+      break;
+    case 'badUrl':
+      text = tr('connStateBadUrl', null, 'The bridge URL is not valid — fix it under Advanced.');
+      break;
+    case 'checking':
+      text = tr('connStateChecking', null, 'Checking the connection…');
+      tone = '';
+      break;
+    default:
+      text = tr('connStateNone', null, 'Not connected — send /connect to the bot and paste the code here');
+  }
+  node.textContent = text;
+  node.className = `conn-state${tone ? ` is-${tone}` : ''}`;
+}
+
+function openAdvanced() {
+  $('bridgeAdvanced').setAttribute('open', '');
 }
 
 function renderIntervalWarning() {
@@ -691,10 +749,12 @@ async function pairWithCode() {
     toast(tr('pairNeedsCode', null, 'Type the code the bot sent for /connect first.'), 'error');
     return;
   }
-  const bridgeUrl = state.draft.bridgeUrl.trim() || DEFAULT_BRIDGE_URL;
-  const url = pairUrl(bridgeUrl);
+  const urlProblem = bridgeUrlProblem(state.draft.bridgeUrl);
+  const bridgeUrl = bridgeUrlToStore(state.draft.bridgeUrl);
+  const url = urlProblem ? null : pairUrl(bridgeUrl);
   if (!url) {
-    toast(tr('pairNeedsUrl', null, 'Type a valid bridge URL first, for example http://127.0.0.1:8765/bridge.'), 'error');
+    openAdvanced();
+    toast(urlProblem || tr('pairNeedsUrl', null, 'Type a valid bridge URL first, for example http://127.0.0.1:8765/bridge.'), 'error');
     return;
   }
   const button = $('pairBtn');
@@ -844,6 +904,11 @@ function addSuggested() {
 
 // First failure wins; null when the draft can be stored.
 function validate() {
+  const urlProblem = bridgeUrlProblem(state.draft.bridgeUrl);
+  if (urlProblem) {
+    openAdvanced();
+    return urlProblem;
+  }
   const names = new Set();
   for (const [i, beacon] of state.draft.beacons.entries()) {
     const name = beacon.name.trim();
@@ -895,7 +960,7 @@ async function save() {
     const settings = {
       intervalMinutes: readInterval(draft.interval),
       paused: fresh.paused === true,
-      bridgeUrl: draft.bridgeUrl.trim(),
+      bridgeUrl: bridgeUrlToStore(draft.bridgeUrl),
       bridgeSecret: draft.bridgeSecret.trim(),
     };
     const beacons = draft.beacons.map((b) => ({
@@ -913,10 +978,15 @@ async function save() {
       values.familyTitleFilters = { ...stored, ...familyFilters };
     }
     await chrome.storage.local.set(values);
+    const connectionChanged = settings.bridgeUrl !== asObject(state.stored.settings).bridgeUrl
+      || settings.bridgeSecret !== String(asObject(state.stored.settings).bridgeSecret || '');
+    state.stored = { ...state.stored, settings };
     draft.interval = String(settings.intervalMinutes);
+    draft.bridgeUrl = settings.bridgeUrl;
     draft.searches = searches;
     renderConnection();
     await notifyWorker();
+    if (connectionChanged) await fetchBotConfig();
     setSaveState(tr('saveStateSaved', null, 'Saved'));
     setTimeout(() => {
       if ($('saveState').textContent === tr('saveStateSaved', null, 'Saved')) setSaveState('');
@@ -938,7 +1008,7 @@ function exportConfig() {
     version: CONFIG_VERSION,
     format: CONFIG_FORMAT,
     exportedAt: new Date().toISOString(),
-    settings: { intervalMinutes: readInterval(draft.interval), bridgeUrl: draft.bridgeUrl.trim() },
+    settings: { intervalMinutes: readInterval(draft.interval), bridgeUrl: parseBridgeUrl(draft.bridgeUrl).url || draft.bridgeUrl.trim() },
     beacons: draft.beacons.map((beacon) => cleanBeacon(beacon)),
     searches: normalizeSearches(draft.searches, state.families),
     titleFilter: filters.ai,
@@ -1011,11 +1081,14 @@ async function importConfig(text) {
 
   const here = asObject(current.settings);
   const fileSettings = asObject(config.settings);
+  // beta4-polish S4: the file's bridge URL is stored clean; one that is not a
+  // bridge URL is not stored (the current one is kept) and the page says so.
+  const fileUrl = parseBridgeUrl(typeof fileSettings.bridgeUrl === 'string' ? fileSettings.bridgeUrl : '');
   const values = {
     settings: {
       intervalMinutes: readInterval(fileSettings.intervalMinutes),
       paused: here.paused === true,
-      bridgeUrl: typeof fileSettings.bridgeUrl === 'string' ? fileSettings.bridgeUrl.trim() : '',
+      bridgeUrl: fileUrl.error ? String(here.bridgeUrl || '') : fileUrl.url,
       bridgeSecret: String(here.bridgeSecret || ''),
     },
     beacons,
@@ -1053,7 +1126,10 @@ async function importConfig(text) {
   }
   await load();
   setSaveState('');
-  const done = tr('importDone', beacons.length, 'Imported $1 beacons.');
+  let done = tr('importDone', beacons.length, 'Imported $1 beacons.');
+  if (fileUrl.error) {
+    done = `${done} ${tr('importBridgeUrlKept', null, 'The bridge URL of the file is not valid: the current one was kept.')}`;
+  }
   if (!unknown.size) {
     toast(done, 'ok');
     return;
@@ -1097,14 +1173,44 @@ async function adoptConfigFamilies(payload) {
   drawManualRows();
 }
 
+function setConnection(connection) {
+  state.connection = connection;
+  renderConnectionState();
+}
+
+// GET /config with the stored secret: the bot's settings for the page, and
+// the connection state shown instead of the secret (beta4-polish S4).
 async function fetchBotConfig() {
   const settings = asObject(state.stored.settings);
-  const url = configUrl(settings.bridgeUrl);
   const secret = String(settings.bridgeSecret || '').trim();
-  if (!url || !secret) return;
+  if (!secret) {
+    setConnection({ kind: 'none' });
+    return;
+  }
+  const bridgeUrl = healedBridgeUrl(settings.bridgeUrl);
+  const url = parseBridgeUrl(bridgeUrl).error ? null : configUrl(bridgeUrl);
+  if (!url) {
+    setConnection({ kind: 'badUrl' });
+    return;
+  }
+  setConnection({ kind: 'checking' });
+  let response;
   try {
-    const response = await fetchWithTimeout(url, { headers: { [SECRET_HEADER]: secret } });
-    if (!response.ok) return;
+    response = await fetchWithTimeout(url, { headers: { [SECRET_HEADER]: secret } });
+  } catch (_) {
+    setConnection({ kind: 'unreachable' });
+    return;
+  }
+  if (response.status === 401 || response.status === 403) {
+    setConnection({ kind: 'rejected' });
+    return;
+  }
+  if (!response.ok) {
+    setConnection({ kind: 'http', status: response.status });
+    return;
+  }
+  setConnection({ kind: 'ok' });
+  try {
     const payload = await response.json();
     const parsed = parseBotConfig(payload);
     if (!parsed) return;
