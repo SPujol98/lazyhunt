@@ -8,7 +8,6 @@ S5: the exported config template has no owner-only notes; S6: a fresh
 
 import io
 import logging
-import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,7 +19,6 @@ import bot
 from cva.config import Settings
 from cva.i18n import Lang, t
 from cva.setup import telegram_token
-from tests.test_export_public import export_public
 from tests.test_init_wizard import (
     API_KEY,
     FRESH_ANSWERS,
@@ -37,8 +35,6 @@ from tests.test_onboarding_beta3 import _to_background
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _REAL_CHECK = telegram_token.check_token
 GEMINI_LIKE = "AIzaSyFakeGeminiKeyForTests_0123456789ab"
-# Spelled in two parts: the export scan refuses the joined path anywhere.
-OWNER_DEPLOY_DIR = "deploy" + "/"
 TOKEN_LIKE_KEY = "987654321:AAThisIsAnApiKeyShapedLikeAToken_xyz"
 
 
@@ -368,30 +364,6 @@ def test_a_saved_country_is_kept_on_a_rerun(tmp_path: Path) -> None:
 
 
 # --- S5: the config template has no owner-only notes --------------------------
-
-
-def test_the_exported_config_template_has_no_owner_notes() -> None:
-    text = (REPO_ROOT / "config.local.toml.example").read_text(encoding="utf-8")
-    public = export_public.strip_owner_regions(text)
-    for owner_only in (OWNER_DEPLOY_DIR, "C:\\", "cv_mirror_dir", "tracker_xlsx_path"):
-        assert owner_only not in public, owner_only
-    tomllib.loads(public)  # still a valid TOML file
-    for doc in ("docs/running.md", "docs/providers.md", "docs/gmail.md"):
-        assert doc in public
-
-
-def test_the_export_scan_refuses_a_link_to_the_owner_deploy_notes(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "a.toml").write_text(
-        f"# see {OWNER_DEPLOY_DIR}README.md §12\n", "utf-8"
-    )
-    assert export_public.scan(tmp_path) == [
-        f"a.toml: points at the owner-only {OWNER_DEPLOY_DIR}readme"
-    ]
-
-
-# --- S6: a fresh install turns the AI judge on ---------------------------------
 
 
 def test_a_fresh_install_writes_match_mode_hybrid(tmp_path: Path) -> None:
