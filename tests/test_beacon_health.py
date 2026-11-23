@@ -46,10 +46,11 @@ PARSER_MSG = (
 )
 
 
+# Beacon "b1" / "Barcelona AI" names no portal: generic wording (S2).
 UNCONFIRMED_MSG = (
     "⚠️ El beacon «Barcelona AI» lleva 3 escaneos vacíos sin confirmar. "
-    "Puede ser un bloqueo temporal de LinkedIn o que el portal haya cambiado "
-    "su HTML; ábrelo a mano para comprobarlo."
+    "Puede ser un bloqueo temporal del portal o que haya cambiado su HTML; "
+    "ábrelo a mano para comprobarlo."
 )
 
 
@@ -169,6 +170,43 @@ def test_long_unconfirmed_streak_after_healthy_history_alerts() -> None:
 )
 def test_no_unconfirmed_streak_alert(scans: list[BeaconScanRow]) -> None:
     assert _alerts(scans)[0] == []
+
+
+_STREAK = [S(0, status="empty_unconfirmed")] * 3 + [S(4), S(3), S(5), S(6), S(7)]
+
+
+def _streak_message(beacon_id: str, name: str, lang: str = "es") -> str:
+    scans = [s.model_copy(update={"beacon_id": beacon_id}) for s in _STREAK]
+    alerts, _ = new_alerts(name, scans, set(), lang)  # type: ignore[arg-type]
+    assert [a.condition for a in alerts] == [UNCONFIRMED_STREAK]
+    return alerts[0].message
+
+
+def test_unconfirmed_streak_names_the_portal_of_a_manual_beacon() -> None:
+    """S2 (owner's report): an InfoJobs beacon's alert must not blame LinkedIn."""
+    assert _streak_message("bcn_x1", "Ingeniero IA · Barcelona · InfoJobs") == (
+        "⚠️ El beacon «Ingeniero IA · Barcelona · InfoJobs» lleva 3 escaneos "
+        "vacíos sin confirmar. Puede ser un bloqueo temporal de InfoJobs o que "
+        "el portal haya cambiado su HTML; ábrelo a mano para comprobarlo."
+    )
+
+
+def test_unconfirmed_streak_names_the_portal_of_an_auto_beacon() -> None:
+    message = _streak_message("auto:s1:infojobs", "AI Engineer", "en")
+    assert "temporary InfoJobs block" in message
+    assert "LinkedIn" not in message
+    assert "temporary LinkedIn block" in _streak_message(
+        "auto:s1:linkedin", "AI Engineer · LinkedIn", "en"
+    )
+
+
+def test_unconfirmed_streak_without_a_known_portal_is_generic() -> None:
+    for lang in ("en", "es"):
+        message = _streak_message("bcn_x1", "Barcelona AI", lang)
+        assert "LinkedIn" not in message
+    assert "temporary block by the portal" in _streak_message(
+        "bcn_x1", "Barcelona AI", "en"
+    )
 
 
 def test_failed_scans_do_not_count_or_break_the_unconfirmed_streak() -> None:

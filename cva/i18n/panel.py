@@ -299,13 +299,26 @@ _ENTRIES: Final[tuple[tuple[str, str, str], ...]] = (
         "panel.health.unconfirmed_streak",
         (
             "⚠️ The beacon «{name}» has had {runs} unconfirmed empty scans in a "
-            "row. It may be a temporary LinkedIn block or the portal may have "
+            "row. It may be a temporary {portal} block or the portal may have "
             "changed its HTML; open it by hand to check."
         ),
         (
             "⚠️ El beacon «{name}» lleva {runs} escaneos vacíos "
-            "sin confirmar. Puede ser un bloqueo temporal de LinkedIn o que el "
+            "sin confirmar. Puede ser un bloqueo temporal de {portal} o que el "
             "portal haya cambiado su HTML; ábrelo a mano para comprobarlo."
+        ),
+    ),
+    (
+        "panel.health.unconfirmed_streak_generic",
+        (
+            "⚠️ The beacon «{name}» has had {runs} unconfirmed empty scans in a "
+            "row. It may be a temporary block by the portal or it may have "
+            "changed its HTML; open it by hand to check."
+        ),
+        (
+            "⚠️ El beacon «{name}» lleva {runs} escaneos vacíos "
+            "sin confirmar. Puede ser un bloqueo temporal del portal o que haya "
+            "cambiado su HTML; ábrelo a mano para comprobarlo."
         ),
     ),
     # --- gate reasons (card text; the stored value stays Spanish) -----------------
@@ -712,6 +725,11 @@ _ENTRIES: Final[tuple[tuple[str, str, str], ...]] = (
         "panel.cli.help.labels",
         "labels.json (default: eval/ of the profile_dir, or eval/labels.json)",
         "labels.json (por defecto: eval/ del profile_dir, o eval/labels.json)",
+    ),
+    (
+        "panel.cli.help.details",
+        "also print each offer's judgment (score, verdict, walls, rationale)",
+        "imprime también el juicio de cada oferta (score, veredicto, muros, motivo)",
     ),
     (
         "panel.cli.help.rejudge",

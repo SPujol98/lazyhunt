@@ -31,6 +31,7 @@ from collections.abc import Sequence
 from typing import Final, NamedTuple
 
 from cva.i18n import LEGACY_LANG, Lang, t
+from cva.ingest.sources import SOURCES
 from cva.tracker.repo import BeaconScanRow, OfferRepository
 
 __all__ = [
@@ -108,7 +109,32 @@ def active_conditions(scans: Sequence[BeaconScanRow]) -> set[str]:
     return active
 
 
-def _message(condition: str, name: str, lang: Lang = LEGACY_LANG) -> str:
+_AUTO_BEACON_PREFIX: Final[str] = "auto:"
+_NAME_SEPARATOR: Final[str] = "·"
+
+
+def portal_label(beacon_id: str, name: str) -> str | None:
+    """The display name of the beacon's portal, or ``None`` when unknown.
+
+    Read from what a scan report carries: an auto beacon's id ends with the
+    portal id (``auto:<search>:<portal>``); an auto or hand-named beacon's
+    name usually has the portal label as one ``·``-separated part
+    (``Ingeniero IA · Barcelona · InfoJobs``).
+    """
+    if beacon_id.startswith(_AUTO_BEACON_PREFIX):
+        spec = SOURCES.get(beacon_id.rsplit(":", 1)[-1])
+        if spec is not None:
+            return spec.label
+    parts = {part.strip().casefold() for part in name.split(_NAME_SEPARATOR)}
+    for spec in SOURCES.values():
+        if spec.label.casefold() in parts:
+            return spec.label
+    return None
+
+
+def _message(
+    condition: str, name: str, lang: Lang = LEGACY_LANG, *, portal: str | None = None
+) -> str:
     """The Telegram text for ``condition``; thresholds come from the constants."""
     if condition == YIELD_DROP:
         return t("panel.health.yield_drop", lang, name=name, runs=_ZERO_RUN)
@@ -120,8 +146,19 @@ def _message(condition: str, name: str, lang: Lang = LEGACY_LANG) -> str:
             ratio=f"{_PARSER_EMPTY_RATIO:.0%}",
         )
     if condition == UNCONFIRMED_STREAK:
+        if portal is None:
+            return t(
+                "panel.health.unconfirmed_streak_generic",
+                lang,
+                name=name,
+                runs=_UNCONFIRMED_RUN,
+            )
         return t(
-            "panel.health.unconfirmed_streak", lang, name=name, runs=_UNCONFIRMED_RUN
+            "panel.health.unconfirmed_streak",
+            lang,
+            name=name,
+            runs=_UNCONFIRMED_RUN,
+            portal=portal,
         )
     raise ValueError(f"unknown beacon health condition: {condition!r}")
 
@@ -146,8 +183,9 @@ def new_alerts(
     delivered (see :class:`AlertClaims`).
     """
     active = active_conditions(scans)
+    portal = portal_label(scans[0].beacon_id, name) if scans else None
     fresh = [
-        Alert(c, _message(c, name, lang))
+        Alert(c, _message(c, name, lang, portal=portal))
         for c in CONDITIONS
         if c in active and c not in alerted
     ]

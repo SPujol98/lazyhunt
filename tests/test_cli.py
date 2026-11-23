@@ -100,8 +100,8 @@ class FakeService:
         self.calls.append(("latest_judgment", (offer_id,)))
         return self.judgment, self.judgment_fallback
 
-    async def judge_eval(self, labels_path: Path) -> str:
-        self.calls.append(("judge_eval", (labels_path,)))
+    async def judge_eval(self, labels_path: Path, **kwargs: object) -> str:
+        self.calls.append(("judge_eval", (labels_path, *kwargs.items())))
         return self.judge_eval_report
 
     async def rejudge_backlog(self, **kwargs: object) -> RejudgeResult:

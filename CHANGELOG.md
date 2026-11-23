@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.5] - 2026-11-23
+
+Fifth pre-release for testers: a more dependable AI judge.
+
+### Changed
+
+- When the AI judge is temporarily unavailable (for example Gemini's free tier answering "high demand"), an offer found by the extension waits and is judged again later (about 10 min, 30 min, 2 h, 6 h) instead of being scored by keywords at once; no half-judged card is sent in between.
+- `cli.py judge-eval` now judges with the configured profile's own criteria, positions and deterministic gates (it used the original author's criteria for every profile), and `--details` shows every offer's score, verdict and reason next to its label.
+- `docs/providers.md` reports how Gemini compares with Claude Code as the judge and when to raise the threshold.
+
+### Fixed
+
+- InfoJobs' current "no results" page ("Ningún resultado a la vista") is recognised, so a search with no new offers no longer raises the "unconfirmed empty scans" alert.
+- That alert now names the beacon's own portal instead of always saying LinkedIn.
+
 ## [2.0.0-beta.4] - 2026-11-23
 
 Fourth pre-release for testers: fixes from a real end-to-end test.
@@ -179,7 +194,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...HEAD
+[2.0.0-beta.5]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...v2.0.0-beta.5
 [2.0.0-beta.4]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...v2.0.0-beta.4
 [2.0.0-beta.3]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...v2.0.0-beta.3
 [2.0.0-beta.2]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.1...v2.0.0-beta.2

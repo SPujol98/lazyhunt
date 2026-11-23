@@ -295,7 +295,7 @@ The same service is scriptable from the command line:
 ```bash
 uv run cli.py --help
 uv run cli.py analyze <id>
-uv run cli.py judge-eval      # measure the judge against labelled offers
+uv run cli.py judge-eval      # measure the judge against labelled offers (--details: per offer)
 ```
 
 </details>
@@ -436,13 +436,22 @@ Run `claude auth status`. If it says you are logged out, run `claude auth login`
 </details>
 
 <details>
+<summary><b>An offer the extension found has no card yet</b></summary>
+
+<br>
+
+With `match_mode = "hybrid"`, when the AI judge is temporarily unavailable (HTTP 503 "high demand", 429, a timeout) the offer stays pending and the bot judges it again later: after about 10 minutes, 30 minutes, 2 hours and 6 hours. The card arrives when the judge answers. If it never does, the offer is scored by keywords, the card says the LLM judgment failed and the offer's notes say the AI judge was unavailable. See [docs/providers.md](docs/providers.md).
+
+</details>
+
+<details>
 <summary><b>A scan finds nothing, or a health alert arrives</b></summary>
 
 <br>
 
 - Open the search in your browser by hand: you may have been logged out, shown a captcha, or the search really has no new offers.
 - Title filters and the location gate can drop everything; try a broader search, or turn the title filter off for that search in the extension's Options.
-- A **⚠️ beacon** alert means a beacon that used to return offers now returns none, or its offers arrive without a company. The portal probably changed its pages or blocked you for a while; open it by hand, and see [docs/portals.md](docs/portals.md) for each portal's known limits.
+- A **⚠️ beacon** alert means a beacon that used to return offers now returns none, or its offers arrive without a company, or that its last scans came back empty without the portal's "no results" page (the alert names the portal when the beacon's name or search says which one). The portal probably changed its pages or blocked you for a while; open it by hand, and see [docs/portals.md](docs/portals.md) for each portal's known limits.
 
 </details>
 
@@ -486,7 +495,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.4`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.5`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

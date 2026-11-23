@@ -17,7 +17,7 @@ import re
 import sqlite3
 import threading
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
@@ -87,7 +87,7 @@ from cva.match.followup import (
     generate_followup,
     resolve_recipient,
 )
-from cva.match.gates import GatePrefs, gate_reason, run_gates
+from cva.match.gates import GatePrefs, GateResult, gate_reason, run_gates
 from cva.match.interview_prep import (
     STAGES,
     CompanyFact,
@@ -100,7 +100,15 @@ from cva.match.interview_prep import (
     build_prep_prompt,
     verified_facts,
 )
-from cva.match.judge import OfferJudgment, Wall, build_claims_digest, judge_offer
+from cva.match.judge import (
+    JUDGE_RETRY_DELAYS,
+    OfferJudgment,
+    Wall,
+    apply_walls,
+    build_claims_digest,
+    is_transient_judge_error,
+    judge_offer,
+)
 from cva.match.judge_eval import run_judge_eval
 from cva.match.persona import JudgePersona
 from cva.match.salary_reference import (
@@ -487,6 +495,11 @@ def _unique_report_path(report_dir: Path, stamp: str) -> Path:
 
 # offer_events note marking an offer rescued with /rescatar (leaves the panel).
 RESCUED_NOTE: Final[str] = "rescatada con /rescatar"
+# Stored (Spanish, like every note) when the AI judge stayed unavailable for the
+# whole retry budget and the offer was settled on the keyword score.
+JUDGE_UNAVAILABLE_NOTE: Final[str] = (
+    "juez IA no disponible tras varios reintentos: score por palabras clave"
+)
 
 _DUPLICATE_OF: Final = re.compile(re.escape(DUPLICATE_NOTE_PREFIX) + r"(\d+)")
 
@@ -593,6 +606,20 @@ class FollowupItem:
     days_silent: int
     followups: int
     kind: Literal["reminder", "proposal"]
+
+
+class JudgeDeferredError(Exception):
+    """The AI judge failed transiently; the analysis is retried later.
+
+    Raised by :meth:`JobService.analyze` only when the caller asked to defer
+    (``defer_transient_judge=True``) and the judge retry budget is not spent.
+    Nothing was persisted.
+    """
+
+    def __init__(self, offer_id: int, cause: LlmResponseError) -> None:
+        super().__init__(f"offer #{offer_id}: AI judge unavailable ({cause})")
+        self.offer_id = offer_id
+        self.cause = cause
 
 
 class OfferClosedError(Exception):
@@ -702,6 +729,15 @@ def _offer_input(fetched: FetchedOffer, *, today: date | None = None) -> OfferIn
         fecha_publicacion=dates.publicacion,
         fecha_limite=dates.limite,
     )
+
+
+def _gate_walls(gates: Sequence[GateResult]) -> list[Wall]:
+    """Walls of the non-PASS gates: FAIL is hard (discard), FLAG is soft."""
+    return [
+        Wall(text=g.reason, hard=g.verdict == "FAIL")
+        for g in gates
+        if g.verdict != "PASS"
+    ]
 
 
 def _guard_offer(fetched: FetchedOffer) -> tuple[FetchedOffer, GuardReport]:
@@ -1999,10 +2035,27 @@ class JobService:
                 self._refresh_tracker()
             else:
                 await self.ingest(url, None)
-            result = await self.analyze(offer_id)
+            result = await self.analyze(offer_id, defer_transient_judge=True)
         except OfferClosedError as closed:
             _logger.info("bridge offer #%s closed: %s", offer_id, closed.marker)
             return BridgeJobOutcome(zone="closed", score=None, reason=CLOSED_NOTE)
+        except JudgeDeferredError as deferred:
+            # Judge retry-later (beta5-reliability S1(1)): no card yet; the
+            # heartbeat sweep re-drives the row when ``next_analyze_at`` is due.
+            prior = self._repo.get_offer(offer_id).analyze_attempts
+            delay = JUDGE_RETRY_DELAYS[min(prior, len(JUDGE_RETRY_DELAYS) - 1)]
+            attempts = self._repo.record_analyze_failure(
+                offer_id, next_analyze_at=(self._now() + delay).isoformat()
+            )
+            _logger.warning(
+                "offer %s: AI judge unavailable (attempt %d/%d), retrying in %s: %s",
+                offer_id,
+                attempts,
+                self._judge_retry_budget(),
+                delay,
+                deferred.cause,
+            )
+            return BridgeJobOutcome(zone="pending", score=None)
         except Exception as exc:  # noqa: BLE001 — the card tree below IS the surface
             attempts = self._repo.record_analyze_failure(
                 offer_id,
@@ -2299,7 +2352,13 @@ class JobService:
         self._refresh_tracker()
         raise OfferClosedError(offer.id, marker)
 
-    async def analyze(self, offer_id: int) -> MatchResult:
+    def _judge_retry_budget(self) -> int:
+        """Judge retries before the keyword fallback (never past the sweep's)."""
+        return min(len(JUDGE_RETRY_DELAYS), self._analyze_retry_max)
+
+    async def analyze(
+        self, offer_id: int, *, defer_transient_judge: bool = False
+    ) -> MatchResult:
         """Extract (cached) → deterministic score → persist + keyword bump.
 
         match_mode (llm-offer-judge design): "keyword" (default) is exactly
@@ -2314,6 +2373,14 @@ class JobService:
         whose judge call fails never leaves an earlier successful judgment
         looking current — :meth:`latest_judgment` reads the same row, so
         clearing it here is the single source of truth for both.
+
+        ``defer_transient_judge`` (bridge auto-analysis, beta5-reliability
+        S1(1)): a TRANSIENT judge failure (:func:`is_transient_judge_error`)
+        raises :class:`JudgeDeferredError` persisting nothing, while the
+        offer's ``analyze_attempts`` is below the judge retry budget; once the
+        budget is spent it falls back as above and notes
+        :data:`JUDGE_UNAVAILABLE_NOTE`. Non-transient failures and direct calls
+        (``/analizar``, ``cli analyze``) keep the immediate fallback.
         """
         offer = self._repo.get_offer(offer_id)
         self._discard_if_closed(offer)
@@ -2349,7 +2416,13 @@ class JobService:
                 model=self._extraction_model,
             )
             return await self._finish_analysis(
-                offer, offer_id, profile, threshold, extraction, judge_task
+                offer,
+                offer_id,
+                profile,
+                threshold,
+                extraction,
+                judge_task,
+                defer_transient_judge=defer_transient_judge,
             )
         finally:
             # Extraction/scoring failed (or the caller was cancelled) before
@@ -2369,6 +2442,8 @@ class JobService:
         threshold: int,
         extraction: OfferExtraction,
         judge_task: "asyncio.Task[OfferJudgment] | None",
+        *,
+        defer_transient_judge: bool = False,
     ) -> MatchResult:
         """Score + walls + (hybrid) judge outcome + persistence (analyze tail)."""
         result = score(extraction, self._db, self._syn, threshold=threshold)
@@ -2385,18 +2460,16 @@ class JobService:
         )
         # Hard walls (stack wall, gate FAIL) force a discard verdict; gate FLAGs
         # are soft walls shown with a warning marker on the judge card.
-        walls = [
-            *([Wall(text=wall, hard=True)] if wall else []),
-            *(
-                Wall(text=g.reason, hard=g.verdict == "FAIL")
-                for g in gates
-                if g.verdict != "PASS"
-            ),
-        ]
+        walls = [*([Wall(text=wall, hard=True)] if wall else []), *_gate_walls(gates)]
+        judge_unavailable = False
         if judge_task is not None:
             try:
                 judgment = await judge_task
             except LlmResponseError as exc:
+                if defer_transient_judge and is_transient_judge_error(exc):
+                    if offer.analyze_attempts < self._judge_retry_budget():
+                        raise JudgeDeferredError(offer_id, exc) from exc
+                    judge_unavailable = True
                 _logger.warning(
                     "offer %s: judge failed, falling back to the keyword score: %s: %s",
                     offer_id,
@@ -2407,17 +2480,7 @@ class JobService:
                 # analysis looking current (robustness follow-up: T3a).
                 self._repo.clear_judge_result(offer_id)
             else:
-                if walls:
-                    judgment = judgment.model_copy(
-                        update={
-                            "walls": [*judgment.walls, *walls],
-                            "verdict": (
-                                "discard"
-                                if any(w.hard for w in walls)
-                                else judgment.verdict
-                            ),
-                        }
-                    )
+                judgment = apply_walls(judgment, walls)
                 self._repo.save_judge_result(
                     offer_id,
                     score=judgment.score,
@@ -2435,6 +2498,8 @@ class JobService:
             offer_id, DEFAULT_PROFILE, self._keyword_log(extraction)
         )
         self._repo.set_estado(offer_id, "analizada")
+        if judge_unavailable:
+            self._repo.append_note(offer_id, JUDGE_UNAVAILABLE_NOTE)
         # Pacing D3: any success (auto OR manual) defuses the retry sweep.
         self._repo.clear_analyze_retry(offer_id)
         self._refresh_tracker()
@@ -2458,7 +2523,7 @@ class JobService:
             return None, True
         return OfferJudgment.model_validate_json(row.judgment_json), False
 
-    async def judge_eval(self, labels_path: Path) -> str:
+    async def judge_eval(self, labels_path: Path, *, details: bool = False) -> str:
         """Run the judge against the labeled eval bank (owner-approved: spends
         LLM quota). Never invoked by tests against a real LLM — see
         ``cva/match/judge_eval.py`` and ``cli.py judge-eval``.
@@ -2467,7 +2532,15 @@ class JobService:
         (robustness follow-up) — without this, the harness graded verdict
         agreement against a hardcoded default, silently diverging from
         whatever the owner actually configured.
+
+        Same judge inputs as :meth:`analyze` (beta5-reliability S1(4)): the
+        profile's persona (the owner's when ``profile_dir`` is unset),
+        families, ``lang`` and the deterministic gates (no location column:
+        the bank holds texts only). Approved outcome examples stay out: the
+        eval is an independent check (outcome-calibration design). The backend stack
+        wall needs an extraction, which this judge-only harness never runs.
         """
+        gate_prefs = self._gate_prefs()
         return await run_judge_eval(
             labels_path,
             self._db,
@@ -2475,6 +2548,10 @@ class JobService:
             model=self._judge_model,
             threshold=self._threshold,
             lang=self._lang,
+            persona=self._judge_persona,
+            families=self._prefs.families,
+            walls_for=lambda text: _gate_walls(run_gates(text, None, gate_prefs)),
+            details=details,
         )
 
     async def rejudge_backlog(

@@ -87,6 +87,10 @@ export const NO_RESULTS_MARKERS = [
   'no se encontraron (?:empleos|ofertas|trabajos|resultados)',
   'no hemos encontrado (?:ning[uú]n[ao]? )?(?:empleos?|ofertas?|trabajos?|resultados)',
   'no hay ofertas (?:de trabajo )?que coincidan',
+  // 2026-11 empty state ("0 ofertas de <kw> en <place>" + this heading),
+  // seen live by the owner; without it the empty search looked unconfirmed.
+  'ning[uú]n resultado a la vista',
+  '(?:^|[^0-9])0 ofertas de ',
 ];
 
 function hostMatch(url) {

@@ -97,7 +97,18 @@ Examples (`llm_base_url` / `llm_model`; confirm model names with the provider):
 | Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
 | LM Studio (local) | `http://localhost:1234/v1` | the model id LM Studio shows |
 
-Gemini (tested with a free-tier AI Studio key on 2026-11-21): `gemini-3.5-flash-lite` (fast, cheap) and `gemini-3-flash-preview` (stronger) both completed extraction and judging. Model ids change and old ones are retired (HTTP 404 "no longer available to new users"); the `gemini-flash-latest` alias did not answer for a new key at that date (requests timed out), so pick an explicit id from AI Studio's model list. The free tier can answer HTTP 503 "high demand" at busy times; the bot retries twice with a short backoff and then shows the provider's message.
+Gemini (tested with a free-tier AI Studio key on 2026-11-21): `gemini-3.5-flash-lite` (fast, cheap) and `gemini-3-flash-preview` (stronger) both completed extraction and judging. Model ids change and old ones are retired (HTTP 404 "no longer available to new users"); the `gemini-flash-latest` alias did not answer for a new key at that date (requests timed out), so pick an explicit id from AI Studio's model list. The free tier can answer HTTP 503 "high demand" at busy times; the bot retries twice with a short backoff and then shows the provider's message. When the failing call is the AI judge of an offer found by the extension (hybrid mode), the offer stays pending and the bot judges it again later (after about 10 min, 30 min, 2 h and 6 h, within `analyze_retry_max`), with no card in between; if the judge is still unavailable after that, the offer is scored by keywords as before, the card says the LLM judgment failed and the offer's notes record it. Other judge errors (a malformed reply, HTTP 4xx other than 429) fall back to the keyword score at once.
+
+**How reliable is Gemini as the judge?** Measured on 2026-11-23 against Claude Code and the labelled demo set (`cli.py judge-eval --details`):
+
+| | `gemini-3.5-flash-lite` | Claude Code |
+| --- | --- | --- |
+| Same verdict as Claude on 39 real offers | 92% (1 offer crosses the threshold differently) | — |
+| Verdict accuracy on the labelled demo set | 75–88% (two runs) | 89% |
+| Offers wrongly sent to you (false positives) | 0 | 0 |
+| Mean score error vs the labels | 10–13 points, mostly **too high** on good offers | 7.5 points |
+
+Gemini flash-lite decides like Claude on clear cases but scores good offers 6–20 points higher, so with it consider raising `threshold` to about 70. `gemini-3-flash-preview` is the stronger option and answered every call on 2026-11-21, but timed out on all calls on 2026-11-23 (free-tier load): try it, and switch back if the judge keeps deferring.
 
 Local servers ignore the key but cva still requires `CVA_LLM_API_KEY` to be set
 (any non-empty value).

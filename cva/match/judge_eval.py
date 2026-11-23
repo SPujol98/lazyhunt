@@ -11,13 +11,23 @@ must never be invoked by tests against a real LLM.
 """
 
 import json
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final, NamedTuple
 
 from cva.claimsdb import ClaimsDB
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.i18n import LEGACY_LANG, Lang
 from cva.llm import LlmClient
-from cva.match.judge import _DEFAULT_THRESHOLD, judge_offer
+from cva.match.judge import (
+    _DEFAULT_THRESHOLD,
+    OfferJudgment,
+    Wall,
+    apply_walls,
+    judge_offer,
+)
+from cva.match.persona import JudgePersona
+from cva.match.persona_defaults import OWNER_JUDGE_PERSONA
 
 _DEFAULT_TOLERANCE: Final[int] = 10
 
@@ -32,6 +42,7 @@ class EvalRow(NamedTuple):
     label_verdict: str
     judge_verdict: str
     hard_walls: list[str]
+    judgment: OfferJudgment
 
 
 class EvalFailure(NamedTuple):
@@ -49,6 +60,10 @@ async def run_judge_eval(
     model: str | None = None,
     threshold: int = _DEFAULT_THRESHOLD,
     lang: Lang = LEGACY_LANG,
+    persona: JudgePersona = OWNER_JUDGE_PERSONA,
+    families: FamilyRegistry = BUILTIN_REGISTRY,
+    walls_for: Callable[[str], Sequence[Wall]] | None = None,
+    details: bool = False,
 ) -> str:
     """Judge every ``eval/labels.json`` offer; return the formatted report.
 
@@ -60,6 +75,13 @@ async def run_judge_eval(
     default, or this harness silently grades verdict agreement against a
     different gate than the one actually in effect (robustness follow-up:
     duplicated threshold constant).
+
+    ``persona``, ``families`` and ``walls_for`` (the deterministic walls of an
+    offer text, e.g. the gates) are the same inputs ``JobService.analyze``
+    gives the judge; the defaults are the owner's legacy ones. The owner's
+    approved outcome examples are deliberately NOT given: this harness stays
+    an independent check of the judge. ``details`` appends one block per offer with
+    the judge's score, verdict, walls and rationale next to the label.
 
     One offer's judge call failing never aborts the run (robustness
     follow-up): it is recorded as a failure with its error message,
@@ -80,8 +102,17 @@ async def run_judge_eval(
             text = offer_path.read_text(encoding="utf-8")
             try:
                 judgment = await judge_offer(
-                    text, claims, llm, model=model, threshold=threshold, lang=lang
+                    text,
+                    claims,
+                    llm,
+                    model=model,
+                    threshold=threshold,
+                    persona=persona,
+                    families=families,
+                    lang=lang,
                 )
+                if walls_for is not None:
+                    judgment = apply_walls(judgment, walls_for(text))
             except Exception as exc:  # noqa: BLE001 — the report row IS the surface
                 failures.append(
                     EvalFailure(
@@ -98,9 +129,29 @@ async def run_judge_eval(
                     label_verdict=entry["verdict"],
                     judge_verdict=judgment.verdict,
                     hard_walls=[wall.text for wall in judgment.walls if wall.hard],
+                    judgment=judgment,
                 )
             )
-    return _format_report(rows, failures, tolerance)
+    report = _format_report(rows, failures, tolerance)
+    return report + _format_details(rows) if details and rows else report
+
+
+def _format_details(rows: list[EvalRow]) -> str:
+    """One block per judged offer: judge vs label, walls, gaps, rationale."""
+    lines = ["", "Details:"]
+    for row in rows:
+        judgment = row.judgment
+        lines.append(
+            f"{row.file}: judge {row.judge_score} {row.judge_verdict} "
+            f"| label {row.label_score} {row.label_verdict}"
+        )
+        lines.append(f"  role: {judgment.core_role}")
+        for wall in judgment.walls:
+            lines.append(f"  wall ({'hard' if wall.hard else 'soft'}): {wall.text}")
+        if judgment.gaps:
+            lines.append(f"  gaps: {'; '.join(judgment.gaps)}")
+        lines.append(f"  rationale: {judgment.rationale}")
+    return "\n".join(lines)
 
 
 def _format_report(

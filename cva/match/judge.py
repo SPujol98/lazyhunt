@@ -58,8 +58,10 @@ unconditionally overwritten.
 import dataclasses
 import re
 from collections.abc import Mapping, Sequence
+from datetime import timedelta
 from typing import Annotated, Final, Literal
 
+import httpx
 from pydantic import BaseModel, Field
 
 from cva.calibration import (
@@ -122,6 +124,55 @@ class JudgeError(LlmResponseError):
     Subclasses ``LlmResponseError`` so a judge failure is handled exactly
     like any other LLM failure by existing callers (retry/fallback/log).
     """
+
+
+# Judge retry-later (beta5-reliability S1(1)): provider statuses that say "try
+# again later" (429 rate limit, 5xx, Anthropic's 529 "overloaded"). Any other
+# 4xx and every schema/parse failure are permanent: retrying cannot help.
+_TRANSIENT_JUDGE_STATUSES: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 529})
+# Wait before each judge retry on the bridge auto-analysis; its length is the
+# retry budget (capped by ``analyze_retry_max``). After it the offer falls
+# back to the keyword score.
+JUDGE_RETRY_DELAYS: Final[tuple[timedelta, ...]] = (
+    timedelta(minutes=10),
+    timedelta(minutes=30),
+    timedelta(hours=2),
+    timedelta(hours=6),
+)
+
+
+def is_transient_judge_error(exc: BaseException) -> bool:
+    """True when a judge failure is worth retrying later.
+
+    Transient: an HTTP status in :data:`_TRANSIENT_JUDGE_STATUSES`, or a
+    timeout/connection failure (the client wraps ``httpx`` timeouts and
+    network errors, and the CLI providers wrap ``TimeoutError``, as the
+    ``__cause__`` of an ``LlmResponseError`` with no status). Everything else
+    (other 4xx, malformed replies, :class:`JudgeError` validation) is not.
+    """
+    if not isinstance(exc, LlmResponseError) or isinstance(exc, JudgeError):
+        return False
+    if exc.status is not None:
+        return exc.status in _TRANSIENT_JUDGE_STATUSES
+    return isinstance(
+        exc.__cause__, (httpx.TimeoutException, httpx.NetworkError, TimeoutError)
+    )
+
+
+def apply_walls(judgment: OfferJudgment, walls: Sequence[Wall]) -> OfferJudgment:
+    """Add the deterministic ``walls`` (stack wall, gates) to ``judgment``.
+
+    A hard wall forces the ``discard`` verdict; soft walls only add their text.
+    Shared by the analysis and ``judge-eval`` so both grade the same way.
+    """
+    if not walls:
+        return judgment
+    return judgment.model_copy(
+        update={
+            "walls": [*judgment.walls, *walls],
+            "verdict": ("discard" if any(w.hard for w in walls) else judgment.verdict),
+        }
+    )
 
 
 # Generic rubric. The persona-bound parts (the candidate-specific rules, walls

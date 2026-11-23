@@ -193,7 +193,10 @@ def _cmd_judge_eval(
     if settings is not None:
         print(describe_llm_setup(settings))
     print(t("panel.cli.judge_eval_warning", lang))
-    return asyncio.run(service.judge_eval(_judge_eval_labels(args, settings)))
+    labels = _judge_eval_labels(args, settings)
+    if args.details:
+        return asyncio.run(service.judge_eval(labels, details=True))
+    return asyncio.run(service.judge_eval(labels))
 
 
 def _cmd_rejudge(
@@ -437,6 +440,7 @@ def build_parser(
 
     p_judge_eval = sub.add_parser("judge-eval", help=h("judge_eval"))
     p_judge_eval.add_argument("--labels", default=None, help=h("labels"))
+    p_judge_eval.add_argument("--details", action="store_true", help=h("details"))
 
     p_rejudge = sub.add_parser("rejudge", help=h("rejudge"))
     p_rejudge.add_argument(
