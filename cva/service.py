@@ -5,14 +5,18 @@ shells with no business logic. CV generation happens only on an explicit call
 (slice-7 invariant); analysis is cached at the extraction layer, so re-analysis
 makes zero LLM calls. Keyword auto-append writes the §5 demand log
 (``keyword_registry`` with per-offer dedupe via ``offer_keywords``), never
-``synonyms.json`` (design D6). ``generate_cv`` delivers a byte-identical copy
+``synonyms.json`` (design D6); the only ``synonyms.json`` writer is an
+adapted CV the user accepts with a new synonym in it (tailored-cv S7,
+:meth:`JobService.accept_tailored`). ``generate_cv`` delivers a byte-identical copy
 of the owner's fixed base PDF (``cv_base_pdfs/``, fixed-base-cvs); masters are
 no longer rendered.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
 import threading
@@ -25,6 +29,7 @@ from pathlib import Path
 from typing import Any, Final, Literal, NamedTuple
 
 from pydantic import BaseModel, Field, ValidationError
+from pypdf import PdfReader
 
 from cva.beacons import SweepResult, check_beacon, checks_done_today
 from cva.calibration import (
@@ -46,7 +51,9 @@ from cva.cvgen.base_pdfs import (
     deliver_base_pdf,
     manifest_entry,
     variant_key,
+    verified_base_pdf,
 )
+from cva.cvgen.cv_source import CvSource, claim_ids_in, source_state
 from cva.cvgen.engine import generic_output_path
 from cva.cvgen.fonts import DEFAULT_CV_FONT, CvFont
 from cva.cvgen.letter_pdf import (
@@ -55,8 +62,22 @@ from cva.cvgen.letter_pdf import (
     open_letter_path,
     render_letter_pdf,
 )
+from cva.cvgen.starter import render_source
+from cva.cvgen.tailor import (
+    Substitution,
+    TailorPlan,
+    Violation,
+    apply_plan,
+    clean_term,
+    describe_changes,
+    final_check,
+    proposed_synonyms,
+    sanitize_plan,
+    tailor,
+    without_change,
+)
 from cva.fetch import Fetcher, HttpxFetcher
-from cva.fsutil import display_path
+from cva.fsutil import atomic_write, display_path
 from cva.i18n import LEGACY_LANG, Lang, t
 from cva.ingest import (
     FetchedOffer,
@@ -126,7 +147,13 @@ from cva.match.salary_research import (
     build_research_prompt,
     to_outcome,
 )
-from cva.match.scorer import SynonymMap, classify_keyword, load_synonyms
+from cva.match.scorer import (
+    SynonymError,
+    SynonymMap,
+    alias_key,
+    classify_keyword,
+    load_synonyms,
+)
 from cva.match.stack_wall import stack_wall_display, stack_wall_reason
 from cva.match.warnings import offer_warnings
 from cva.mirror import mirror_root, on_discarded, on_generated, on_sent
@@ -145,6 +172,7 @@ from cva.notifier import (
     with_also_on,
     with_no_cv_line,
 )
+from cva.onboarding.commit import WRITE_LOCK
 from cva.profile_identity import load_identity, require_identity_claim
 from cva.profile_paths import ProfilePaths, resolve_profile_paths
 from cva.profile_persona import load_judge_persona, load_letter_bases
@@ -218,6 +246,12 @@ NEUTRAL_CAMBIOS: Final[str] = "plan neutro (sin selección LLM)"
 # Prefix of the cambios text; the full text (variant + manifest sha) comes
 # from base_cambios() so a later base-CV sync never mislabels new rows.
 BASE_CAMBIOS: Final[str] = "CV base fijo"
+# Prefix of the cambios text of an adapted CV (tailored-cv T3):
+# ``ADAPTED:<sha256[:8] of the adapted PDF>:<number of changes>``. Anything
+# but BASE_CAMBIOS, so a row never passes an adapted CV off as the base.
+ADAPTED_CAMBIOS: Final[str] = "ADAPTED"
+# How long a proposed (not yet used) adapted CV stays available.
+TAILOR_PROPOSAL_TTL: Final[timedelta] = timedelta(hours=24)
 # Flagged posting-guard verdicts kept in memory for the cards (oldest evicted).
 _GUARD_REPORTS_MAX: Final[int] = 500
 _OUTCOME_NOTE_MAX: Final[int] = 2000
@@ -632,6 +666,29 @@ class OfferClosedError(Exception):
 
 
 @dataclass(frozen=True)
+class TailorProposal:
+    """A proposed adapted CV (tailored-cv T3), kept in memory per offer.
+
+    ``plan`` is sanitized and passed :func:`~cva.cvgen.tailor.final_check`;
+    ``changes`` has one preview line per change (index ``i`` is what
+    :meth:`JobService.tailor_without` ``i`` removes) in the UI language;
+    ``dropped`` are the planner's suggestions the validator refused;
+    ``new_synonyms`` are the plan's swaps that are not approved aliases yet
+    (S7: marked in ``changes``, saved only on accept). Nothing is written
+    until :meth:`JobService.accept_tailored`.
+    """
+
+    offer_id: int
+    variant: str
+    source: CvSource
+    plan: TailorPlan
+    dropped: tuple[Violation, ...]
+    changes: tuple[str, ...]
+    created: datetime
+    new_synonyms: tuple[Substitution, ...] = ()
+
+
+@dataclass(frozen=True)
 class PrepDelivery:
     """A stored interview prep pack, ready to send."""
 
@@ -901,6 +958,8 @@ class JobService:
         self._facts_locks: dict[str, asyncio.Lock] = {}
         self._prep_claims: set[tuple[int, str]] = set()
         self._last_letters: dict[int, CoverLetterResult] = {}
+        # Adapted CVs proposed and not yet used/discarded (tailored-cv T3).
+        self._tailor_proposals: dict[int, TailorProposal] = {}
         self._tracker_gen = 0
         # Deferred mode (enable_deferred_tracker_writes): debounce timer and
         # the single background flush task, both on the bot's loop.
@@ -2937,6 +2996,271 @@ class JobService:
         on_generated(self._mirror, pdf_path)
         self._refresh_tracker()
         return pdf_path
+
+    # --- adapted CV (tailored-cv T3) -------------------------------------------
+
+    def _adaptable(self, variant: str) -> CvSource | None:
+        """The current structured source of ``variant``'s base CV, else None.
+
+        The legacy layout (the owner's install) never adapts (S5/S6); an
+        uploaded or hand-made PDF, an obsolete source or a removed claim
+        neither (:func:`~cva.cvgen.cv_source.source_state`).
+        """
+        if self._paths.profile_toml is None:
+            return None
+        state, source = source_state(
+            self._base_pdfs_dir, variant, claim_ids_in(self._paths.claims)
+        )
+        return source if state == "current" else None
+
+    def can_adapt(self, variant: str | None) -> bool:
+        """Whether "Adapt to this offer" is offered for the delivered ``variant``."""
+        return variant is not None and self._adaptable(variant) is not None
+
+    async def tailor_cv(
+        self, offer_id: int, role: str, lang: str, *, ui: Lang
+    ) -> TailorProposal:
+        """Propose an adapted CV of the base CV ``<role>_<LANG>`` for the offer.
+
+        One LLM call (the judge model) plans the edits; the deterministic
+        validator keeps only what it can prove and the final check must find
+        no ungrounded word, else ``tailor.bot.unsafe``. The proposal replaces
+        any earlier one of the offer; nothing is rendered or recorded. An LLM
+        failure propagates unchanged and leaves everything as it was.
+        """
+        offer = self._repo.get_offer(offer_id)
+        variant = variant_key(role, lang)
+        source = self._adaptable(variant)
+        if source is None:
+            raise ServiceError.keyed("tailor.bot.not_adaptable")
+        result = await tailor(
+            source,
+            offer.source_data,
+            self._db,
+            self._syn,
+            self._llm,
+            lang=source.lang,
+            model=self._judge_model,
+            blocked_terms=self._swap_blocked_terms(offer),
+        )
+        return self._propose(
+            offer_id, variant, source, result.plan, tuple(result.dropped), ui
+        )
+
+    def _propose(
+        self,
+        offer_id: int,
+        variant: str,
+        source: CvSource,
+        plan: TailorPlan,
+        dropped: tuple[Violation, ...],
+        ui: Lang,
+    ) -> TailorProposal:
+        tailored = apply_plan(source, plan)
+        if final_check(source, tailored, self._db, self._syn, plan=plan):
+            self._tailor_proposals.pop(offer_id, None)
+            raise ServiceError.keyed("tailor.bot.unsafe")
+        new = proposed_synonyms(plan, self._db, self._syn)
+        proposal = TailorProposal(
+            offer_id=offer_id,
+            variant=variant,
+            source=source,
+            plan=plan,
+            dropped=dropped,
+            changes=tuple(describe_changes(source, plan, ui, new_synonyms=new)),
+            created=self._now(),
+            new_synonyms=tuple(new),
+        )
+        self._tailor_proposals[offer_id] = proposal
+        return proposal
+
+    def _proposal(self, offer_id: int) -> TailorProposal:
+        proposal = self._tailor_proposals.get(offer_id)
+        if proposal is None or self._now() - proposal.created > TAILOR_PROPOSAL_TTL:
+            self._tailor_proposals.pop(offer_id, None)
+            raise ServiceError.keyed("tailor.bot.expired")
+        return proposal
+
+    def tailor_without(self, offer_id: int, index: int, *, ui: Lang) -> TailorProposal:
+        """The pending proposal minus change ``index``, re-validated."""
+        proposal = self._proposal(offer_id)
+        offer = self._repo.get_offer(offer_id)
+        plan, _ = sanitize_plan(
+            without_change(proposal.plan, index),
+            proposal.source,
+            self._db,
+            self._syn,
+            offer.source_data,
+            cv_lang=proposal.source.lang,
+            blocked_terms=self._swap_blocked_terms(offer),
+        )
+        return self._propose(
+            offer_id, proposal.variant, proposal.source, plan, proposal.dropped, ui
+        )
+
+    def discard_tailored(self, offer_id: int) -> bool:
+        """Drop the pending proposal; False when there was none."""
+        return self._tailor_proposals.pop(offer_id, None) is not None
+
+    def _swap_blocked_terms(self, offer: OfferRow) -> list[str]:
+        """Words a proposed synonym may not contain (S7 technology rule).
+
+        The offer's ``tool``/``skill``/``domain`` requirement names from the
+        cached extraction (no LLM call; none when not analyzed) and each
+        word of the company name. ``soft`` requirements stay allowed.
+        """
+        terms: list[str] = []
+        model = self._extraction_model or getattr(self._llm, "model", None)
+        if model:
+            extraction = self._cache.get(cache_key(offer.source_data, model))
+            if extraction is not None:
+                terms += [
+                    r.name for r in extraction.requirements if r.category != "soft"
+                ]
+        terms += [w for w in re.split(r"\W+", offer.empresa or "") if len(w) >= 3]
+        return terms
+
+    def _save_new_synonyms(self, subs: Sequence[Substitution]) -> list[str]:
+        """Add each accepted new synonym to the profile's ``synonyms.json``.
+
+        Key = the alias normalized as the scorer looks it up, value
+        ``{claim_id, strength: "weak"}``: the user approved the word for
+        their CV wording, which is a near-synonym, so in offer matching it
+        counts as partial coverage (``~``), never as proof of an exact
+        requirement (``strong``/``✓`` stays a curated decision). An alias
+        that already exists is never overwritten, and a word that fails
+        :func:`~cva.cvgen.tailor.clean_term` (symbols, other scripts,
+        invisible characters, digits) is never persisted. Written atomically under
+        the profile write lock, validated with :func:`load_synonyms` (the
+        previous file is put back if it does not load) and reloaded so
+        scoring and tailoring see it at once. The legacy layout (the owner's
+        install) is never written. Returns the aliases added.
+        """
+        if self._paths.profile_toml is None or not subs:
+            return []
+        path = self._paths.synonyms
+        with WRITE_LOCK:
+            old = path.read_text(encoding="utf-8")
+            raw = json.loads(old)
+            added: list[str] = []
+            for sub in subs:
+                word = clean_term(sub.to_text)
+                key = alias_key(word) if word is not None else ""
+                if key and key not in raw:
+                    raw[key] = {"claim_id": sub.claim_id, "strength": "weak"}
+                    added.append(key)
+            if not added:
+                return []
+            atomic_write(path, json.dumps(raw, ensure_ascii=False, indent=2) + "\n")
+            try:
+                self._syn = load_synonyms(path, self._db)
+            except (SynonymError, ValueError):
+                atomic_write(path, old)
+                raise
+        return added
+
+    def _adapted_output_path(self, offer: OfferRow, variant: str) -> Path:
+        """``<base delivery name>_adapted_<id>.pdf`` next to the base copy."""
+        role, lang = variant.rsplit("_", 1)
+        family = next(
+            (f for f in self._prefs.families.families if f.role == role), None
+        )
+        base = generic_output_path(
+            variant,
+            offer.id,
+            offer.empresa,
+            self._output_dir,
+            self._identity.file_slug,
+            delivery_name=manifest_entry(variant, self._base_pdfs_dir).delivery_name,
+            fallback_name=f"{family.label if family else role}_{lang}",
+        )
+        return base.with_name(f"{base.stem}_adapted_{offer.id}.pdf")
+
+    def _commit_adapted(
+        self, proposal: TailorProposal, chosen: TailorPlan, tmp: Path, out: Path
+    ) -> None:
+        """Save the new synonyms, move ``tmp`` to ``out`` and record it, as
+        one step under :data:`WRITE_LOCK` (see :meth:`accept_tailored`)."""
+        source, offer_id = proposal.source, proposal.offer_id
+        new = proposed_synonyms(chosen, self._db, self._syn)
+        count = len(describe_changes(source, chosen, self._lang))
+        sha = hashlib.sha256(tmp.read_bytes()).hexdigest()[:8]
+        with WRITE_LOCK:
+            path = self._paths.synonyms
+            old = path.read_bytes() if self._paths.profile_toml is not None else None
+            existed = out.exists()
+            self._save_new_synonyms(new)  # a failure aborts: nothing moved yet
+            try:
+                os.replace(tmp, out)
+                self._repo.record_cv(
+                    offer_id,
+                    cv_base=proposal.variant,
+                    cv_path=display_path(out),
+                    cambios=f"{ADAPTED_CAMBIOS}:{sha}:{count}",
+                )
+            except BaseException:
+                if not existed:
+                    out.unlink(missing_ok=True)
+                if old is not None and path.read_bytes() != old:
+                    atomic_write(path, old)
+                    self._syn = load_synonyms(path, self._db)
+                raise
+
+    async def accept_tailored(self, offer_id: int) -> Path:
+        """Render the pending proposal and record it as the offer's CV.
+
+        The PDF goes to a distinct file next to the base copy (which stays
+        byte-identical); the row keeps ``cv_base`` (so "Redo CV" delivers the
+        base again) with an ``ADAPTED:`` cambios marker, and the mirror gets
+        the adapted file, which ``mark_sent`` then moves. Page limit: when
+        the render is longer than the base CV, retry without the headline
+        skills, then also without reorders; still longer ->
+        ``tailor.bot.too_long`` (proposal kept, nothing written). A base CV
+        changed since the proposal -> ``tailor.bot.expired``. The plan's new
+        synonyms (S7) are saved to ``synonyms.json`` only here
+        (:meth:`_save_new_synonyms`), BEFORE the PDF is moved into place and
+        recorded, all under the profile write lock: when saving them fails
+        the accept is aborted (nothing recorded, no PDF moved); when moving
+        or recording fails afterwards, the previous ``synonyms.json`` is put
+        back and reloaded.
+        """
+        proposal = self._proposal(offer_id)
+        source = proposal.source
+        if self._adaptable(proposal.variant) != source:
+            self._tailor_proposals.pop(offer_id, None)
+            raise ServiceError.keyed("tailor.bot.expired")
+        offer = self._repo.get_offer(offer_id)
+        out = self._adapted_output_path(offer, proposal.variant)
+        base_pdf = verified_base_pdf(proposal.variant, self._base_pdfs_dir)
+        base_pages = len(PdfReader(base_pdf).pages)
+        tmp = out.with_name(f".{out.name}.tmp")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        plan = proposal.plan
+        fallbacks = [
+            plan,
+            plan.model_copy(update={"headline_skills": []}),
+            plan.model_copy(update={"headline_skills": [], "order": []}),
+        ]
+        chosen: TailorPlan | None = None
+        try:
+            for candidate in fallbacks:
+                tailored = apply_plan(source, candidate)
+                if final_check(source, tailored, self._db, self._syn, plan=candidate):
+                    self._tailor_proposals.pop(offer_id, None)
+                    raise ServiceError.keyed("tailor.bot.unsafe")
+                pages = render_source(tailored, tmp, created=self._now())
+                if pages <= base_pages:
+                    chosen = candidate
+                    break
+            if chosen is None:
+                raise ServiceError.keyed("tailor.bot.too_long")
+            self._commit_adapted(proposal, chosen, tmp, out)
+        finally:
+            tmp.unlink(missing_ok=True)
+        self._tailor_proposals.pop(offer_id, None)
+        on_generated(self._mirror, out)
+        self._refresh_tracker()
+        return out
 
     def mark_sent(self, offer_id: int, cv_path: Path | None = None) -> None:
         """Record the send: estado=enviada + fecha_envio + CV fields + match.

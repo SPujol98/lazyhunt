@@ -38,13 +38,15 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
 
-from cva.families import BUILTIN_REGISTRY
+from cva.families import BUILTIN_REGISTRY, FamilyRegistry
 from cva.i18n import Lang
 from cva.onboarding import answers as A
 from cva.onboarding.commit import WRITE_LOCK, Hook, commit_all
+from cva.onboarding.cv_catalog import profile_entries
 from cva.onboarding.prefill import current_answers
 from cva.onboarding.profile_gen import SETUP_PREFIX, confirm_hook
 from cva.profile_identity import ProfileError
+from cva.profile_prefs import load_preferences
 
 EDITABLE_SECTIONS: Final[tuple[str, ...]] = (
     "positions",
@@ -344,6 +346,14 @@ def parse_request(payload: Any, declared: Sequence[str]) -> tuple[str, dict[str,
 # --- the profile ----------------------------------------------------------------------
 
 
+def _families(profile_dir: Path) -> FamilyRegistry:
+    """The profile's role families (the built-ins when unreadable)."""
+    try:
+        return load_preferences(profile_dir / "preferences.toml").families
+    except (ProfileError, OSError, ValueError):
+        return BUILTIN_REGISTRY
+
+
 def _declared(profile_dir: Path) -> tuple[list[str], list[tuple[str, str]]]:
     return A.families_in_effect(profile_dir / "preferences.toml")
 
@@ -378,6 +388,7 @@ def profile_view(profile_dir: Path) -> dict[str, Any]:
         answers = current_answers(profile_dir)
         builtin, others = _declared(profile_dir)
         setup, other = _claims(profile_dir)
+        base_cvs = profile_entries(profile_dir, _families(profile_dir))
     bg = A.background(answers)
     return {
         "sections": {
@@ -430,6 +441,8 @@ def profile_view(profile_dir: Path) -> dict[str, Any]:
             "language_length": A.MAX_LANGUAGE_LEN,
         },
         "claims": {"setup": setup, "other": other},
+        # Read-only (tailored-cv T1): the base CVs as /cvs lists them.
+        "base_cvs": base_cvs,
     }
 
 

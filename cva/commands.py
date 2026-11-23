@@ -83,6 +83,10 @@ COMMANDS: Final[tuple[Command, ...]] = (
     Command("rescatar", SECTION_ANALYZE, en_name="rescue"),
     Command("cv", SECTION_CV),
     Command("cartabase", SECTION_CV, aliases=("base",), en_name="basecover"),
+    # The base CV catalog (tailored-cv T1): unlisted like /connect (the full
+    # /help is near Telegram's 4096 limit); the /setup Confirm reply and
+    # docs/onboarding.md point to it.
+    Command("cvs", SECTION_CV, listed=False),
     Command("status", SECTION_TRACKING),
     Command("sent", SECTION_TRACKING),
     Command("outcome", SECTION_TRACKING),

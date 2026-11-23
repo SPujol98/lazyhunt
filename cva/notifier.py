@@ -82,6 +82,10 @@ OE = "oe"  # record an outcome estado
 GM = "gm"  # Gmail proposal actions: gm:<y|o|i>:<gmail message id>
 FU = "fu"  # follow-up reminder actions: ok | skip | none
 PREP = "prep"  # interview prep: prep:<id> (stage choice) | prep:<id>:<stage>
+# Adapted CV (tailored-cv T3): cvt:<id>:<ROLE>:<lang> proposes one;
+# cva:<id>:accept | cva:<id>:discard | cva:<id>:rm:<change index>.
+CV_TAILOR = "cvt"
+CV_TAILOR_ACTION = "cva"
 BEACON_RESUME = "beacon_resume"
 BEACON_DISABLE = "beacon_disable"
 
@@ -915,8 +919,13 @@ def sent_keyboard(
     cover_letter_asked: bool = False,
     families: FamilyRegistry = BUILTIN_REGISTRY,
     lang: Lang = LEGACY_LANG,
+    adaptable: bool = False,
 ) -> InlineKeyboardMarkup:
     """Post-generation keyboard: [Mark as sent] + [🗑 Discard].
+
+    ``adaptable`` (tailored-cv T3: the delivered base CV is one lazyhunt
+    built, never the owner's own PDFs) adds a last row [✨ Adapt to this
+    offer] -> ``cvt:<id>:<ROLE>:<lang>``, the same variant as [🔄 Redo CV].
 
     With the delivered ``cv_base`` (e.g. ``BACKEND_EN``) a second row offers
     [🔄 Redo CV]: it re-runs that same variant through the regular ``cv:``
@@ -934,6 +943,7 @@ def sent_keyboard(
             ),
         ]
     ]
+    adapt: str | None = None
     if cv_base and "_" in cv_base:
         role, cv_lang = cv_base.rsplit("_", 1)
         family = families.resolve(role)
@@ -946,8 +956,17 @@ def sent_keyboard(
                 )
             ]
         )
+        adapt = f"{CV_TAILOR}:{offer_id}:{family.role}:{cv_lang}"
     rows.append(_salary_button_row(offer_id, lang))
     rows.append(_cover_letter_button_row(offer_id, lang, asked=cover_letter_asked))
+    if adaptable and adapt is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    t("tailor.bot.button.adapt", lang), callback_data=adapt
+                )
+            ]
+        )
     return InlineKeyboardMarkup(rows)
 
 

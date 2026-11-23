@@ -54,12 +54,18 @@ repeated id gets ``-2``, ``-3``... The ``setup-`` prefix is reserved: when
 the ones of the current answers and every other claim keeps its exact bytes
 (:func:`merge_setup_claims`); the file is rewritten only when the ``setup-*``
 claims change (``updated``).
+An existing ``synonyms.json`` is pruned, never wiped: an alias whose
+``claim_id`` no longer exists (the user removed that skill) or whose key is
+junk (:func:`~cva.match.scorer.junk_alias`) is dropped and logged, every
+other alias keeps its key and value; the file is rewritten only when
+something was dropped.
 The result is loaded with the strict loaders before it is reported; when that
 fails, only the files this call created are removed and
 :class:`~cva.profile_identity.ProfileError` propagates.
 """
 
 import json
+import logging
 import re
 import stat
 import tomllib
@@ -74,7 +80,7 @@ from cva.claimsdb import load_claims
 from cva.families import BUILTIN_REGISTRY
 from cva.fsutil import atomic_write
 from cva.i18n import Lang, t
-from cva.match.scorer import load_synonyms
+from cva.match.scorer import junk_alias, load_synonyms
 from cva.onboarding.answers import (
     ANSWERS_FILE,
     SPOKEN_LANGUAGES,
@@ -88,6 +94,7 @@ from cva.profile_prefs import load_preferences
 from cva.profile_writer import read_document
 
 _TEMPLATES_DIR: Final[Path] = Path(__file__).parent / "templates"
+_log = logging.getLogger(__name__)
 
 GENERATED_FILES: Final[tuple[str, ...]] = (
     "claims.json",
@@ -503,6 +510,36 @@ def _merged_claims(
     return merged, _Previous(raw, stat.S_IMODE(path.stat().st_mode))
 
 
+def _pruned_synonyms(profile_dir: Path) -> tuple[str, _Previous] | None:
+    """``(new text, previous file)`` when ``synonyms.json`` holds aliases of
+    claims ``claims.json`` no longer has, or junk keys; ``None`` when
+    nothing is to drop or either file is missing or unreadable (left alone:
+    the strict loader reports it)."""
+    path = profile_dir / "synonyms.json"
+    try:
+        raw = path.read_bytes()
+        synonyms = json.loads(raw)
+        claims = json.loads((profile_dir / "claims.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(synonyms, dict) or not isinstance(claims, list):
+        return None
+    ids = {str(c.get("id")) for c in claims if isinstance(c, dict)}
+    kept: dict[str, Any] = {}
+    for key, spec in synonyms.items():
+        cid = spec.get("claim_id") if isinstance(spec, dict) else None
+        if isinstance(cid, str) and cid not in ids:
+            _log.info("synonyms.json: dropped alias %r of removed claim %s", key, cid)
+        elif junk_alias(key):
+            _log.info("synonyms.json: dropped unusable alias %r", key)
+        else:
+            kept[key] = spec
+    if len(kept) == len(synonyms):
+        return None
+    text = json.dumps(kept, ensure_ascii=False, indent=2) + "\n"
+    return text, _Previous(raw, stat.S_IMODE(path.stat().st_mode))
+
+
 def generate_minimal_profile(
     profile_dir: Path,
     answers: Mapping[str, Any],
@@ -546,6 +583,13 @@ def generate_minimal_profile(
                 text, previous = merge
                 atomic_write(profile_dir / "claims.json", text, mode=previous.mode)
                 replaced["claims.json"] = previous
+            prune = (
+                _pruned_synonyms(profile_dir) if "synonyms.json" in skipped else None
+            )
+            if prune is not None:
+                text, previous = prune
+                atomic_write(profile_dir / "synonyms.json", text, mode=previous.mode)
+                replaced["synonyms.json"] = previous
             _validate(profile_dir)
         except BaseException:
             _rollback(profile_dir, created, judge_created, replaced)

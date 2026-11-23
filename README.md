@@ -234,6 +234,7 @@ On an offer card (button names are shown in English here; with `ui_language = "e
 - **📄 Generate CV** (*Generar CV*) builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
 - **✉️ Cover letter** (*Carta de presentación*) keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
 - **✅ Use this one** (*Usar esta*) saves the letter on the offer and also sends it as a one-page PDF (same font as your CVs, next to the offer's CV), for portals that want the letter as a file; `/basecover` (`/cartabase`) sends the generic letter as a PDF too.
+- **✨ Adapt to this offer** (*Adaptar a esta oferta*) appears under a delivered CV only when lazyhunt created that base CV in `/setup` (not for an uploaded PDF or your own hand-made PDFs). It proposes a few small changes starting from the base CV: reorder items, feature up to 3 of your skills in the headline, and swap a word for the offer's wording for something already on your CV. A word that is not an approved synonym yet is marked 🆕 *new synonym* and is your call: pressing **✅ Use this CV** saves it to `synonyms.json`, so it applies on its own next time and also helps match offers (never a tool, technology, company, title, degree or number). Nothing is invented and nothing is final until you press **✅ Use this CV** (*Usar este CV*); **↩️ Remove change N** drops one change and **Discard** keeps the base CV. The adapted PDF is a separate file (`…_adapted_<id>.pdf`) next to the base one; **🔄 Redo CV** still sends the base. Details: [docs/onboarding.md](docs/onboarding.md#adapting-a-created-cv-to-an-offer).
 - **✅ Mark as sent** (*Marcar enviada*, or `/sent 42`) records that you applied.
 - **🔎 On LinkedIn / On Google / On InfoJobs** (*En …*), the card's last row, open a search for the same offer (title + company) on another site, so you can apply there instead; the offer's own portal is left out (an InfoJobs offer gets Indeed instead).
 
@@ -495,7 +496,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.5`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.6`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

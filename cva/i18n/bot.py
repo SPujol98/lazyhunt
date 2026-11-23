@@ -77,6 +77,37 @@ EN: Final[dict[str, str]] = {
         "🔌 Next, connect the browser extension: send {connect} and type the "
         "code in its Options."
     ),
+    # --- /cvs: the base CV catalog (tailored-cv T1) -----------------------------
+    "bot.cvs.header": "📄 Your base CVs",
+    "bot.cvs.empty": "📄 No base CVs yet: {setup} cvs adds them.",
+    "bot.cvs.empty_legacy": "📄 No base CVs yet.",
+    "bot.cvs.origin.lazyhunt": "created with lazyhunt · {template} template",
+    "bot.cvs.origin.uploaded": "uploaded PDF · not adaptable",
+    "bot.cvs.origin.own": "your own PDF",
+    "bot.cvs.section.profile": "Profile",
+    "bot.cvs.section.experience": "Experience",
+    "bot.cvs.section.education": "Education",
+    "bot.cvs.section.skills": "Skills",
+    "bot.cvs.section.languages": "Languages",
+    "bot.cvs.stale": "⚠️ Your answers changed since it was made: 🔄 rebuilds it.",
+    "bot.cvs.create_hint": (
+        "An uploaded PDF cannot be adapted: {setup} cvs can create one with "
+        "lazyhunt instead."
+    ),
+    "bot.cvs.legend": ("📄 View PDF · 🎨 Change template · 🔄 Rebuild from my answers"),
+    "bot.cvs.legend_own": "📄 sends the PDF.",
+    "bot.cvs.pick_template": "🎨 {slot}: pick the new template (now {template}).",
+    "bot.cvs.done.template": "✅ {slot} redrawn with the {template} template.",
+    "bot.cvs.done.rebuild": "✅ {slot} rebuilt from your answers.",
+    "bot.cvs.err.missing": "⚠️ That base CV is not there any more: send /cvs again.",
+    "bot.cvs.err.not_created": (
+        "⚠️ Only a CV lazyhunt created can be redrawn; this one is your own PDF."
+    ),
+    "bot.cvs.err.no_slot": (
+        "⚠️ That position or language is no longer in your profile: nothing changed."
+    ),
+    "bot.cvs.err.failed": "⚠️ The CV could not be redrawn: nothing changed.",
+    "bot.cvs.offer": "📄 Your base CVs: {cvs} lists them.",
     "bot.connect.disabled": (
         "The extension bridge is off: CVA_BRIDGE_SECRET is not set in .env. "
         "Run `uv run cli.py init` again and restart the bot."
@@ -333,6 +364,38 @@ ES: Final[dict[str, str]] = {
         "🔌 Después, conecta la extensión del navegador: envía {connect} y "
         "escribe el código en sus Opciones."
     ),
+    # --- /cvs: el catálogo de CV base (tailored-cv T1) --------------------------
+    "bot.cvs.header": "📄 Tus CV base",
+    "bot.cvs.empty": "📄 Aún no hay CV base: {setup} cvs los añade.",
+    "bot.cvs.empty_legacy": "📄 Aún no hay CV base.",
+    "bot.cvs.origin.lazyhunt": "creado con lazyhunt · plantilla {template}",
+    "bot.cvs.origin.uploaded": "PDF subido · no adaptable",
+    "bot.cvs.origin.own": "tu propio PDF",
+    "bot.cvs.section.profile": "Perfil",
+    "bot.cvs.section.experience": "Experiencia",
+    "bot.cvs.section.education": "Formación",
+    "bot.cvs.section.skills": "Habilidades",
+    "bot.cvs.section.languages": "Idiomas",
+    "bot.cvs.stale": "⚠️ Tus respuestas cambiaron desde que se hizo: 🔄 lo rehace.",
+    "bot.cvs.create_hint": (
+        "Un PDF subido no se puede adaptar: {setup} cvs puede crear uno con lazyhunt."
+    ),
+    "bot.cvs.legend": (
+        "📄 Ver PDF · 🎨 Cambiar plantilla · 🔄 Rehacer desde mis respuestas"
+    ),
+    "bot.cvs.legend_own": "📄 envía el PDF.",
+    "bot.cvs.pick_template": "🎨 {slot}: elige la nueva plantilla (ahora {template}).",
+    "bot.cvs.done.template": "✅ {slot} redibujado con la plantilla {template}.",
+    "bot.cvs.done.rebuild": "✅ {slot} rehecho desde tus respuestas.",
+    "bot.cvs.err.missing": "⚠️ Ese CV base ya no está: envía /cvs otra vez.",
+    "bot.cvs.err.not_created": (
+        "⚠️ Solo se puede redibujar un CV creado con lazyhunt; este es tu propio PDF."
+    ),
+    "bot.cvs.err.no_slot": (
+        "⚠️ Ese puesto o idioma ya no está en tu perfil: no ha cambiado nada."
+    ),
+    "bot.cvs.err.failed": "⚠️ No se pudo redibujar el CV: no ha cambiado nada.",
+    "bot.cvs.offer": "📄 Tus CV base: {cvs} los muestra.",
     "bot.connect.disabled": (
         "El puente de la extensión está apagado: CVA_BRIDGE_SECRET no está en "
         ".env. Vuelve a ejecutar `uv run cli.py init` y reinicia el bot."

@@ -34,6 +34,7 @@ from typing import Final, Literal
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
+from cva.cvgen.cv_source import CvSource, SourceItem, SourceSection
 from cva.cvgen.engine import FAMILY
 from cva.cvgen.fonts import DEFAULT_CV_FONT, CvFont, font_files
 from cva.cvgen.letter_pdf import _contact_lines
@@ -211,28 +212,53 @@ _STYLES: Final[dict[Template, _Style]] = {
 }
 
 
-def _sections(cv: StarterCv) -> list[tuple[str, list[tuple[str, str | None]]]]:
+def source_of(cv: StarterCv, template: str, slot: str = "CV_EN") -> CvSource:
+    """``cv`` as a :class:`CvSource` without claim ids (what it draws is the
+    same: the claim ids only matter to a stored source)."""
+
+    def items(texts: Sequence[str]) -> tuple[SourceItem, ...]:
+        return tuple(SourceItem("", text) for text in texts)
+
+    sections = (
+        SourceSection("profile", items([cv.profile] if cv.profile else [])),
+        SourceSection(
+            "experience",
+            tuple(
+                SourceItem("", f"{role} · {company}" if company else role, role)
+                for role, company in cv.experience
+            ),
+        ),
+        SourceSection("education", items(cv.education)),
+        SourceSection("skills", items(cv.skills)),
+        SourceSection("languages", items(cv.languages)),
+    )
+    return CvSource(
+        slot=slot,
+        lang=cv.lang,
+        template=template,
+        name=cv.name,
+        headline=cv.headline,
+        identity_claim_id="",
+        contact=cv.contact,
+        sections=tuple(s for s in sections if s.items),
+    )
+
+
+def _sections(source: CvSource) -> list[tuple[str, list[tuple[str, str | None]]]]:
     """``(section id, lines)`` of the non-empty sections; a line is
-    ``(text, bold part)``."""
+    ``(text, bold part)``. An inline section (skills, languages) is one line
+    of its items joined with " · "."""
     out: list[tuple[str, list[tuple[str, str | None]]]] = []
-    if cv.profile:
-        out.append(("profile", [(cv.profile, None)]))
-    if cv.experience:
-        out.append(
-            (
-                "experience",
-                [
-                    (f"{role} · {company}" if company else role, role)
-                    for role, company in cv.experience
-                ],
-            )
-        )
-    if cv.education:
-        out.append(("education", [(entry, None) for entry in cv.education]))
-    if cv.skills:
-        out.append(("skills", [(" · ".join(cv.skills), None)]))
-    if cv.languages:
-        out.append(("languages", [(" · ".join(cv.languages), None)]))
+    for section in source.sections:
+        if not section.items:
+            continue
+        if section.inline:
+            lines: list[tuple[str, str | None]] = [
+                (" · ".join(item.text for item in section.items), None)
+            ]
+        else:
+            lines = [(item.text, item.bold) for item in section.items]
+        out.append((section.kind, lines))
     return out
 
 
@@ -275,7 +301,7 @@ def _line(pdf: FPDF, text: str, bold: str | None, style: _Style) -> None:
     pdf.multi_cell(width, lead, text, align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 
-def _build(cv: StarterCv, template: Template, font: CvFont, created: datetime) -> FPDF:
+def _build(cv: CvSource, template: Template, font: CvFont, created: datetime) -> FPDF:
     style = _STYLES[template]
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.creation_date = created
@@ -341,6 +367,28 @@ def _build(cv: StarterCv, template: Template, font: CvFont, created: datetime) -
     return pdf
 
 
+def render_source(
+    source: CvSource,
+    out_path: Path,
+    *,
+    font: CvFont = DEFAULT_CV_FONT,
+    created: datetime | None = None,
+) -> int:
+    """Write ``source`` drawn with its template to ``out_path``; return its
+    page count. ``CvgenError`` for an unknown template, a CV without a name
+    or missing font files."""
+    template = source.template
+    if template not in _STYLES:
+        raise CvgenError(f"unknown starter CV template {template!r}")
+    if not source.name.strip():
+        raise CvgenError("a starter CV needs the candidate's name")
+    when = created or datetime.now(UTC).replace(microsecond=0)
+    pdf = _build(source, template, font, when)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(bytes(pdf.output()))
+    return int(pdf.page_no())
+
+
 def render_starter_cv(
     cv: StarterCv,
     template: Template,
@@ -350,19 +398,10 @@ def render_starter_cv(
     created: datetime | None = None,
 ) -> int:
     """Write ``cv`` drawn with ``template`` to ``out_path``; return its page
-    count. ``CvgenError`` for an unknown template, a CV without a name or
-    missing font files."""
-    if template not in _STYLES:
-        raise CvgenError(f"unknown starter CV template {template!r}")
-    if not cv.name.strip():
-        raise CvgenError("a starter CV needs the candidate's name")
-    when = created or datetime.now(UTC).replace(microsecond=0)
-    pdf = _build(cv, template, font, when)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(bytes(pdf.output()))
-    return int(pdf.page_no())
+    count (:func:`render_source` of :func:`source_of`)."""
+    return render_source(source_of(cv, template), out_path, font=font, created=created)
 
 
 def sections_of(cv: StarterCv) -> Sequence[str]:
     """The section ids a starter CV draws (the non-empty ones, in order)."""
-    return [sid for sid, _ in _sections(cv)]
+    return [sid for sid, _ in _sections(source_of(cv, "classic"))]

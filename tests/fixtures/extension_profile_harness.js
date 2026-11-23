@@ -73,6 +73,26 @@ async function helpers() {
   const parsed = m.parseProfile(PROFILE);
   check('parsed sections', parsed.sections, PROFILE.sections);
   check('claims without a string id are dropped', parsed.claims.other.map((c) => c.id), ['identity-contact']);
+
+  // --- rule: the base CVs are listed read-only, as /cvs shows them (tailored-cv T1) --
+  const cvs = m.parseProfile({
+    sections: {},
+    base_cvs: [
+      { slot: 'AI_ES', label: 'AI', lang: 'es', origin: 'lazyhunt', template: 'modern', sections: 5, adaptable: true },
+      { slot: 'AI_EN', label: 'AI', lang: 'en', origin: 'uploaded', template: null, sections: 0, adaptable: false },
+      { slot: 'X_EN', origin: 'weird', sections: -1 },
+      { label: 'no slot' },
+    ],
+  }).base_cvs;
+  check('base cvs shape-checked', cvs.map((c) => [c.slot, c.origin, c.sections, c.adaptable]),
+    [['AI_ES', 'lazyhunt', 5, true], ['AI_EN', 'uploaded', 0, false], ['X_EN', 'own', 0, false]]);
+  check('no base cvs is an empty list', m.parseProfile({ sections: {} }).base_cvs, []);
+  const english = (_key, _subs, fallback) => fallback;
+  check('base cv lines', cvs.map((c) => m.baseCvLine(c, english)), [
+    'AI · ES — created with lazyhunt · Modern template · 5 sections',
+    'AI · EN — uploaded PDF · not adaptable',
+    'X_EN ·  — your own PDF',
+  ]);
   const sparse = m.parseProfile({ sections: { level: { level: 3 }, salary: { min_salary: 1.5 } } });
   check('wrong types become empty values', [sparse.sections.level.level, sparse.sections.salary.min_salary,
     sparse.sections.background.experience, sparse.options.levels], [null, null, null, []]);

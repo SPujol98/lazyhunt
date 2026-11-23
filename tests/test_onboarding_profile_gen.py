@@ -19,6 +19,7 @@ import pytest
 from cva.claimsdb import load_claims
 from cva.config import Settings
 from cva.i18n import Lang, t
+from cva.match.scorer import load_synonyms
 from cva.onboarding.answers import write_answers
 from cva.onboarding.profile_gen import (
     GENERATED_FILES,
@@ -555,3 +556,42 @@ def test_a_failed_validation_puts_back_the_exact_bytes_of_a_crlf_claims_file(
     with pytest.raises(ProfileError, match="identity_claim_id"):
         generate_minimal_profile(profile, answers, "en")
     assert claims.read_bytes() == raw
+
+
+# --- synonyms.json survives a re-run (tailored-cv B3) ---------------------------
+
+
+def test_rerun_prunes_orphan_and_junk_synonyms_and_keeps_the_valid_ones(
+    tmp_path: Path,
+) -> None:
+    profile, answers = _confirmed(tmp_path, **_BACKGROUND)
+    generate_minimal_profile(profile, answers, "en")
+    synonyms = profile / "synonyms.json"
+    synonyms.write_text(
+        json.dumps(
+            {
+                "aguante": {"claim_id": "setup-skill-python", "strength": "weak"},
+                "mother tongue": {"claim_id": "setup-lang-es", "strength": "weak"},
+                "kuber\u200bnetes": {"claim_id": "setup-lang-en", "strength": "weak"},
+                "s\u0435ni\u043er": {"claim_id": "setup-lang-en", "strength": "weak"},
+            },
+            ensure_ascii=False,
+        ),
+        "utf-8",
+    )
+    # The user drops Python from the skills: no exception, no rollback.
+    result = generate_minimal_profile(profile, {**answers, "skills": ["Go"]}, "en")
+    assert "claims.json" in result.updated
+    ids = {c["id"] for c in json.loads((profile / "claims.json").read_text())}
+    assert "setup-skill-python" not in ids and "setup-skill-go" in ids
+    assert json.loads(synonyms.read_text("utf-8")) == {
+        "mother tongue": {"claim_id": "setup-lang-es", "strength": "weak"}
+    }
+    db = load_claims(profile / "claims.json")
+    assert set(load_synonyms(synonyms, db).entries) == {"mother tongue"}
+
+    # Re-running /setup with the same answers never wipes approved synonyms.
+    kept = synonyms.read_bytes()
+    generate_minimal_profile(profile, {**answers, "skills": ["Go"]}, "en")
+    generate_minimal_profile(profile, answers, "en")
+    assert synonyms.read_bytes() == kept

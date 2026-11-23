@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "about": "Proposed (not yet approved) tailoring synonyms: both words must be in the same group. soft = soft skills, level = language level wording. ES + EN. See cva/cvgen/tailor.py.",
+  "soft": {
+    "endurance": [
+      "disciplina", "autodisciplina", "constancia", "aguante", "aguante físico",
+      "resistencia", "resistencia física", "perseverancia", "persistencia",
+      "resiliencia", "tenacidad", "tesón", "fortaleza", "capacidad de esfuerzo",
+      "cultura del esfuerzo", "sacrificio", "esfuerzo", "determinación",
+      "discipline", "self-discipline", "perseverance", "persistence",
+      "resilience", "stamina", "endurance", "tenacity", "grit", "determination",
+      "hard work", "work ethic", "strong work ethic", "diligence"
+    ],
+    "teamwork": [
+      "trabajo en equipo", "colaboración", "cooperación", "compañerismo",
+      "espíritu de equipo", "teamwork", "team player", "team spirit",
+      "collaboration", "cooperation"
+    ],
+    "communication": [
+      "comunicación", "habilidades de comunicación", "capacidad de comunicación",
+      "comunicación efectiva", "escucha activa", "asertividad", "communication",
+      "communication skills", "effective communication", "active listening",
+      "assertiveness"
+    ],
+    "leadership": [
+      "liderazgo", "capacidad de liderazgo", "dotes de liderazgo", "leadership",
+      "leadership skills"
+    ],
+    "initiative": [
+      "proactividad", "iniciativa", "autonomía", "espíritu emprendedor",
+      "automotivación", "motivación", "proactivity", "proactiveness",
+      "initiative", "autonomy", "self-motivation", "motivation", "self-starter",
+      "drive", "ownership"
+    ],
+    "adaptability": [
+      "adaptabilidad", "flexibilidad", "capacidad de adaptación", "polivalencia",
+      "versatilidad", "agilidad", "adaptability", "flexibility", "versatility",
+      "agility"
+    ],
+    "commitment": [
+      "compromiso", "implicación", "dedicación", "responsabilidad", "seriedad",
+      "fiabilidad", "lealtad", "commitment", "dedication", "involvement",
+      "responsibility", "reliability", "dependability", "accountability",
+      "loyalty"
+    ],
+    "punctuality": ["puntualidad", "punctuality"],
+    "organization": [
+      "organización", "capacidad de organización", "planificación",
+      "gestión del tiempo", "orden", "organization", "organisation",
+      "organizational skills", "organisational skills", "planning",
+      "time management"
+    ],
+    "detail": [
+      "atención al detalle", "minuciosidad", "meticulosidad", "rigor",
+      "precisión", "exactitud", "attention to detail", "thoroughness",
+      "meticulousness", "rigour", "precision", "accuracy"
+    ],
+    "problem_solving": [
+      "resolución de problemas", "pensamiento crítico", "capacidad analítica",
+      "pensamiento analítico", "problem solving", "problem-solving",
+      "critical thinking", "analytical skills", "analytical thinking"
+    ],
+    "learning": [
+      "capacidad de aprendizaje", "ganas de aprender", "curiosidad",
+      "aprendizaje continuo", "eagerness to learn", "willingness to learn",
+      "curiosity", "continuous learning", "quick learner"
+    ],
+    "pressure": [
+      "trabajo bajo presión", "tolerancia a la presión", "tolerancia al estrés",
+      "gestión del estrés", "autocontrol", "calma", "working under pressure",
+      "stress tolerance", "stress management", "composure", "self-control"
+    ],
+    "people": [
+      "empatía", "inteligencia emocional", "don de gentes",
+      "habilidades sociales", "habilidades interpersonales", "sociabilidad",
+      "amabilidad", "cordialidad", "empathy", "emotional intelligence",
+      "people skills", "interpersonal skills", "social skills", "friendliness"
+    ],
+    "customer": [
+      "orientación al cliente", "atención al cliente", "trato al cliente",
+      "vocación de servicio", "customer focus", "customer orientation",
+      "customer service"
+    ],
+    "results": [
+      "orientación a resultados", "orientación a objetivos", "eficiencia",
+      "results orientation", "goal orientation", "efficiency"
+    ],
+    "creativity": [
+      "creatividad", "innovación", "imaginación", "creativity", "innovation",
+      "imagination"
+    ],
+    "attitude": [
+      "actitud positiva", "buena actitud", "entusiasmo", "dinamismo", "energía",
+      "positive attitude", "enthusiasm", "dynamism", "energy"
+    ],
+    "patience": ["paciencia", "patience"],
+    "integrity": [
+      "honestidad", "integridad", "discreción", "confidencialidad", "ética",
+      "honesty", "integrity", "discretion", "confidentiality", "ethics"
+    ],
+    "negotiation": [
+      "negociación", "capacidad de negociación", "persuasión", "negotiation",
+      "persuasion"
+    ]
+  },
+  "level": {
+    "native": [
+      "nativo", "nativa", "lengua materna", "idioma materno", "materno",
+      "materna", "native", "native speaker", "mother tongue", "first language"
+    ],
+    "bilingual": ["bilingüe", "bilingual"],
+    "fluent": [
+      "fluido", "fluida", "con fluidez", "fluidez", "dominio", "fluent",
+      "fluency", "proficient", "full professional proficiency"
+    ],
+    "advanced": [
+      "avanzado", "avanzada", "nivel avanzado", "advanced", "advanced level"
+    ],
+    "upper_intermediate": [
+      "intermedio alto", "intermedio-alto", "upper intermediate",
+      "upper-intermediate"
+    ],
+    "intermediate": [
+      "intermedio", "intermedia", "nivel intermedio", "intermediate",
+      "intermediate level"
+    ],
+    "basic": [
+      "básico", "básica", "nivel básico", "elemental", "principiante", "basic",
+      "basic level", "elementary", "beginner"
+    ],
+    "conversational": [
+      "conversacional", "nivel conversacional", "conversational"
+    ]
+  }
+}

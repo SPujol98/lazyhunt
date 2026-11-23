@@ -12,6 +12,10 @@ Deterministic matching strategy (claims-db spec, design D6):
 - Numbers and metric values are never flagged; enforcement is token-level,
   not fact-level.
 - Output is the sorted set of offending tokens: stable, unique, comparable.
+- The tokenizer only sees ``[a-z0-9]`` (after accent stripping), so it
+  drops non-Latin letters, symbols and invisible characters silently.
+  :func:`foreign_runs` covers that blind spot for callers that must prove
+  nothing new was written at all (the tailored CV's final check).
 
 The function is pure: no disk access, no network, no LLM — safe to run
 post-render on every emitted artifact.
@@ -19,6 +23,7 @@ post-render on every emitted artifact.
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from cva.claimsdb.loader import ClaimsDB
@@ -51,7 +56,11 @@ STOPWORDS: frozenset[str] = frozenset(_STOPWORDS_TEXT.split())
 
 
 def whitelist_violations(
-    text: str, db: ClaimsDB, *, master: "MasterCv | None" = None
+    text: str,
+    db: ClaimsDB,
+    *,
+    master: "MasterCv | None" = None,
+    extra_vocab: Iterable[str] = (),
 ) -> list[str]:
     """Return the sorted tokens in ``text`` that carry no claim in ``db``.
 
@@ -60,8 +69,14 @@ def whitelist_violations(
     renders the owner's dict text, which is deliberately not claims-DB
     vocabulary (claim curation stays with the owner). Lazy import keeps
     this module free of cvgen coupling for the pure-text callers.
+
+    ``extra_vocab`` strings (tokenized the same way) also join the approved
+    vocabulary: the tailored CV passes the user's own CV text and the
+    ``synonyms.json`` aliases of the claims on that CV (tailored-cv S4(c)).
     """
     vocabulary = _vocabulary(db)
+    for extra in extra_vocab:
+        vocabulary |= frozenset(_tokens(extra))
     if master is not None:
         from cva.cvgen.master import iter_leaves
 
@@ -100,3 +115,41 @@ def _tokens(text: str) -> list[str]:
     lowered = unicodedata.normalize("NFD", text.casefold())
     stripped = "".join(char for char in lowered if not unicodedata.combining(char))
     return [token for token in _TOKEN_SPLIT.split(stripped) if token]
+
+
+# Characters a swap may legitimately bring in besides Latin letters and digits.
+_WORD_JOINERS = frozenset("-'\u2019")
+
+
+def _plain(char: str) -> bool:
+    """A character the token check above can judge, or plain spacing."""
+    if char.isspace() or char in _WORD_JOINERS or (char.isascii() and char.isalnum()):
+        return True
+    return char.isalpha() and unicodedata.name(char, "").startswith("LATIN ")
+
+
+def foreign_runs(text: str, allowed_texts: Iterable[str] = ()) -> list[str]:
+    """Sorted runs of ``text`` the token whitelist cannot see.
+
+    A run is a maximal sequence of characters that are neither whitespace,
+    ASCII letters/digits, Latin-script letters (accented Latin included,
+    full-width forms excluded) nor ``-``/apostrophes: other scripts
+    (Cyrillic, Greek, CJK), symbols ("★"), punctuation, invisible format or
+    control characters (zero-width space) and non-ASCII digits. A run is
+    allowed only when it occurs verbatim in one of ``allowed_texts`` (the
+    base CV's own punctuation, the headline joiner); every other run is
+    returned. Mixed-script words show up through their non-Latin letters.
+    """
+    pool = list(allowed_texts)
+    runs: set[str] = set()
+    current: list[str] = []
+    for char in [*text, " "]:
+        if not _plain(char):
+            current.append(char)
+            continue
+        if current:
+            run = "".join(current)
+            if not any(run in allowed for allowed in pool):
+                runs.add(run)
+            current = []
+    return sorted(runs)

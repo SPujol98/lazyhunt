@@ -977,7 +977,7 @@ def _cv_create(state: State, slot: U.Slot, template: str) -> None:
         sha, pages = starter.create_pending_cv(
             folder, _answers(state), slot, cast(Template, template)
         )
-    except (U.UploadError, CvgenError, OSError):
+    except (U.UploadError, CvgenError, OSError, ProfileError):
         cv["notice"] = {"key": "onboarding.err.cv_create", "fmt": {}}
         return
     cv["got"][slot.key] = sha
@@ -1616,6 +1616,9 @@ async def on_document(message: Any, user_data: dict[Any, Any], env: Env) -> bool
     else:
         cv = _cv(state)
         cv["got"][target.key] = sha
+        # The upload replaces a CV lazyhunt created for the slot: Confirm
+        # must not re-render that one over it (_refresh_created).
+        cv["created"].pop(target.key, None)
         cv["skip"] = [k for k in cv["skip"] if k != target.key]
         cv["target"] = None
         count = t(
@@ -1723,7 +1726,7 @@ def _refresh_created(state: State, profile_dir: Path, slots: list[U.Slot]) -> No
             sha, _ = starter.create_pending_cv(
                 profile_dir, _answers(state), by_key[key], cast(Template, template)
             )
-        except (U.UploadError, CvgenError, OSError):
+        except (U.UploadError, CvgenError, OSError, ProfileError):
             continue
         cv["got"][key] = sha
 
@@ -1748,8 +1751,16 @@ def _offer_extension_pairing(_env: Env, lang: Lang) -> ConfirmExtra:
     )
 
 
+def _point_to_base_cvs(_env: Env, lang: Lang) -> ConfirmExtra:
+    """After Confirm: ``/cvs`` lists the base CVs (unlisted in /help)."""
+    from cva.commands import command_name  # local: commands imports i18n only
+
+    return ConfirmExtra(line=t("bot.cvs.offer", lang, cvs=command_name("cvs", lang)))
+
+
 CONFIRM_REPLY_EXTRAS: list[Callable[[Env, Lang], ConfirmExtra | None]] = [
-    _offer_extension_pairing
+    _offer_extension_pairing,
+    _point_to_base_cvs,
 ]
 
 

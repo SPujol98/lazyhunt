@@ -103,6 +103,7 @@ class FakeMessage:
         self.replies: list[str] = []
         self.markups: list[object] = []
         self.documents: list[str] = []
+        self.captions: list[str | None] = []
         self.chat_id = 5
         self.message_id = 11
         self.reply_markup: object = None
@@ -135,6 +136,7 @@ class FakeMessage:
         sent.edited = self.edited
         sent.edited_markups = self.edited_markups
         sent.documents = self.documents
+        sent.captions = self.captions
         self.sent.append(sent)
         return sent
 
@@ -151,10 +153,11 @@ class FakeMessage:
         self.edited_markups.append(reply_markup)
 
     async def reply_document(
-        self, document: object, filename: str | None = None
+        self, document: object, filename: str | None = None, caption: str | None = None
     ) -> None:
         self.events.append("reply_document")
         self.documents.append(filename or "")
+        self.captions.append(caption)
 
 
 class FakeTgFile:

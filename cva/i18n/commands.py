@@ -141,6 +141,14 @@ EN: Final[dict[str, str]] = {
         "A one-time code to type in the extension's Options (no .env to open)."
     ),
     "commands.cmd.conectar.example": "/connect",
+    "commands.cmd.cvs.usage": "/cvs",
+    "commands.cmd.cvs.menu": "Your base CVs: view, change template, rebuild",
+    "commands.cmd.cvs.explanation": (
+        "Lists your base CVs (position × language) and what each is made of; "
+        "buttons send the PDF and, for the ones lazyhunt created, change the "
+        "template or rebuild them from your answers."
+    ),
+    "commands.cmd.cvs.example": "/cvs",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Show this help",
     "commands.cmd.help.explanation": "Commands and buttons (also /start).",
@@ -359,6 +367,14 @@ ES: Final[dict[str, str]] = {
         "Un código de un solo uso para las Opciones de la extensión (sin abrir .env)."
     ),
     "commands.cmd.conectar.example": "/conectar",
+    "commands.cmd.cvs.usage": "/cvs",
+    "commands.cmd.cvs.menu": "Tus CV base: ver, cambiar plantilla, rehacer",
+    "commands.cmd.cvs.explanation": (
+        "Lista tus CV base (puesto × idioma) y de qué se componen; los botones "
+        "envían el PDF y, en los que creó lazyhunt, cambian la plantilla o los "
+        "rehacen desde tus respuestas."
+    ),
+    "commands.cmd.cvs.example": "/cvs",
     "commands.cmd.help.usage": "/help",
     "commands.cmd.help.menu": "Muestra esta ayuda",
     "commands.cmd.help.explanation": "Comandos y botones (también /start).",

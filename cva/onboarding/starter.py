@@ -21,19 +21,29 @@ without an answer are left out.
 import os
 import tomllib
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final
 
+from cva.cvgen.cv_source import (
+    CvSource,
+    SourceItem,
+    SourceSection,
+    save_source,
+)
 from cva.cvgen.starter import (
     StarterCv,
     Template,
     language_line,
     profile_line,
-    render_starter_cv,
+    render_source,
+    source_of,
 )
 from cva.fsutil import atomic_write
 from cva.onboarding import answers as A
 from cva.onboarding import cv_upload as U
+from cva.onboarding.profile_gen import setup_claims
+from cva.profile_identity import DEFAULT_IDENTITY, ProfileError, load_identity
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import load_letter_bases
 from cva.profile_writer import toml_document
@@ -98,20 +108,88 @@ def starter_cv(answers: Mapping[str, Any], slot: U.Slot) -> StarterCv:
     )
 
 
+def _ids(claims: list[dict[str, Any]], category: str) -> list[str]:
+    return [str(c["id"]) for c in claims if c["category"] == category]
+
+
+def starter_source(
+    answers: Mapping[str, Any],
+    slot: U.Slot,
+    template: str,
+    identity_claim_id: str = DEFAULT_IDENTITY.identity_claim_id,
+) -> CvSource:
+    """The starter CV of ``slot`` as a :class:`CvSource`: the same content
+    as :func:`starter_cv`, each item pointing at the claim it says (the
+    ``setup-*`` claims :func:`cva.onboarding.profile_gen.setup_claims` builds
+    from the same answers; the identity claim for the header and, without an
+    experience answer, for the profile line)."""
+    cv = starter_cv(answers, slot)
+    drawn = source_of(cv, template, slot.key)
+    claims = setup_claims(answers, "en")  # ids do not depend on the language
+    experience = _ids(claims, "experience")
+    ids: dict[str, list[str]] = {
+        "profile": experience[:1] or [identity_claim_id],
+        "experience": experience,
+        "education": _ids(claims, "education"),
+        "skills": _ids(claims, "skill"),
+        "languages": _ids(claims, "language"),
+    }
+    sections = []
+    for section in drawn.sections:
+        wanted = ids[section.kind]
+        if len(wanted) != len(section.items):  # never guess a claim
+            raise ProfileError(f"starter CV {slot.key}: {section.kind} without claims")
+        sections.append(
+            SourceSection(
+                section.kind,
+                tuple(
+                    SourceItem(cid, item.text, item.bold)
+                    for cid, item in zip(wanted, section.items, strict=True)
+                ),
+            )
+        )
+    return CvSource(
+        slot=slot.key,
+        lang=cv.lang,
+        template=template,
+        name=cv.name,
+        headline=cv.headline,
+        identity_claim_id=identity_claim_id,
+        contact=cv.contact,
+        sections=tuple(sections),
+    )
+
+
+def identity_claim_id(profile_dir: Path) -> str:
+    """The identity claim id of the profile (its default before Confirm
+    wrote ``profile.toml`` or when it cannot be read)."""
+    try:
+        return load_identity(profile_dir / "profile.toml").identity_claim_id
+    except (ProfileError, OSError, ValueError):
+        return DEFAULT_IDENTITY.identity_claim_id
+
+
 def create_pending_cv(
     profile_dir: Path, answers: Mapping[str, Any], slot: U.Slot, template: Template
 ) -> tuple[str, int]:
-    """Render the starter CV of ``slot`` as its pending upload; returns
-    ``(sha256, pages)`` like an upload. :class:`cva.onboarding.cv_upload.UploadError`
-    when the result is not an acceptable PDF; ``CvgenError`` / ``OSError``
-    when it cannot be rendered."""
+    """Render the starter CV of ``slot`` as its pending upload, with its
+    source next to it (:func:`cva.onboarding.cv_upload.pending_source`,
+    stored by Confirm); returns ``(sha256, pages)`` like an upload.
+    :class:`cva.onboarding.cv_upload.UploadError` when the result is not an
+    acceptable PDF; ``CvgenError`` / ``OSError`` / ``ProfileError`` when it
+    cannot be rendered."""
+    source = starter_source(answers, slot, template, identity_claim_id(profile_dir))
     tmp = U.new_temp(profile_dir)
     try:
-        render_starter_cv(starter_cv(answers, slot), template, tmp)
+        render_source(source, tmp)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    return U.accept_download(tmp, profile_dir, slot.key)
+    sha, pages = U.accept_download(tmp, profile_dir, slot.key)
+    save_source(
+        U.pending_source(profile_dir, slot.key), replace(source, pdf_sha256=sha)
+    )
+    return sha, pages
 
 
 # --- the base cover letter ----------------------------------------------------------

@@ -1159,5 +1159,35 @@
         "content": "$2"
       }
     }
+  },
+  "profileBaseCvsHeading": {
+    "message": "Base CVs"
+  },
+  "profileBaseCvsIntro": {
+    "message": "Read-only: send /cvs to the bot to view a PDF, change its template or rebuild it."
+  },
+  "profileBaseCvsNone": {
+    "message": "None yet."
+  },
+  "profileBaseCvCreated": {
+    "message": "created with lazyhunt"
+  },
+  "profileBaseCvUploaded": {
+    "message": "uploaded PDF · not adaptable"
+  },
+  "profileBaseCvOwn": {
+    "message": "your own PDF"
+  },
+  "profileBaseCvSections": {
+    "message": "sections"
+  },
+  "profileTemplateClassic": {
+    "message": "Classic template"
+  },
+  "profileTemplateModern": {
+    "message": "Modern template"
+  },
+  "profileTemplateCompact": {
+    "message": "Compact template"
   }
 }

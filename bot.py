@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, NoReturn, TextIO
 
 from pydantic import ValidationError
-from telegram import BotCommand, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import InvalidToken
 from telegram.ext import (
     Application,
@@ -93,6 +93,8 @@ from cva.notifier import (
     CL,
     CLC,
     CLD,
+    CV_TAILOR,
+    CV_TAILOR_ACTION,
     FU,
     GM,
     OE,
@@ -137,11 +139,18 @@ from cva.notifier import (
     unknown_role_message,
     with_no_cv_line,
 )
+from cva.onboarding import cv_catalog
 from cva.onboarding import flow as onboarding
 from cva.profile_paths import resolve_profile_paths
 from cva.profile_persona import LETTER_LANGUAGES, ProfileError, load_letter_bases
 from cva.report.panel import PANEL_FILENAME
-from cva.service import JobService, OfferClosedError, ServiceError, display_result
+from cva.service import (
+    JobService,
+    OfferClosedError,
+    ServiceError,
+    TailorProposal,
+    display_result,
+)
 from cva.setup import telegram_token
 from cva.setup.pairing import (
     CLAIM_CODE_TTL_SECONDS,
@@ -258,6 +267,95 @@ async def connect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             connect=command_name("conectar", lang),
         )
     )
+
+
+def _rows_markup(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup | None:
+    """``(label, callback data)`` rows as an inline keyboard (``None`` if empty)."""
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(label, callback_data=data) for label, data in row]
+            for row in rows
+        ]
+    )
+
+
+def _profile_dir(context: ContextTypes.DEFAULT_TYPE) -> Path | None:
+    value = context.bot_data.get(_PROFILE_DIR_KEY)
+    return value if isinstance(value, Path) else None
+
+
+async def cvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/cvs``: the base CV catalog (tailored-cv T1, :mod:`cva.onboarding.cv_catalog`):
+    every slot with its origin, template and sections, and buttons to view
+    the PDF, change the template or rebuild it (created CVs only)."""
+    lang = _lang(context)
+    profile_dir = _profile_dir(context)
+    entries = await asyncio.to_thread(
+        cv_catalog.base_cvs, profile_dir, _families(context)
+    )
+    setup = command_name("configurar", lang) if profile_dir is not None else None
+    await update.message.reply_text(
+        cv_catalog.catalog_text(entries, lang, setup),
+        reply_markup=_rows_markup(cv_catalog.catalog_buttons(entries)),
+    )
+
+
+def _slot_name(slot: str, families: FamilyRegistry) -> str:
+    role, _, lang = slot.rpartition("_")
+    label = next((f.label for f in families.families if f.role == role), role)
+    return f"{label} · {lang}"
+
+
+async def _cb_cvs(press: "_Press", parts: list[str]) -> bool:
+    """The catalog's buttons: ``cvs:pdf|tpl|re:<slot>``, ``cvs:set:<slot>:<template>``."""
+    if len(parts) not in (2, 3) or (len(parts) == 3) != (parts[0] == "set"):
+        return False
+    action, slot = parts[0], parts[1]
+    if action not in ("pdf", "tpl", "re", "set"):
+        return False
+    query, ui = press.query, press.ui
+    profile_dir = _profile_dir(press.context)
+    name = _slot_name(slot, press.families)
+    try:
+        if action == "pdf":
+            pdf = cv_catalog.pdf_path(profile_dir, slot)
+            with pdf.open("rb") as handle:
+                await query.message.reply_document(handle, filename=pdf.name)
+            return True
+        if action == "tpl":
+            source = cv_catalog.created_source(profile_dir, slot)
+            await query.message.reply_text(
+                t(
+                    "bot.cvs.pick_template",
+                    ui,
+                    slot=name,
+                    template=cv_catalog.template_name(source.template, ui),
+                ),
+                reply_markup=_rows_markup(
+                    cv_catalog.template_buttons(slot, source.template, ui)
+                ),
+            )
+            return True
+        if action == "set":
+            source = await asyncio.to_thread(
+                cv_catalog.change_template, profile_dir, slot, parts[2]
+            )
+            done = t(
+                "bot.cvs.done.template",
+                ui,
+                slot=name,
+                template=cv_catalog.template_name(source.template, ui),
+            )
+        else:
+            await asyncio.to_thread(cv_catalog.rebuild, profile_dir, slot)
+            done = t("bot.cvs.done.rebuild", ui, slot=name)
+    except cv_catalog.CatalogError as exc:
+        await query.message.reply_text(t(exc.key, ui))
+        return True
+    await query.message.reply_text(done)
+    return True
 
 
 def _service(context: ContextTypes.DEFAULT_TYPE) -> JobService:
@@ -910,6 +1008,7 @@ async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     service = _service(context)
     pdf_path = await service.generate_cv(offer_id, role, lang)  # type: ignore[arg-type]
     await _send_pdf(update.message, pdf_path)
+    cv_base = service.offer(offer_id).cv_base
     await update.message.reply_text(
         cv_ready_message(
             pdf_path,
@@ -920,10 +1019,11 @@ async def cv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ),
         reply_markup=sent_keyboard(
             offer_id,
-            cv_base=service.offer(offer_id).cv_base,
+            cv_base=cv_base,
             cover_letter_asked=_cover_letter_asked(service, offer_id),
             families=families,
             lang=ui,
+            adaptable=service.can_adapt(cv_base),
         ),
     )
 
@@ -1380,6 +1480,7 @@ async def _cb_cv(press: _Press, parts: list[str]) -> bool:
     # The re-sent card is rewritten now: stop tracking it (as every other
     # button does) so a later "También en" edit can't restore the old text.
     service.forget_card(card.chat_id, card.message_id)
+    cv_base = service.offer(offer_id).cv_base
     await card.edit_text(
         cv_ready_message(
             pdf_path,
@@ -1390,11 +1491,113 @@ async def _cb_cv(press: _Press, parts: list[str]) -> bool:
         ),
         reply_markup=sent_keyboard(
             offer_id,
-            cv_base=service.offer(offer_id).cv_base,
+            cv_base=cv_base,
             cover_letter_asked=_cover_letter_asked(service, offer_id),
             families=families,
             lang=ui,
+            adaptable=service.can_adapt(cv_base),
         ),
+    )
+    return True
+
+
+# --- adapted CV (tailored-cv T3) ----------------------------------------------
+
+# Removal buttons shown under a preview (one per change, the first ones).
+_TAILOR_REMOVE_BUTTONS = 5
+
+
+def _tailor_preview(proposal: TailorProposal, ui: Lang) -> str:
+    """Numbered change lines, the dropped suggestions in one line, a note."""
+    changes = "\n".join(f"{i}. {line}" for i, line in enumerate(proposal.changes, 1))
+    lines = [t("tailor.bot.preview", ui, id=proposal.offer_id, changes=changes)]
+    dropped = sum(1 for v in proposal.dropped if v.reason != "order_completed")
+    if dropped:
+        key = "tailor.bot.dropped.one" if dropped == 1 else "tailor.bot.dropped.other"
+        lines.append(t(key, ui, n=dropped))
+    if proposal.new_synonyms:
+        lines.append(t("tailor.bot.new_synonym_note", ui))
+    lines.append(t("tailor.bot.preview_note", ui))
+    return "\n\n".join(lines)
+
+
+def _tailor_keyboard(proposal: TailorProposal, ui: Lang) -> InlineKeyboardMarkup | None:
+    """[✅ Use this CV] / [↩️ Remove change N] (two per row) / [Discard]."""
+    oid = proposal.offer_id
+    prefix = f"{CV_TAILOR_ACTION}:{oid}"
+    removals = [
+        (t("tailor.bot.button.remove", ui, n=i + 1), f"{prefix}:rm:{i}")
+        for i in range(min(len(proposal.changes), _TAILOR_REMOVE_BUTTONS))
+    ]
+    rows = [[(t("tailor.bot.button.use", ui), f"{prefix}:accept")]]
+    rows += [removals[i : i + 2] for i in range(0, len(removals), 2)]
+    rows.append([(t("tailor.bot.button.discard", ui), f"{prefix}:discard")])
+    return _rows_markup(rows)
+
+
+async def _cb_tailor(press: _Press, parts: list[str]) -> bool:
+    """``cvt:<id>:<ROLE>:<lang>``: propose an adapted CV (nothing written)."""
+    if len(parts) != 3 or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    service, query, ui = press.service, press.query, press.ui
+    await query.message.reply_text(t("tailor.bot.preparing", ui))
+    try:
+        proposal = await service.tailor_cv(offer_id, parts[1], parts[2], ui=ui)
+    except ServiceError as exc:
+        await query.message.reply_text(exc.text(ui))
+        return True
+    except Exception as exc:  # noqa: BLE001 — LLM/provider: the base CV stays
+        _LOG.warning("adapted CV for offer %s failed: %s", offer_id, exc)
+        await query.message.reply_text(t("tailor.bot.failed", ui))
+        return True
+    if not proposal.changes:
+        service.discard_tailored(offer_id)
+        await query.message.reply_text(t("tailor.bot.no_changes", ui))
+        return True
+    await query.message.reply_text(
+        _tailor_preview(proposal, ui), reply_markup=_tailor_keyboard(proposal, ui)
+    )
+    return True
+
+
+async def _cb_tailor_action(press: _Press, parts: list[str]) -> bool:
+    """``cva:<id>:accept|discard|rm:<i>`` on a preview."""
+    if len(parts) < 2 or (offer_id := _parse_id(parts[0])) is None:
+        return False
+    action = parts[1:]
+    valid = action in (["accept"], ["discard"]) or (
+        len(action) == 2 and action[0] == "rm" and action[1].isdigit()
+    )
+    if not valid:
+        return False
+    service, query, ui = press.service, press.query, press.ui
+    if action == ["discard"]:
+        service.discard_tailored(offer_id)
+        await query.edit_message_text(t("tailor.bot.discarded", ui))
+        return True
+    try:
+        if action == ["accept"]:
+            pdf_path = await service.accept_tailored(offer_id)
+        else:
+            proposal = service.tailor_without(offer_id, int(action[1]), ui=ui)
+    except ServiceError as exc:
+        await query.message.reply_text(exc.text(ui))
+        return True
+    if action == ["accept"]:
+        await query.edit_message_reply_markup(reply_markup=None)
+        with pdf_path.open("rb") as document:
+            await query.message.reply_document(
+                document,
+                filename=pdf_path.name,
+                caption=t("tailor.bot.adapted_caption", ui),
+            )
+        return True
+    if not proposal.changes:
+        service.discard_tailored(offer_id)
+        await query.edit_message_text(t("tailor.bot.nothing_left", ui))
+        return True
+    await query.edit_message_text(
+        _tailor_preview(proposal, ui), reply_markup=_tailor_keyboard(proposal, ui)
     )
     return True
 
@@ -1623,6 +1826,9 @@ CALLBACK_HANDLERS: dict[str, _CallbackHandler] = {
     BEACON_RESUME: _cb_beacon,
     BEACON_DISABLE: _cb_beacon,
     onboarding.PREFIX: _cb_onboarding,
+    cv_catalog.PREFIX: _cb_cvs,
+    CV_TAILOR: _cb_tailor,
+    CV_TAILOR_ACTION: _cb_tailor_action,
 }
 
 
@@ -2111,6 +2317,7 @@ _COMMAND_HANDLERS: dict[
     "cartabase": cartabase_command,
     "configurar": setup_command,
     "conectar": connect_command,
+    "cvs": cvs_command,
 }
 
 

@@ -55,6 +55,27 @@ def _normalize(value: str) -> str:
     return " ".join(letters.split())
 
 
+def alias_key(value: str) -> str:
+    """``value`` normalized as the scorer looks up ``synonyms.json`` keys."""
+    return _normalize(value)
+
+
+def junk_alias(key: str) -> bool:
+    """Whether ``key`` can never be a real ``synonyms.json`` alias.
+
+    Blank, or holding a format/control character (zero-width space, tab,
+    newline) or a letter outside the Latin script (a Cyrillic homoglyph in
+    "sеniоr"). Curated keys with symbols ("c++", "node.js") are fine.
+    """
+    if not key.strip():
+        return True
+    return any(
+        unicodedata.category(ch) in ("Cf", "Cc")
+        or (ch.isalpha() and not unicodedata.name(ch, "").startswith("LATIN "))
+        for ch in key
+    )
+
+
 def _strip_soft_framing(name: str) -> str | None:
     """Strip one soft-framing wrapper from an already-normalized ``name``.
 

@@ -1159,5 +1159,35 @@
         "content": "$2"
       }
     }
+  },
+  "profileBaseCvsHeading": {
+    "message": "CV base"
+  },
+  "profileBaseCvsIntro": {
+    "message": "Solo lectura: envía /cvs al bot para ver un PDF, cambiar su plantilla o rehacerlo."
+  },
+  "profileBaseCvsNone": {
+    "message": "Ninguno todavía."
+  },
+  "profileBaseCvCreated": {
+    "message": "creado con lazyhunt"
+  },
+  "profileBaseCvUploaded": {
+    "message": "PDF subido · no adaptable"
+  },
+  "profileBaseCvOwn": {
+    "message": "tu propio PDF"
+  },
+  "profileBaseCvSections": {
+    "message": "secciones"
+  },
+  "profileTemplateClassic": {
+    "message": "plantilla Clásica"
+  },
+  "profileTemplateModern": {
+    "message": "plantilla Moderna"
+  },
+  "profileTemplateCompact": {
+    "message": "plantilla Compacta"
   }
 }

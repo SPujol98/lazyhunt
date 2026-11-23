@@ -29,14 +29,24 @@ every caller does (bot-i18n T2-T6).
 from string import Formatter
 from typing import Final, Literal, get_args
 
-from cva.i18n import bot, commands, core, notifier, onboarding, panel, prompts, wizard
+from cva.i18n import (
+    bot,
+    commands,
+    core,
+    notifier,
+    onboarding,
+    panel,
+    prompts,
+    tailor,
+    wizard,
+)
 
 Lang = Literal["en", "es"]
 LANGS: Final[tuple[Lang, ...]] = get_args(Lang)
 DEFAULT_LANG: Final[Lang] = "en"
 LEGACY_LANG: Final[Lang] = "es"
 
-_MODULES = (core, commands, notifier, bot, panel, prompts, onboarding, wizard)
+_MODULES = (core, commands, notifier, bot, panel, prompts, onboarding, wizard, tailor)
 
 
 def _merge(lang: Lang) -> dict[str, str]:

@@ -95,7 +95,8 @@ the same validated, all-or-nothing path and the bot uses the result at once:
 
 The Profile tab needs the bridge (URL and secret in **Options › Schedule and
 bot**) and a profile that is already set up; contact data, portals and base
-CVs stay in `/setup <section>`.
+CVs stay in `/setup <section>` (the base CVs are listed read-only at the
+end; `/cvs` in the bot changes their template or rebuilds them).
 
 ## Steps
 
@@ -326,6 +327,115 @@ are the `<ROLE>_<LANG>` keys of `cv_base_pdfs/manifest.json`, for example
 - Replacing a variant does not delete its previous PDF if it had another
   name.
 - Reading the PDFs to propose claims is a later phase (P2).
+
+### What a created CV is made of (`<SLOT>.source.json`)
+
+A CV lazyhunt creates is also kept as its structured source,
+`cv_base_pdfs/<SLOT>.source.json` (for example `AI_ES.source.json`), next to
+the PDF: the slot, template and language, the header (name, target position,
+contact line) and the sections (profile, experience, education, skills,
+languages) with their items in order. Every item names the claim it says:
+the `setup-*` claims of your answers (below), or the identity claim for the
+header and, without an experience answer, for the profile line. The PDF is
+drawn from this source (the same bytes as before for the same content), and
+the source records the `sha256` of that PDF. Confirm writes it atomically
+together with the PDF and the manifest (a failed Confirm undoes it too); the
+manifest format is unchanged. Uploading a PDF over a created one removes its
+source. A source no longer describes the slot's CV (and is ignored) when the
+manifest's PDF is a different one or a claim it names is gone. Uploaded and
+hand-made PDFs have no source.
+
+### Your base CVs: `/cvs`
+
+`/cvs` (both languages; not in `/help`, which is near Telegram's size limit;
+the Confirm reply points to it) lists every base CV in one message: position
+× language and where it comes from.
+
+- **created with lazyhunt · <template> template**, with its sections and
+  how many items each has (for example `Profile 1 · Experience 1 · Skills 5`).
+  When an answer changed since it was made and a claim it used is gone, it
+  says so: 🔄 rebuilds it.
+- **uploaded PDF · not adaptable**, in a profile that also has created CVs;
+  `/setup cvs` can create one with lazyhunt instead.
+- **your own PDF** when no base CV has a source (hand-made PDFs, the legacy
+  layout): listed plainly, nothing else changes.
+
+Buttons per CV: **📄** sends the stored PDF; for created CVs only, **🎨**
+redraws it from its source with another template and **🔄** rebuilds it from
+your current answers (same template). Both replace the PDF, its source and
+the manifest `sha256` all or nothing (a failure puts the three files back).
+**Options › Profile** lists the same base CVs read-only (`base_cvs` in
+`GET /profile`: slot, label, language, origin, template, number of sections).
+
+### Adapting a created CV to an offer
+
+After **📄 Generate CV** sends the base PDF, the card shows one more button,
+**✨ Adapt to this offer** (*Adaptar a esta oferta*), only when that base CV
+was created with lazyhunt and its source is current (see above). Uploaded
+PDFs, hand-made PDFs and the legacy layout never show it: there the card is
+exactly as before.
+
+What adaptation can do, starting from the base CV and its claims:
+
+- reorder the items of a section so the most relevant come first;
+- feature up to 3 of the skills already on the CV in the headline;
+- swap up to 5 words for the offer's own wording, only when the offer is in
+  the CV language, the old word is in that line of your CV and the new word
+  is in the offer. Only plain words are swapped: Latin letters (accents,
+  ñ, ç, ü included), spaces, hyphens and apostrophes; never digits,
+  symbols, other alphabets or hidden characters, and the word written in
+  the CV is the offer's own spelling. The old word is never the role or
+  the company (the bold lead of an experience line), a name, a date or a
+  number word. When the new word is already an approved synonym
+  (`synonyms.json`) or a tag of the same claim, the swap is simply applied.
+  Otherwise it is a **new synonym** that you decide on (at most 3 per CV).
+
+**New synonyms (you approve them).** The preview marks them
+`🆕 new synonym: «disciplina» → «aguante»` (*nuevo sinónimo*). They are only
+applied if you press **✅ Use this CV**; then each one is saved in your
+profile's `synonyms.json` as an alias of that claim, so next time it applies
+on its own, and it also improves offer matching: an offer asking for
+"aguante" counts as partly covered (`~`, saved as a `weak` alias: an approved
+wording, not proof of an exact requirement). **↩️ Remove change N** or
+**Discard** saves nothing.
+
+New synonyms are only offered for **soft skills and language-level
+wording**: both the old and the new word must be in the bundled lexicon
+(`cva/cvgen/soft_lexicon.json`, Spanish and English) in the same group of
+equivalent words, for example «disciplina» / «constancia» / «aguante» /
+«stamina», «trabajo en equipo» / «colaboración» / «teamwork», or
+«nativo» / «lengua materna» / «mother tongue». A language level is only
+swapped in the languages section and only for a word of the same level
+(«nativo» never becomes «avanzado»). Tools, technologies, companies,
+numbers, years, job titles and degrees are never in the lexicon, so they
+are never proposed; on top of that a new synonym is still refused when it
+belongs to another item of your profile, names a technology (including
+the offer's analyzed tool/skill/domain requirements and the company) or
+the offer only writes it capitalized. Words that are already approved in
+your `synonyms.json` keep working as before (with the same plain-word and
+old-word rules).
+
+Re-running `/setup` never wipes your approved synonyms: when you remove a
+skill, only the synonyms of that skill are dropped from `synonyms.json`
+(and unusable keys, such as ones with hidden characters); the rest stay.
+
+What it cannot do: add skills, tools, years, companies, titles or
+achievements, or change the language of the CV. One LLM call (the judge
+model) proposes the changes; deterministic checks keep only the provable
+ones, and a final check refuses the whole CV if any word is not grounded in
+your claims, the base CV, approved synonyms or, only in its own line, a new
+synonym you are approving.
+
+The preview lists the changes, numbered, and how many suggestions were
+dropped. **✅ Use this CV** renders the adapted PDF to a separate file next
+to the base copy (`<base name>_adapted_<id>.pdf`) and sends it; the offer
+records it with an `ADAPTED:<sha>:<changes>` marker, so **Mark as sent** and
+the CV mirror move that file, while **🔄 Redo CV** delivers the base again.
+**↩️ Remove change N** drops one change, **Discard** drops the proposal
+(the base CV stays). If the adapted CV would have more pages than the base,
+the headline skills and then the reorders are dropped; if it is still
+longer, nothing is made. A proposal lives in memory for 24 hours (a restart
+forgets it). If the LLM fails, the base CV is untouched.
 
 ## Notes and limits
 

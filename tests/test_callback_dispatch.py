@@ -45,6 +45,9 @@ from tests.test_bot import (
 EXPECTED: dict[str, str] = {
     "an": "_cb_analyze",
     "cv": "_cb_cv",
+    "cvs": "_cb_cvs",
+    "cvt": "_cb_tailor",
+    "cva": "_cb_tailor_action",
     "lang": "_cb_toggle",
     "variant": "_cb_toggle",
     "discard": "_cb_discard",

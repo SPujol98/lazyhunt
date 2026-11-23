@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.6] - 2026-11-23
+
+Sixth pre-release for testers: an optional CV adapted to each offer.
+
+### Added
+
+- `/cvs` lists your base CVs (position type × language, created with lazyhunt or uploaded, template, sections) with buttons to view the PDF, change the template or rebuild it from your answers. Options › Profile shows the same list.
+- "✨ Adapt to this offer", next to the base CV the bot sends, for CVs lazyhunt created: the AI proposes a few changes (reorder what fits the offer best, feature 2-3 of your skills in the headline, swap a word for the offer's wording). You see the list before anything is final and choose "Use this CV", remove a change, or discard. Your base CV is never modified.
+- Nothing you did not state can enter an adapted CV: every change is checked against your profile; new wording is only proposed for soft skills and language level, marked 🆕 for your approval, and saved as a synonym (which also improves offer matching) only when you accept it.
+
+### Fixed
+
+- Uploading a PDF over a CV lazyhunt had created no longer gets the created one rendered back over it at Confirm.
+
 ## [2.0.0-beta.5] - 2026-11-23
 
 Fifth pre-release for testers: a more dependable AI judge.
@@ -194,7 +208,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...HEAD
+[2.0.0-beta.6]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...v2.0.0-beta.6
 [2.0.0-beta.5]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...v2.0.0-beta.5
 [2.0.0-beta.4]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...v2.0.0-beta.4
 [2.0.0-beta.3]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.2...v2.0.0-beta.3

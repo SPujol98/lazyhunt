@@ -26,6 +26,11 @@ Stored file name, following the demo profile's convention
 
 It never uses the name the user's file had (no path from Telegram reaches
 the disk).
+
+A PDF lazyhunt created (:mod:`cva.onboarding.starter`) has its structured
+source pending next to it (:func:`pending_source`); Confirm stores it as
+``cv_base_pdfs/<SLOT>.source.json`` (:mod:`cva.cvgen.cv_source`) and an
+uploaded PDF removes the slot's stored source.
 """
 
 import hashlib
@@ -46,6 +51,12 @@ from cva.cvgen.base_pdfs import (
     VARIANT_KEY_RE,
     variant_key,
     verified_base_pdf,
+)
+from cva.cvgen.cv_source import (
+    CvSourceError,
+    load_source,
+    save_source,
+    source_path,
 )
 from cva.cvgen.master import CvgenError
 from cva.fsutil import atomic_write
@@ -151,6 +162,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def sha256_of(path: Path) -> str:
+    """The sha256 the manifest records for ``path``."""
+    return _sha256(path)
+
+
 def accept_download(tmp: Path, profile_dir: Path, key: str) -> tuple[str, int]:
     """Validate a downloaded file and keep it as the pending upload of ``key``.
 
@@ -171,10 +187,35 @@ def accept_download(tmp: Path, profile_dir: Path, key: str) -> tuple[str, int]:
         if pages > MAX_PAGES:
             raise UploadError("onboarding.err.cv_pages")
         target = pending_dir(profile_dir) / f"{key}.pdf"
+        # A new PDF for the slot: whatever source a created one had is gone
+        # (:func:`cva.onboarding.starter.create_pending_cv` writes it again).
+        pending_source(profile_dir, key).unlink(missing_ok=True)
         os.replace(tmp, target)
         return _sha256(target), pages
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def pending_source(profile_dir: Path, key: str) -> Path:
+    """The structured source of the pending PDF of ``key`` when lazyhunt
+    created it (:mod:`cva.cvgen.cv_source`); absent for an upload."""
+    return source_path(pending_dir(profile_dir), key)
+
+
+def _store_source(profile_dir: Path, target_dir: Path, key: str, sha: str) -> None:
+    """Keep the source of the stored PDF of ``key`` next to it when the
+    pending PDF was created by lazyhunt (and is the one stored: same sha256);
+    otherwise remove the slot's stored source, which described an older PDF."""
+    stored = source_path(target_dir, key)
+    try:
+        source = load_source(pending_source(profile_dir, key))
+    except (OSError, CvSourceError):
+        stored.unlink(missing_ok=True)
+        return
+    if source.slot != key or source.pdf_sha256 != sha:
+        stored.unlink(missing_ok=True)
+        return
+    save_source(stored, source)
 
 
 def new_temp(profile_dir: Path) -> Path:
@@ -253,10 +294,12 @@ def commit(
         shutil.copyfile(source, part)
         os.replace(part, target)
         old = variants.get(key)
+        sha = _sha256(target)
         variants[key] = {
             **(old if isinstance(old, dict) else {}),
             "file": file_name,
-            "sha256": _sha256(target),
+            "sha256": sha,
         }
+        _store_source(profile_dir, target_dir, key, sha)
     atomic_write(manifest_path, json.dumps(manifest, indent=2) + "\n")
     return keys

@@ -60,6 +60,23 @@ function claimList(value) {
     .map((c) => ({ id: c.id, category: textOrNull(c.category), text: typeof c.text === 'string' ? c.text : '' }));
 }
 
+const BASE_CV_ORIGINS = ['lazyhunt', 'uploaded', 'own'];
+
+// The read-only base CV list of GET /profile (tailored-cv T1), shape-checked.
+function baseCvList(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((c) => isObject(c) && typeof c.slot === 'string')
+    .map((c) => ({
+      slot: c.slot,
+      label: typeof c.label === 'string' && c.label ? c.label : c.slot,
+      lang: typeof c.lang === 'string' ? c.lang : '',
+      origin: BASE_CV_ORIGINS.includes(c.origin) ? c.origin : 'own',
+      template: textOrNull(c.template),
+      sections: Number.isInteger(c.sections) && c.sections > 0 ? c.sections : 0,
+      adaptable: c.adaptable === true,
+    }));
+}
+
 // The bot's GET /profile body, shape-checked (missing parts get empty
 // values); null when it is not a profile at all.
 export function parseProfile(payload) {
@@ -112,6 +129,7 @@ export function parseProfile(payload) {
       currencies: strings(options.currencies),
     },
     claims: { setup: claimList(claims.setup), other: claimList(claims.other) },
+    base_cvs: baseCvList(payload.base_cvs),
   };
 }
 
@@ -214,6 +232,27 @@ const LEVEL_NAMES = {
 const MODE_NAMES = {
   remote: ['profileModeRemote', 'Remote'], hybrid: ['profileModeHybrid', 'Hybrid'], onsite: ['profileModeOnsite', 'On-site'],
 };
+// Base CV origin / template (cva/onboarding/cv_catalog.py) -> [locale key, English].
+const ORIGIN_NAMES = {
+  lazyhunt: ['profileBaseCvCreated', 'created with lazyhunt'],
+  uploaded: ['profileBaseCvUploaded', 'uploaded PDF · not adaptable'],
+  own: ['profileBaseCvOwn', 'your own PDF'],
+};
+const TEMPLATE_NAMES = {
+  classic: ['profileTemplateClassic', 'Classic template'],
+  modern: ['profileTemplateModern', 'Modern template'],
+  compact: ['profileTemplateCompact', 'Compact template'],
+};
+
+// One line of the read-only base CV list: "AI · ES — created with lazyhunt · Modern template · 5 sections".
+export function baseCvLine(cv, tr) {
+  const name = (map, code) => (map[code] ? tr(map[code][0], null, map[code][1]) : code);
+  const parts = [name(ORIGIN_NAMES, cv.origin)];
+  if (cv.template) parts.push(name(TEMPLATE_NAMES, cv.template));
+  if (cv.sections) parts.push(`${cv.sections} ${tr('profileBaseCvSections', null, 'sections')}`);
+  return `${cv.label} · ${cv.lang.toUpperCase()} — ${parts.join(' · ')}`;
+}
+
 const YEARS_NAMES = {
   0: ['profileYears0', 'No experience yet'], lt1: ['profileYearsLt1', 'Less than 1 year'],
   '1-2': ['profileYears1to2', '1-2 years'], '3-5': ['profileYears3to5', '3-5 years'],
@@ -434,5 +473,13 @@ export function mountProfileEditor(root, profile, { el, tr, post, onSaved, toast
       el('p', { class: 'hint', text: tr('profileOtherClaimsHint', null, 'The extension never changes these: edit claims.json in your profile folder by hand.') }),
       el('ul', { class: 'profile-claims' }, ...profile.claims.other.map(claimItem))));
 
-  root.replaceChildren(positions, level, background, location, salary, offerLangs, claims);
+  // Base CVs: read-only, as /cvs in the bot lists them (it changes them there).
+  const baseCvs = el('div', { class: 'profile-block' },
+    el('h3', { class: 'profile-legend', text: tr('profileBaseCvsHeading', null, 'Base CVs') }),
+    el('p', { class: 'hint', text: tr('profileBaseCvsIntro', null, 'Read-only: send /cvs to the bot to view a PDF, change its template or rebuild it.') }),
+    profile.base_cvs.length
+      ? el('ul', { class: 'profile-claims' }, ...profile.base_cvs.map((cv) => el('li', { class: 'profile-claim', text: baseCvLine(cv, tr) })))
+      : el('p', { class: 'empty-row muted', text: tr('profileBaseCvsNone', null, 'None yet.') }));
+
+  root.replaceChildren(positions, level, background, location, salary, offerLangs, baseCvs, claims);
 }
