@@ -142,6 +142,19 @@ class Sink:
         self.warnings.append(text)
 
 
+class AnsweringSink(Sink):
+    """The owner answers every card at once, so no proposal stays pending
+    (a pending one would hold back later mail for the same offer/estado)."""
+
+    def __init__(self, repo: OfferRepository) -> None:
+        super().__init__()
+        self._repo = repo
+
+    async def proposal(self, proposal: Proposal) -> None:
+        await super().proposal(proposal)
+        self._repo.set_gmail_decision(proposal.message_id, "ignored")
+
+
 def _sync(
     repo: OfferRepository,
     client: FakeClient,
@@ -508,7 +521,7 @@ def test_truncated_window_is_walked_back_across_runs_until_complete(
     client, messages = _truncated_setup(repo)
     clock = Clock()
     sync = _sync(repo, client, clock=clock)
-    sink = Sink()
+    sink = AnsweringSink(repo)
     for expected_checkpoint in (False, False, False, True):  # 1-message overlap
         assert getattr(_run(sync, sink), "status", None) == "ok"
         assert (repo.get_state(CHECKPOINT_KEY) is not None) is expected_checkpoint
@@ -538,7 +551,7 @@ def test_failing_slice_boundary_is_counted_and_given_up_after_three_runs(
     client.get_errors["m2"] = GmailApiError("boom")  # oldest listed = boundary
     clock = Clock()
     sync = _sync(repo, client, clock=clock)
-    sink = Sink()
+    sink = AnsweringSink(repo)
     statuses = []
     for _ in range(5):
         statuses.append(getattr(_run(sync, sink), "status", None))
@@ -570,7 +583,7 @@ def test_llm_outage_holds_the_checkpoint_and_retries_the_message(
     llm = FakeLlm(RuntimeError("llm down"))
     clock = Clock()
     sync = _sync(repo, client, llm, clock)
-    sink = Sink()
+    sink = AnsweringSink(repo)
     result = _run(sync, sink)
     assert getattr(result, "status", None) == "api_error"
     assert [p.message_id for p in sink.proposals] == ["old"]
@@ -661,3 +674,114 @@ def test_walk_ending_with_no_new_progress_keeps_the_walk_newest_stamp(
     clock.now += timedelta(days=2)
     assert getattr(_run(sync, sink), "status", None) == "ok"
     assert _checkpoint(repo)["after"] == walk_newest
+
+
+# --- duplicate proposals (owner 2026-11-25) ----------------------------------------
+
+
+def test_a_pending_proposal_blocks_another_for_the_same_offer_and_estado(
+    repo: OfferRepository,
+) -> None:
+    _sent_offer(repo)
+    client = FakeClient(
+        [
+            _msg("m1", subject="Schedule your interview", at=NOW - timedelta(hours=3)),
+            _msg("m2", subject="Video interview", at=NOW - timedelta(hours=2)),
+        ]
+    )
+    sink = Sink()
+    result = _run(_sync(repo, client), sink)
+
+    assert [p.message_id for p in sink.proposals] == ["m1"]
+    assert getattr(result, "proposed", None) == 1
+    first, extra = repo.get_gmail_proposal("m1"), repo.get_gmail_proposal("m2")
+    assert first is not None and first.decision == "pending"
+    # the extra email is kept as evidence (never proposed, never re-read)
+    assert extra is not None and extra.decision == "stale"
+    assert extra.subject == "Video interview"
+
+
+def test_an_answered_proposal_no_longer_blocks_a_new_one(
+    repo: OfferRepository,
+) -> None:
+    _sent_offer(repo)
+    client = FakeClient([_msg("m1", at=NOW - timedelta(hours=3))])
+    clock = Clock()
+    sync = _sync(repo, client, clock=clock)
+    sink = Sink()
+    _run(sync, sink)
+    repo.set_gmail_decision("m1", "ignored")
+    client.messages["m2"] = _msg("m2", at=NOW - timedelta(minutes=5))
+    clock.now += timedelta(minutes=61)
+    _run(sync, sink)
+    assert [p.message_id for p in sink.proposals] == ["m1", "m2"]
+
+
+def test_a_different_estado_for_the_same_offer_is_still_proposed(
+    repo: OfferRepository,
+) -> None:
+    _sent_offer(repo)
+    client = FakeClient(
+        [
+            _msg("m1", at=NOW - timedelta(hours=3)),
+            _msg(
+                "m2",
+                subject="Lamentablemente",
+                text="Lamentablemente hemos decidido seguir con otros candidatos.",
+                at=NOW - timedelta(hours=2),
+            ),
+        ]
+    )
+    sink = Sink()
+    _run(_sync(repo, client, FakeLlm("rechazada")), sink)
+    assert [(p.message_id, p.estado) for p in sink.proposals] == [
+        ("m1", "screening"),
+        ("m2", "rechazada"),
+    ]
+
+
+def test_a_timed_out_send_keeps_the_proposal_and_never_resends_it(
+    repo: OfferRepository,
+) -> None:
+    from telegram.error import TimedOut
+
+    _sent_offer(repo)
+    client = FakeClient([_msg("m1")])
+    clock = Clock()
+    sync = _sync(repo, client, clock=clock)
+    calls: list[str] = []
+
+    async def timed_out(proposal: Proposal) -> None:
+        calls.append(proposal.message_id)
+        raise TimedOut()  # Telegram may well have delivered it
+
+    async def warn(text: str) -> None:
+        return None
+
+    result = asyncio.run(sync.run(timed_out, warn))
+    assert getattr(result, "status", None) == "ok"
+    row = repo.get_gmail_proposal("m1")
+    assert row is not None and row.decision == "pending"
+    repo.set_state(CHECKPOINT_KEY, "")
+    clock.now += timedelta(minutes=61)
+    asyncio.run(sync.run(timed_out, warn))
+    assert calls == ["m1"]
+
+
+def test_the_delivered_card_is_remembered_for_later_edits(
+    repo: OfferRepository,
+) -> None:
+    from cva.gmail.sync import card_ref
+
+    _sent_offer(repo)
+    client = FakeClient([_msg("m1")])
+
+    async def send(proposal: Proposal) -> object:
+        return type("Msg", (), {"chat_id": 5, "message_id": 77})()
+
+    async def warn(text: str) -> None:
+        return None
+
+    asyncio.run(_sync(repo, client).run(send, warn))
+    assert card_ref(repo, "m1") == (5, 77)
+    assert card_ref(repo, "unknown") is None

@@ -753,6 +753,39 @@ def test_status_command_lists_recent(tmp_path: Path) -> None:
     assert f"#{offer_id}" in message.replies[0]
 
 
+def test_status_shows_the_analysis_score_of_analysed_offers(tmp_path: Path) -> None:
+    service, _llm = make_service(
+        tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))
+    )
+    repo = service._repo
+    analysed = asyncio.run(service.ingest(None, PASTE_TEXT))
+    repo.save_match_result(analysed, score=22, threshold=65, breakdown_json="{}")
+    fresh = repo.upsert_offer(
+        OfferInput(title="X", company="Y", url="https://x/new", text="x", source="link")
+    )
+    sent = repo.upsert_offer(
+        OfferInput(
+            title="S", company="Z", url="https://x/sent", text="x", source="link"
+        )
+    )
+    repo.mark_sent(sent, cv_path="cv.pdf", cambios="c", match=70)
+
+    message = FakeMessage()
+    asyncio.run(bot.status_command(FakeUpdate(message=message), FakeContext(service)))
+    lines = {line.split(" · ")[0]: line for line in message.replies[0].splitlines()}
+    assert " · match 22 · " in lines[f"#{analysed}"]
+    assert " · match — · " in lines[f"#{fresh}"]  # no analysis: unchanged
+    assert " · match 70 · " in lines[f"#{sent}"]  # sent-time score: unchanged
+
+    one = FakeMessage()
+    context = FakeContext(service, args=[str(analysed)])
+    asyncio.run(bot.status_command(FakeUpdate(message=one), context))
+    assert (
+        one.replies[0].startswith(f"#{analysed} · ")
+        and " · match 22 · " in (one.replies[0])
+    )
+
+
 # --- /beacons + /beacon resume|disable (8b; real surface replaces 8a stub) -----
 
 

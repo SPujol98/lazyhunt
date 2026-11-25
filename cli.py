@@ -380,15 +380,17 @@ def _families(service: object) -> FamilyRegistry:
 def build_parser(
     families: FamilyRegistry = BUILTIN_REGISTRY,
     lang: Lang = LEGACY_LANG,
+    prog: str = "cli.py",
 ) -> argparse.ArgumentParser:
     """Argparse surface (help in ``lang``, same verbs as design D12); ``cv``'s
-    role choices are the profile's role families (role-families T5)."""
+    role choices are the profile's role families (role-families T5). ``prog``
+    is the name ``--help`` shows (``lazyhunt`` from the console command)."""
 
     def h(key: str) -> str:
         return t(f"panel.cli.help.{key}", lang)
 
     parser = argparse.ArgumentParser(
-        prog="cli.py",
+        prog=prog,
         description=t("panel.cli.description", lang),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -405,6 +407,10 @@ def build_parser(
         default=None,
         metavar="ID",
         help=t("wizard.cli.owner_id", lang),
+    )
+    sub.add_parser(
+        "bot",
+        help="start the Telegram bot (same as `uv run bot.py`; stop it with Ctrl+C)",
     )
     sub.add_parser("check", help=h("check"))
 
@@ -494,6 +500,7 @@ def run(
     *,
     settings: Settings | None = None,
     lang: Lang | None = None,
+    prog: str = "cli.py",
 ) -> str:
     """Parse ``argv`` against the injected service; return the output text.
 
@@ -507,7 +514,7 @@ def run(
     """
     if lang is None:
         lang = settings.ui_language if settings is not None else LEGACY_LANG
-    args = build_parser(_families(service), lang).parse_args(argv)
+    args = build_parser(_families(service), lang, prog).parse_args(argv)
     handlers = {
         "check": lambda: _cmd_check(service, lang),
         "ingest": lambda: _cmd_ingest(service, args, lang),
@@ -522,6 +529,7 @@ def run(
         "rejudge": lambda: _cmd_rejudge(service, args, settings, lang),
         "gmail-auth": lambda: _cmd_gmail_auth(args, settings, lang),
         "init": lambda: _cmd_init(args.owner_id),
+        "bot": _cmd_bot,
     }
     return handlers[args.command]()
 
@@ -532,32 +540,58 @@ def _cmd_init(owner_id: int | None = None) -> str:
     return "" if code == 0 else f"init ended with exit code {code}"
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None, *, prog: str = "cli.py") -> None:
     """Real entrypoint: wire JobService from Settings and print the result.
 
     ``argv`` stays injectable for tests; the actual process invocation below
     passes nothing, so this reads the real command-line arguments
     (``sys.argv[1:]``) instead of always analyzing an empty argument list.
+    ``prog`` is the command name ``--help`` shows (:mod:`cva.cli_entry`).
     """
     arguments = list(argv if argv is not None else sys.argv[1:])
     if arguments[:1] == ["init"]:
         # A fresh clone has no token yet: never load Settings for the wizard.
-        parsed = build_parser(lang=DEFAULT_LANG).parse_args(arguments)
+        parsed = build_parser(lang=DEFAULT_LANG, prog=prog).parse_args(arguments)
         code = run_init(Path.cwd(), owner_id=parsed.owner_id)
         if code:
             raise SystemExit(code)
         return
+    if arguments[:1] == ["bot"]:
+        _start_bot(arguments, prog)
+        return
     settings = _load_settings_or_none()
     if settings is None:
-        settings = _settings_without_token(arguments)
+        settings = _settings_without_token(arguments, prog)
     print(
         run(
             arguments,
             JobService.from_settings(settings),
             settings=settings,
             lang=settings.ui_language,
+            prog=prog,
         )
     )
+
+
+def _start_bot(arguments: Sequence[str], prog: str) -> None:
+    """``bot``: ``bot.py``'s ``main`` (it builds its own settings and service).
+
+    Arguments are parsed first (``--help``, usage errors); without a token it
+    stops with the same line as the other verbs instead of a traceback.
+    """
+    build_parser(lang=DEFAULT_LANG, prog=prog).parse_args(arguments)
+    if _load_settings_or_none() is None:
+        print(NO_TOKEN_MESSAGE, file=sys.stderr)
+        raise SystemExit(1)
+    _cmd_bot()
+
+
+def _cmd_bot() -> str:
+    """Run the bot until it stops (``bot.py``'s ``main``); prints nothing."""
+    import bot  # the repository root is on sys.path (cli.py or cva.cli_entry)
+
+    bot.main()
+    return ""
 
 
 # Commands that work before ``init`` has written a Telegram token: ``check``
@@ -592,7 +626,7 @@ def _load_settings_or_none() -> Settings | None:
         raise
 
 
-def _settings_without_token(arguments: Sequence[str]) -> Settings:
+def _settings_without_token(arguments: Sequence[str], prog: str = "cli.py") -> Settings:
     """Settings for a run with no token: help, usage errors and ``check`` work.
 
     Arguments are parsed first (in the configured UI language, with the
@@ -602,7 +636,9 @@ def _settings_without_token(arguments: Sequence[str]) -> Settings:
     """
     placeholder: dict[str, Any] = {"CVA_TELEGRAM_TOKEN": _PLACEHOLDER_TOKEN}
     settings = Settings(**placeholder)
-    args = build_parser(BUILTIN_REGISTRY, settings.ui_language).parse_args(arguments)
+    args = build_parser(BUILTIN_REGISTRY, settings.ui_language, prog).parse_args(
+        arguments
+    )
     if args.command not in _TOKENLESS_COMMANDS:
         print(NO_TOKEN_MESSAGE, file=sys.stderr)
         raise SystemExit(1)

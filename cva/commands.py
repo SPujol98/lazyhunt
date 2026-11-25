@@ -87,7 +87,7 @@ COMMANDS: Final[tuple[Command, ...]] = (
     # /help is near Telegram's 4096 limit); the /setup Confirm reply and
     # docs/onboarding.md point to it.
     Command("cvs", SECTION_CV, listed=False),
-    Command("status", SECTION_TRACKING),
+    Command("estado", SECTION_TRACKING, en_name="status"),
     Command("sent", SECTION_TRACKING),
     Command("outcome", SECTION_TRACKING),
     Command("calibracion", SECTION_TRACKING, en_name="calibration"),
@@ -97,6 +97,8 @@ COMMANDS: Final[tuple[Command, ...]] = (
     Command("keywords", SECTION_BEACONS),
     Command("beacons", SECTION_BEACONS),
     Command("beacon", SECTION_BEACONS),
+    # Unlisted like /cvs: the full /help is near Telegram's 4096 limit.
+    Command("busquedas", SECTION_BEACONS, en_name="searches", listed=False),
     Command("star", SECTION_INTERVIEW),
     Command("prep", SECTION_INTERVIEW),
     Command("pausa", SECTION_OTHER, en_name="pause"),

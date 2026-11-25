@@ -190,8 +190,8 @@ def test_coverage_is_skipped_without_requirements() -> None:
 
 def test_length_outside_the_limits_is_a_finding() -> None:
     short = letter_quality(PLAIN_EN, offer_requirements=(), language="en")
-    assert "length" in _codes(short)  # default limits: the assembled letter's 250-350
-    ok = letter_quality(_words(300, "word"), offer_requirements=(), language="en")
+    assert "length" in _codes(short)  # default limits: about 120-250 (beta.8)
+    ok = letter_quality(_words(200, "word"), offer_requirements=(), language="en")
     assert "length" not in _codes(ok)
 
 
@@ -317,8 +317,9 @@ FLORID_PARTS = {
         "Sin duda, es un proyecto de vanguardia e innovador donde puedo aportar valor.",
     ),
     "why_role": ES_PARTS["why_role"].replace(
-        "y quiero dar ese paso con vosotros.",
-        "y quiero llevarlo al siguiente nivel con gran entusiasmo.",
+        # beta.8 fixture: the closing sentence of paragraph 3 changed.
+        "Quiero aplicar ese método con vosotros.",
+        "Quiero llevarlo al siguiente nivel con gran entusiasmo.",
     ),
 }
 

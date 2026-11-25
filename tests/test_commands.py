@@ -20,7 +20,13 @@ from cva.config import Settings
 from cva.fetch import FetchResponse
 from cva.i18n import LANGS, Lang
 from cva.notifier import help_message
-from tests.test_bot import FakeFetcher, FakeUpdate, make_service
+from tests.test_bot import (
+    FakeContext,
+    FakeFetcher,
+    FakeMessage,
+    FakeUpdate,
+    make_service,
+)
 
 _NAME_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 
@@ -281,3 +287,45 @@ def test_help_advertises_setup_with_an_optional_section(lang: Lang) -> None:
     assert f"/{name} [" in text
     assert f"/{name} {section}" in text
     assert len(text) < 4096
+
+
+# --- beta.8: /estado is the Spanish name of /status ------------------------------
+
+
+def test_estado_and_status_reach_the_same_handler(
+    tmp_path: Path, clean_settings: Callable[..., Settings]
+) -> None:
+    service, _ = make_service(tmp_path, FakeFetcher(FetchResponse(200, "", "u")))
+    app = bot.build_app(clean_settings(), service)
+    callbacks = {
+        name: handler.callback
+        for group in app.handlers.values()
+        for handler in group
+        if isinstance(handler, CommandHandler)
+        for name in handler.commands
+    }
+    assert callbacks["estado"] is bot.status_command
+    assert callbacks["status"] is bot.status_command
+
+
+@pytest.mark.parametrize(("lang", "name"), [("es", "estado"), ("en", "status")])
+def test_status_menu_and_help_use_the_language_name(lang: Lang, name: str) -> None:
+    other = "status" if name == "estado" else "estado"
+    menu = {n for n, _ in menu_commands(lang)}
+    assert name in menu and other not in menu
+    text = help_text(lang=lang)
+    assert f"/{name} [id]" in text and f"/{name} 42" in text
+    assert f"/{other}" not in text
+    assert len(text) < 4096
+
+
+@pytest.mark.parametrize(("lang", "name"), [("es", "estado"), ("en", "status")])
+def test_status_usage_reply_names_the_language_command(
+    tmp_path: Path, lang: Lang, name: str
+) -> None:
+    service, _ = make_service(tmp_path, FakeFetcher(FetchResponse(200, "", "u")))
+    context = FakeContext(service, args=["abc"])
+    context.bot_data[bot._LANG_KEY] = lang
+    update = FakeUpdate(message=FakeMessage("/x abc"))
+    asyncio.run(bot.status_command(update, context))  # type: ignore[arg-type]
+    assert f"/{name} [id]" in update.message.replies[-1]

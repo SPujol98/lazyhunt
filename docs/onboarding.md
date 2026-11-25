@@ -2,7 +2,7 @@
 
 The guided setup asks for your profile in Telegram, in about 10 minutes, so
 you never have to write the profile files by hand. It runs on the first start
-(setup mode, after `uv run cli.py init` with an empty profile), and you can
+(setup mode, after `uv run lazyhunt init` with an empty profile), and you can
 run it again later, whole or one section at a time, to change your answers.
 Where it fits in the whole first run: [getting-started.md](getting-started.md).
 

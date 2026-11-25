@@ -218,7 +218,11 @@ from cva.tracker import (
     refresh_tracker_xlsx,
 )
 from cva.tracker.history import PRE_SEND_ESTADOS
-from cva.tracker.repo import DUPLICATE_NOTE_PREFIX, _is_stored_duplicate
+from cva.tracker.repo import (
+    DUPLICATE_NOTE_PREFIX,
+    SearchOverviewRow,
+    _is_stored_duplicate,
+)
 from cva.tracker.xlsx import write_tracker_xlsx
 
 # A CV role: a role family's ``id.upper()`` (``ProfilePrefs.families``; the
@@ -3594,6 +3598,11 @@ class JobService:
         """The most recent offers, newest first (bot /status listing)."""
         return self._repo.recent_offers(limit)
 
+    def analysis_scores(self, offer_ids: list[int]) -> dict[int, int]:
+        """Stored analysis score per analysed offer (/status match column):
+        ``match_results.score``, the judge's score in hybrid mode."""
+        return self._repo.analysis_scores(offer_ids)
+
     def keywords(self, profile: str | None = None) -> list[KeywordRow]:
         """Demand-log rows (bot /keywords [profile])."""
         return self._repo.keyword_rows(profile)
@@ -3877,6 +3886,29 @@ class JobService:
         """Set a proposal's decision; with ``expect`` only from that state."""
         return self._repo.set_gmail_decision(message_id, decision, expect=expect)
 
+    def close_sibling_gmail_proposals(
+        self, offer_id: int, answered: str
+    ) -> list[tuple[int, int]]:
+        """Resolve (as ``stale``) every other pending proposal of ``offer_id``
+        once the owner answered ``answered``; returns the ``(chat, message)``
+        Telegram cards to edit. Each card reference is forgotten here."""
+        from cva.gmail.sync import card_ref, forget_card
+
+        cards: list[tuple[int, int]] = []
+        for row in self._repo.pending_gmail_proposals(offer_id):
+            if row.message_id == answered:
+                continue
+            if not self._repo.set_gmail_decision(
+                row.message_id, "stale", expect="pending"
+            ):
+                continue
+            ref = card_ref(self._repo, row.message_id)
+            if ref is not None:
+                cards.append(ref)
+            forget_card(self._repo, row.message_id)
+        forget_card(self._repo, answered)
+        return cards
+
     @property
     def analyze_retry_max(self) -> int:
         """Retry budget per auto-analysis (heartbeat sweep input, pacing D4)."""
@@ -3998,6 +4030,10 @@ class JobService:
     def beacons(self) -> list[BeaconRow]:
         """All beacons in id order (bot /beacons, CLI ``beacon list``)."""
         return self._repo.list_beacons()
+
+    def search_overview(self) -> list[SearchOverviewRow]:
+        """Per watched search: rounds, found, new, last failure (14 days)."""
+        return self._repo.search_overview()
 
     def create_beacon(self, name: str, url: str) -> int:
         """Persist a new enabled beacon; return its id (job-discovery spec)."""

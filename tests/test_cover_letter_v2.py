@@ -35,46 +35,45 @@ BASES = load_letter_bases(DEMO_DIR / "cover_letter_base.toml")
 ES_BASE, EN_BASE, CA_BASE = BASES["es"], BASES["en"], BASES["ca"]
 CLAIMS = load_claims(DEMO_CLAIMS)
 
+# Sized for the beta.8 budgets (linking <= 20, paragraph 2 25-45, paragraph 3
+# 25-50, whole letter 150-250 words), strongest evidence first and no
+# confessed gap (the previous "Todavía no he operado..." sentence is now a
+# quality finding).
 ES_PARTS = {
     "tone": "cercano",
     "linking": (
         "Vi que en Acme llevaréis agentes con LLM a producción desde Valencia, "
-        "y eso es justo lo que llevo un año aprendiendo a hacer bien."
+        "y es lo que hago."
     ),
     "why_company": (
-        "Acme busca llevar sistemas con RAG a producción desde Valencia, y ahí es "
-        "donde mi trabajo encaja. En DocSearch comparé dos tipos de búsqueda con 150 "
-        "preguntas escritas a mano, así que sé medir si una recuperación mejora de "
-        "verdad. Es mi terreno. Además, he mantenido cargas nocturnas de un cliente de "
+        "Acme busca llevar sistemas con RAG a producción desde Valencia. En "
+        "DocSearch comparé dos tipos de búsqueda con 150 preguntas escritas a mano. "
+        "Es mi terreno. Además, he mantenido cargas nocturnas de un cliente de "
         "logística y sé lo que cuesta mantener algo en marcha."
     ),
     "why_role": (
-        "El puesto pide Python y RAG sobre datos propios. En Metrics API construí un "
-        "servicio con FastAPI y PostgreSQL, con tests al 91 % y pruebas de carga, y en "
-        "DocSearch llevé la recuperación híbrida de 0,61 a 0,78 de recall. Todavía no he "
-        "operado un RAG con muchos usuarios simultáneos, pero sí he vigilado cargas "
-        "reales cada noche, y quiero dar ese paso con vosotros."
+        "El puesto pide Python y RAG sobre datos propios. En DocSearch llevé la "
+        "recuperación híbrida de 0,61 a 0,78 de recall. En Metrics API construí un "
+        "servicio con FastAPI y PostgreSQL, con tests al 91 %. Quiero aplicar ese "
+        "método con vosotros."
     ),
 }
 EN_PARTS = {
     "tone": "cercano",
     "linking": (
-        "I saw that Acme is taking LLM agents to production from Valencia, which is "
-        "exactly what I have spent a year learning to do well."
+        "I saw that Acme is taking LLM agents to production from Valencia, which "
+        "is what I do."
     ),
     "why_company": (
-        "Acme wants to bring RAG systems to production from Valencia, and that is where "
-        "my work fits. In DocSearch I compared two kinds of search on 150 hand-written "
-        "questions. That taught me how to measure whether retrieval really improves. It "
-        "is my ground. I have also kept a logistics client's nightly loads running. "
-        "Keeping something alive is a skill of its own."
+        "Acme wants to bring RAG systems to production from Valencia. In DocSearch I "
+        "compared two kinds of search on 150 hand-written questions. It is my "
+        "ground. I have also kept a logistics client's nightly loads running."
     ),
     "why_role": (
-        "The role asks for Python and RAG over your own data. In Metrics API I built a "
-        "FastAPI service on PostgreSQL with 91% test coverage. Load tests came next. In "
-        "DocSearch I lifted hybrid retrieval recall from 0.61 to 0.78. I have not yet run "
-        "a RAG for many simultaneous users. Even so, real loads have kept me alert every "
-        "night. I want to take that step with you."
+        "The role asks for Python and RAG over your own data. In DocSearch I lifted "
+        "hybrid retrieval recall from 0.61 to 0.78. In Metrics API I built a FastAPI "
+        "service on PostgreSQL with 91% test coverage. I want to apply that method "
+        "with you."
     ),
 }
 ACME_FACT = CompanyFact(
@@ -234,8 +233,11 @@ def test_empty_parts_are_reported_not_raised() -> None:
 
 
 def test_too_short_letter_is_flagged() -> None:
-    problems = _problems(why_company="Acme hace cosas. Es mi terreno.")
-    assert any("palabras" in p and "250" in p for p in problems)
+    problems = _problems(
+        why_company="Acme hace cosas. Es mi terreno.", why_role="Pido Python."
+    )
+    # beta.8: the minimum dropped from 250 to 150 words (the reader skims).
+    assert any("palabras" in p and "150" in p for p in problems)
 
 
 def test_too_long_letter_is_flagged() -> None:
@@ -361,8 +363,9 @@ def test_prompt_keeps_the_guards_and_the_persona_rules() -> None:
     system, _user = _prompt()
     assert "me apasiona" in system  # banned phrases listed
     assert "Never invent" in system and "Backtrack test" in system
-    assert "ONE sentence of at most 25 words" in system
-    assert "50-70 words" in system and "50-80 words" in system
+    # beta.8 budgets (shorter letters): linking <= 20, P2 25-45, P3 25-50.
+    assert "ONE sentence of at most 20 words" in system
+    assert "25-45 words" in system and "25-50 words" in system
     assert "career change" in system or "systems administration" in system
 
 
@@ -548,13 +551,14 @@ def _words(n: int) -> str:
 @pytest.mark.parametrize(
     ("field", "count", "flagged"),
     [
-        ("why_company", 49, True),
-        ("why_company", 50, False),
-        ("why_company", 70, False),
-        ("why_company", 71, True),
-        ("why_role", 49, True),
-        ("why_role", 80, False),
-        ("why_role", 81, True),
+        # beta.8 budgets: paragraph 2 25-45, paragraph 3 25-50 words.
+        ("why_company", 24, True),
+        ("why_company", 25, False),
+        ("why_company", 45, False),
+        ("why_company", 46, True),
+        ("why_role", 24, True),
+        ("why_role", 50, False),
+        ("why_role", 51, True),
     ],
 )
 def test_paragraph_budgets_are_exact_with_no_hidden_margin(
@@ -565,7 +569,8 @@ def test_paragraph_budgets_are_exact_with_no_hidden_margin(
     assert any(label in p for p in problems) is flagged
 
 
-@pytest.mark.parametrize(("count", "flagged"), [(25, False), (26, True)])
+# beta.8: the linking sentence budget dropped from 25 to 20 words.
+@pytest.mark.parametrize(("count", "flagged"), [(20, False), (21, True)])
 def test_linking_budget_is_exact_with_no_hidden_margin(
     count: int, flagged: bool
 ) -> None:
@@ -574,13 +579,16 @@ def test_linking_budget_is_exact_with_no_hidden_margin(
 
 
 def _letter_with_total(total: int) -> list[str]:
-    base_total = len(_letter(ES_PARTS, ES_BASE, "es").split())
-    p3 = len(ES_PARTS["why_role"].split()) + (total - base_total)
-    return _problems(why_role=_words(p3))
+    # beta.8: 149 words is shorter than the fixture, so both paragraphs flex.
+    empty = {**ES_PARTS, "why_company": "", "why_role": ""}
+    rest = total - len(_letter(empty, ES_BASE, "es").split())
+    return _problems(why_company=_words(rest // 2), why_role=_words(rest - rest // 2))
 
 
 @pytest.mark.parametrize(
-    ("total", "flagged"), [(249, True), (250, False), (350, False), (351, True)]
+    # beta.8: the whole letter is 150-250 words (was 250-350).
+    ("total", "flagged"),
+    [(149, True), (150, False), (250, False), (251, True)],
 )
 def test_letter_total_is_exact_with_no_hidden_margin(total: int, flagged: bool) -> None:
     assert any("la carta completa" in p for p in _letter_with_total(total)) is flagged

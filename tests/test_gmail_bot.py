@@ -1,5 +1,6 @@
 """Gmail proposals on Telegram (M3): message, buttons, callbacks, heartbeat job."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ import pytest
 
 import bot
 from cva.calibration import SentJudgment
-from cva.gmail.sync import Proposal
+from cva.gmail.sync import CARD_KEY_PREFIX, Proposal
 from cva.notifier import (
     GM,
     gmail_proposal_keyboard,
@@ -19,6 +20,7 @@ from cva.service import JobService
 from cva.tracker import OfferInput, OfferRepository
 from tests.helpers import run_coro
 from tests.test_bot import (
+    FakeBot,
     FakeContext,
     FakeFetcher,
     FakeQuery,
@@ -177,6 +179,128 @@ def test_ignore_marks_the_proposal_ignored(tmp_path: Path) -> None:
     assert service.offer(offer_id).estado == "enviada"
     row = repo.get_gmail_proposal(MID)
     assert row is not None and row.decision == "ignored"
+    assert query.edited_markups[-1] is None
+
+
+# --- sibling proposals (owner 2026-11-25: "cual clicko?") --------------------------
+
+
+class _EditingBot(FakeBot):
+    def __init__(self) -> None:
+        super().__init__()
+        self.edits: list[tuple[int, int, str, object]] = []
+
+    async def edit_message_text(
+        self,
+        text: str,
+        chat_id: int | None = None,
+        message_id: int | None = None,
+        reply_markup: object = None,
+    ) -> None:
+        assert chat_id is not None and message_id is not None
+        self.edits.append((chat_id, message_id, text, reply_markup))
+
+
+def _add_pending(
+    repo: OfferRepository, offer_id: int, mid: str, estado: str, card: int | None
+) -> None:
+    repo.add_gmail_proposal(
+        message_id=mid,
+        offer_id=offer_id,
+        sender="Ana <ana@acme.com>",
+        subject="Video interview",
+        received_at=datetime(2026, 11, 4, tzinfo=UTC).isoformat(),
+        proposed_estado=estado,
+    )
+    if card is not None:
+        repo.set_state(CARD_KEY_PREFIX + mid, json.dumps({"chat": 5, "msg": card}))
+
+
+def _siblings(tmp_path: Path) -> tuple[JobService, OfferRepository, int, int]:
+    service, repo, offer_id = _setup(tmp_path, estado="screening")
+    other = repo.upsert_offer(
+        OfferInput(
+            job_id="2",
+            title="AI Engineer",
+            company="Globex",
+            url="https://x/2",
+            text="t",
+            source="link",
+        )
+    )
+    _add_pending(repo, offer_id, "dup-same", "screening", card=101)
+    _add_pending(repo, offer_id, "dup-later", "entrevista_tecnica", card=102)
+    _add_pending(repo, offer_id, "dup-nocard", "screening", card=None)
+    _add_pending(repo, other, "other-offer", "screening", card=103)
+    return service, repo, offer_id, other
+
+
+def _decision(repo: OfferRepository, mid: str) -> str | None:
+    row = repo.get_gmail_proposal(mid)
+    return None if row is None else row.decision
+
+
+def test_yes_resolves_every_other_pending_card_of_the_offer(tmp_path: Path) -> None:
+    service, repo, offer_id, _other = _siblings(tmp_path)
+    tg = _EditingBot()
+    _press(FakeContext(service, tg_bot=tg), "y")
+
+    assert service.offer(offer_id).estado == "screening"
+    assert _decision(repo, MID) == "accepted"
+    for mid in ("dup-same", "dup-later", "dup-nocard"):
+        assert _decision(repo, mid) == "stale"
+    assert _decision(repo, "other-offer") == "pending"  # another offer: untouched
+    expected = f"✅ Ya resuelta (#{offer_id} → screening)"
+    assert sorted(tg.edits, key=lambda e: e[1]) == [
+        (5, 101, expected, None),
+        (5, 102, expected, None),
+    ]
+    assert repo.get_state(CARD_KEY_PREFIX + "dup-same") in (None, "")
+    assert repo.get_state(CARD_KEY_PREFIX + "other-offer")  # kept
+
+
+def test_ignore_and_other_also_resolve_the_sibling_cards(tmp_path: Path) -> None:
+    for action in ("i", "o"):
+        base = tmp_path / action
+        base.mkdir()
+        service, repo, offer_id, _other = _siblings(base)
+        tg = _EditingBot()
+        _press(FakeContext(service, tg_bot=tg), action)
+        assert _decision(repo, "dup-same") == "stale"
+        assert _decision(repo, "dup-later") == "stale"
+        assert _decision(repo, "other-offer") == "pending"
+        assert {e[2] for e in tg.edits} == {f"✅ Ya resuelta (#{offer_id})"}
+        assert all(e[3] is None for e in tg.edits)
+
+
+def test_sibling_cards_are_edited_in_english(tmp_path: Path) -> None:
+    service, _repo, offer_id, _other = _siblings(tmp_path)
+    tg = _EditingBot()
+    context = FakeContext(service, tg_bot=tg)
+    context.bot_data[bot._LANG_KEY] = "en"
+    _press(context, "y")
+    assert {e[2] for e in tg.edits} == {f"✅ Already handled (#{offer_id} → screening)"}
+
+
+def test_a_failing_sibling_edit_never_undoes_the_answer(tmp_path: Path) -> None:
+    service, repo, offer_id, _other = _siblings(tmp_path)
+
+    class _Broken(_EditingBot):
+        async def edit_message_text(self, *args: object, **kwargs: object) -> None:
+            raise RuntimeError("telegram: message to edit not found")
+
+    _press(FakeContext(service, tg_bot=_Broken()), "y")
+    assert service.offer(offer_id).estado == "screening"
+    assert _decision(repo, MID) == "accepted"
+    assert _decision(repo, "dup-same") == "stale"
+
+
+def test_a_lone_proposal_answer_edits_nothing_else(tmp_path: Path) -> None:
+    service, _repo, offer_id = _setup(tmp_path, estado="screening")
+    tg = _EditingBot()
+    query = _press(FakeContext(service, tg_bot=tg), "y")
+    assert tg.edits == []
+    assert service.offer(offer_id).estado == "screening"
     assert query.edited_markups[-1] is None
 
 

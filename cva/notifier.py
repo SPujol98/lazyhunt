@@ -42,7 +42,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from cva.ai_outage import AiOutage
 from cva.beacons import BeaconPausedAlert
 from cva.card_links import search_links
-from cva.commands import help_text
+from cva.commands import help_text, split_message
 from cva.families import BUILTIN_REGISTRY, CV_LANGUAGES, Family, FamilyRegistry
 from cva.fsutil import display_path
 from cva.i18n import CATALOGS, LANGS, LEGACY_LANG, Lang, t
@@ -61,6 +61,7 @@ from cva.tracker import (
     OfferRow,
     RepositoryError,
 )
+from cva.tracker.repo import SEARCH_WINDOW_DAYS, SearchOverviewRow
 
 if TYPE_CHECKING:
     from cva.gmail.sync import Proposal as GmailProposal
@@ -1487,10 +1488,15 @@ def offer_status_line(
     also_on: Sequence[str] = (),
     families: FamilyRegistry = BUILTIN_REGISTRY,
     lang: Lang = LEGACY_LANG,
+    analysis_score: int | None = None,
 ) -> str:
     """One /status line: id · estado · match · position; offers of
-    a non-default family end with its label, e.g. ``[backend]``."""
+    a non-default family end with its label, e.g. ``[backend]``. ``match`` is
+    the send-time score, else ``analysis_score`` (the stored analysis: judge
+    score in hybrid mode, keyword score otherwise), else "—"."""
     match = row.match  # type: ignore[attr-defined]
+    if match is None:
+        match = analysis_score
     family = families.resolve(families.normalize(getattr(row, "perfil", None)))
     tag = "" if family == families.default else f" [{family.label.lower()}]"
     line = t(
@@ -1525,6 +1531,36 @@ def beacons_list_message(rows: list[BeaconRow], *, lang: Lang = LEGACY_LANG) -> 
             )
         )
     return "\n".join(lines)
+
+
+def searches_overview_messages(
+    rows: list[SearchOverviewRow], *, lang: Lang = LEGACY_LANG
+) -> list[str]:
+    """/searches: one line per search (zero new first), split under 4096."""
+    if not rows:
+        return [t("notifier.searches_none", lang)]
+    lines = [t("notifier.searches_head", lang, days=SEARCH_WINDOW_DAYS), ""]
+    for row in rows:
+        line = t(
+            "notifier.searches_line",
+            lang,
+            name=row.name,
+            rounds=row.rounds,
+            found=row.found,
+            new=row.new,
+        )
+        if row.last_failure:
+            line += t("notifier.searches_failure", lang, failure=row.last_failure)
+        lines.append(line)
+    lines.append("")
+    if sum(row.rounds for row in rows) < _LITTLE_DATA_ROUNDS * len(rows):
+        lines.append(t("notifier.searches_little_data", lang))
+    lines.append(t("notifier.searches_hint", lang, days=SEARCH_WINDOW_DAYS))
+    return split_message("\n".join(lines))
+
+
+# Fewer rounds per search than this: the overview says it is still gathering data.
+_LITTLE_DATA_ROUNDS: Final[int] = 3
 
 
 def beacon_action_message(

@@ -5,6 +5,15 @@ Es un resumen del [README](../README.md) y de la
 [guía de instalación](getting-started.md) (en inglés), pensado para quien
 prueba la beta. Calcula unos 20 minutos.
 
+Sigue los pasos en orden: primero lo dejas todo configurado (instalación, bot
+de Telegram, asistente, arrancar el bot, `/configurar`, extensión y primera
+oferta) y al final, en [El día a día](#10-el-día-a-día), cómo se usa.
+
+> [!IMPORTANT]
+> No dejes que tu asistente de programación rellene tu perfil: usa
+> `/configurar`. Si instalas lazyhunt con Claude Code, Codex u otro agente,
+> este lee `AGENTS.md`, que le indica dejar `profiles/` en manos del bot.
+
 ## 1. Qué es y qué esperar de una beta
 
 lazyhunt es un asistente de búsqueda de empleo que se ejecuta en tu ordenador:
@@ -70,7 +79,9 @@ uv sync
 ```
 
 `uv sync` crea un entorno virtual e instala todo. No tienes que activarlo:
-basta con poner `uv run` delante de cada comando.
+basta con poner `uv run` delante de cada comando. Todos los comandos son
+`uv run lazyhunt <comando>` (`uv run lazyhunt --help` los lista); las formas
+antiguas `uv run cli.py …` y `uv run bot.py` siguen funcionando.
 
 ## 4. Crea tu bot de Telegram
 
@@ -86,10 +97,10 @@ Hazlo una vez, en la app de Telegram, antes del asistente:
 ¿Ya tienes un bot? En @BotFather envía `/mybots`, elige tu bot y pulsa
 **API Token**.
 
-## 5. El asistente del terminal: `uv run cli.py init`
+## 5. El asistente del terminal: `uv run lazyhunt init`
 
 ```bash
-uv run cli.py init
+uv run lazyhunt init
 ```
 
 El asistente solo configura el bot; lo que tiene que ver contigo llega después,
@@ -113,7 +124,7 @@ confirmas el resumen y puedes repetirlo cuando quieras.
    API key de la IA), el asistente te lo dice y lo vuelve a pedir; solo
    muestra sus 4 últimos caracteres. **No hace falta tu id numérico**: al
    arrancar, el bot te da un código de un solo uso (paso 6). Si ya lo sabes,
-   `uv run cli.py init --owner-id <id>` lo escribe.
+   `uv run lazyhunt init --owner-id <id>` lo escribe.
 5. **Secreto del puente.** Genera un secreto aleatorio largo que la extensión
    usa para hablar con el bot. No tienes que copiarlo: el bot le da a la
    extensión un código de emparejamiento (`/conectar`, paso 8).
@@ -148,13 +159,13 @@ puntuación, los CV y las cartas funcionan con todas. En el paso 3 del asistente
 Una diferencia: **la búsqueda en la web de datos de la empresa** para la carta
 solo funciona con Claude Code y Codex CLI, porque pueden navegar; los modelos
 por API no tienen esa herramienta, así que esa búsqueda aparece como no
-disponible en vez de inventarse. Para cambiar de IA, vuelve a ejecutar `uv run cli.py init`: con Intro
+disponible en vez de inventarse. Para cambiar de IA, vuelve a ejecutar `uv run lazyhunt init`: con Intro
 conservas todo lo demás. Detalles: [providers.md](providers.md).
 
-## 6. Arrancar el bot
+## 6. Arrancar el bot y hacerte su dueño
 
 ```bash
-uv run bot.py
+uv run lazyhunt bot
 ```
 
 **La primera vez**, el terminal muestra un código de un solo uso (y un enlace
@@ -172,16 +183,16 @@ contesta a ti. Hasta entonces ignora todos los mensajes, y a un código
 incorrecto no responde. El código sirve una vez, durante 30 minutos; tras 5
 intentos fallidos deja de funcionar: reinicia el bot para obtener otro. Solo se
 muestra en un terminal, nunca en un archivo de log: aunque luego lo uses como
-servicio, la primera vez arráncalo con `uv run bot.py` en un terminal.
+servicio, la primera vez arráncalo con `uv run lazyhunt bot` en un terminal.
 
-Después envía `/help`. Con el perfil vacío contesta en **modo
-configuración**: solo funcionan `/help`, `/start`, `/configurar` y
-`/conectar` hasta que completes el perfil.
+Con el perfil vacío el bot está en **modo configuración**: solo funcionan
+`/help`, `/start`, `/configurar` y `/conectar` hasta que completes el
+perfil, y `/start` te dice que sigas con `/configurar`, el paso siguiente.
 
 El bot funciona mientras ese terminal siga abierto. Para dejarlo en segundo
 plano o que arranque al iniciar sesión (systemd, launchd o el Programador de
 tareas de Windows), mira [running.md](running.md). La opción más rápida en
-Linux o macOS es `tmux new -s lazyhunt 'uv run bot.py'` y salir con
+Linux o macOS es `tmux new -s lazyhunt 'uv run lazyhunt bot'` y salir con
 `Ctrl+B` y luego `D`.
 
 ## 7. `/configurar` en Telegram
@@ -256,13 +267,20 @@ repositorio. Sus textos siguen el idioma de tu navegador.
    no tengas ninguna, la ventana de la extensión dice "Todavía no hay
    búsquedas" y te trae aquí.
 
-**Tu primera oferta.** No hace falta esperar: pulsa **Comprobar ahora** en la
+## 9. Tu primera oferta
+
+No hace falta esperar: pulsa **Comprobar ahora** en la
 ventana de la extensión (su icono en la barra), o pega el enlace de una
 oferta en Telegram con `/analyze <url>`. Si no puede revisar nada, lo dice al
 momento (el bot no responde, rechaza el secreto, falta terminar
 `/configurar`, no hay búsquedas o ningún portal está activo) y **Pausar**
 detiene una ronda en curso. Después las rondas se repiten solas
 cada 60 minutos (se cambia en **Frecuencia y bot**).
+
+## 10. El día a día
+
+Ya está todo configurado; a partir de aquí, así se usa lazyhunt. Cada
+comando tiene nombre en español y en inglés; funcionan los dos.
 
 **La tarjeta en Telegram** trae la puntuación de 0 a 100, el veredicto
 (*aplicar*, *aplicar con matices* o *descartar*), lo que cumples y lo que no,
@@ -287,7 +305,17 @@ debajo de tu mínimo*. No descartan la oferta: decides tú.
 `/reanudar` lo vuelve a activar. La ventana de la extensión tiene el botón
 **Pausar**.
 
-## 9. Cambiar tu perfil después
+**Tus CV base.** `/cvs` los lista (puesto × idioma) y, con sus botones,
+te envía el PDF y, en los que creó lazyhunt, cambia la plantilla o los
+rehace con tus respuestas. `/configurar cvs` añade los que te saltaste.
+
+**El seguimiento.** `/estado` (o `/status`) lista tus 10 últimas ofertas y
+`/estado <id>` muestra una; `/sent <id>` anota una candidatura enviada,
+`/outcome <id>` lo que pasó después y `/panel` te envía un panel HTML sin
+conexión. Antes de una entrevista, `/prep <id>` prepara una hoja y `/star`
+guarda tus historias STAR. `/help` lista todos los comandos y botones.
+
+### Cambiar tu perfil después
 
 Con `/configurar <sección>` el bot vuelve a preguntar solo esa parte, con tus
 respuestas actuales ya puestas (botón **Mantener …**). Por ejemplo
@@ -309,7 +337,10 @@ También puedes hacerlo en la extensión: **Opciones › Perfil › Cargar desde
 bot**, cambiar lo que quieras y pulsar **Guardar** en cada parte. Los datos de
 contacto, los portales y los CV solo se cambian con `/configurar <sección>`.
 
-## 10. Problemas frecuentes
+No dejes que tu asistente de programación rellene tu perfil: usa
+`/configurar`.
+
+## 11. Problemas frecuentes
 
 **El bot no contesta en Telegram.**
 Comprueba que sigue en marcha (el terminal o tu servicio). `CVA_TELEGRAM_TOKEN`
@@ -318,7 +349,7 @@ dice en una línea al arrancar («Telegram ha rechazado el token del bot…») y
 se para, sin mostrar el token. Si aún no tiene dueño
 (`owner_telegram_id` sin definir o `0`), solo atiende `/start <código>` con el
 código que muestra su terminal; tras 5 códigos incorrectos o 30 minutos,
-reinícialo para obtener otro. Ya emparejado, solo contesta al id guardado. `uv run cli.py check` carga tu configuración sin Telegram y
+reinícialo para obtener otro. Ya emparejado, solo contesta al id guardado. `uv run lazyhunt check` carga tu configuración sin Telegram y
 nombra el ajuste que esté mal.
 
 **Solo contesta a `/configurar`.** Está en modo configuración: termina el
@@ -352,7 +383,7 @@ a funcionar, analizando N ofertas pendientes», incluidas las que fallaron
 justo antes de la pausa. Con Claude Code: `claude auth login`; para un bot que
 corre solo como servicio, `claude setup-token` y pon el token en `.env` como
 `CLAUDE_CODE_OAUTH_TOKEN=...` y reinicia. Con Codex: `codex login`. Con una
-API: revisa la clave en `.env`. `/status` y `uv run cli.py check` muestran la
+API: revisa la clave en `.env`. `/estado` y `uv run lazyhunt check` muestran la
 pausa.
 
 **Una búsqueda no encuentra nada.** Ábrela a mano en el navegador: puede que
@@ -370,7 +401,7 @@ Límites de cada portal: [portals.md](portals.md).
 
 Más casos: [Troubleshooting](../README.md#troubleshooting) del README.
 
-## 11. Actualizar, desinstalar y privacidad
+## 12. Actualizar, desinstalar y privacidad
 
 **Actualizar:** `git pull` y `uv sync` en la carpeta `lazyhunt`, reinicia el
 bot y pulsa el botón de recargar de lazyhunt en `chrome://extensions`. Tu

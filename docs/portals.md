@@ -306,6 +306,17 @@ everything the bot needs:
 - The scheduler's inline retry and `fetch_offer` (one plain GET, no retries)
   route by that registry, not by portal name.
 
+## Which searches add value (`/searches`)
+
+`/searches` (`/busquedas`) lists every watched search (search × portal) over the
+last 14 days: rounds (scan reports), offers found, offers that were **new** and
+the last failure (`rate_limited`, `session_expired`, `error`), with the ones
+that found nothing new first. Those are the candidates to remove in the
+extension (Options › Searches). Rounds and found come from `beacon_scans`; the
+new counts are appended by the bridge to the `app_state` key
+`beacon_new_counts` (`{search: [[date, new], ...]}`, one row per day, pruned to
+14 days), so they only accumulate from the version that added the command on.
+
 ## Terms of use and volume
 
 The extension reads pages in your own logged-in browser tab, at the existing

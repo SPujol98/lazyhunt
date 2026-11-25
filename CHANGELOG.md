@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.8] - 2026-11-25
+
+Eighth pre-release for testers: clearer instructions, shorter letters and less noise.
+
+### Added
+
+- `uv run lazyhunt …` command: `lazyhunt init`, `lazyhunt bot`, `lazyhunt check` and every other subcommand (`uv run cli.py …` still works).
+- `/searches` (`/busquedas`) shows, for every watched search, the rounds, offers found and NEW offers in the last 14 days, so you can drop the ones that add nothing.
+- `AGENTS.md`: coding assistants (Claude Code, Codex…) opened in the repo are told to leave your profile to `/setup` instead of filling it in themselves.
+- `/estado` is the Spanish name of `/status`.
+
+### Changed
+
+- The quick start is now strictly in order: install, create the Telegram bot, `init`, start, `/setup`, extension, first offer — and day-to-day use at the end.
+- Cover letters are shorter (150–250 words), lead with your strongest evidence, never explain basic concepts to technical readers, never mention skills you lack, and always address the company on the card (never a parent group or recruiter named in the offer).
+- `/status` shows the analysis score of analysed offers.
+
+### Fixed
+
+- Gmail status proposals: one card per offer and state; answering one closes the others ("Already handled"); a card whose send timed out is no longer sent twice.
+
 ## [2.0.0-beta.7] - 2026-11-25
 
 Seventh pre-release for testers: the bot pauses instead of failing offer after offer when the AI is down.
@@ -221,7 +242,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.8...HEAD
+[2.0.0-beta.8]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...v2.0.0-beta.8
 [2.0.0-beta.7]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...v2.0.0-beta.7
 [2.0.0-beta.6]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...v2.0.0-beta.6
 [2.0.0-beta.5]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...v2.0.0-beta.5

@@ -23,7 +23,10 @@ credential is touched until you configure it.
    truncated to 2,000 characters; the answer is one of screening,
    entrevista_tecnica, entrevista_final, oferta, rechazada or none.
 4. Sends one Telegram proposal per message, never twice, and never when the
-   offer already has that status or a later one:
+   offer already has that status or a later one. While a proposal for an offer
+   and status is still unanswered, further emails pointing to the same status
+   (a reminder, a calendar invite) are stored as evidence and not sent again.
+   A send that times out is assumed delivered and never repeated:
 
    > 📧 Acme · «Entrevista»: parece screening. ¿Marcar la oferta #12 como screening?
    > [Sí] [Otro estado] [Ignorar]
@@ -34,6 +37,9 @@ credential is touched until you configure it.
    - **Ignorar** drops the proposal.
    - Pressing a button twice, or on a proposal you already outran, only gets a
      polite answer.
+   - Answering one proposal (any button) also resolves the offer's other
+     unanswered proposals: their cards turn into "✅ Ya resuelta (#12 →
+     screening)" without buttons, so there is only ever one card to click.
 
 If Google rejects the stored authorization (revoked or expired), the bot sends
 **one** warning with the exact command to run, and stays quiet until a run

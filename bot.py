@@ -138,6 +138,7 @@ from cva.notifier import (
     prep_keyboard,
     prep_stage_keyboard,
     salary_research_message,
+    searches_overview_messages,
     sent_keyboard,
     sent_message,
     sent_outcome_keyboard,
@@ -1060,16 +1061,23 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 also_on=service.also_on(offer_id),
                 families=_families(context),
                 lang=lang,
+                analysis_score=service.analysis_scores([offer_id]).get(offer_id),
             )
         )
         return
     if args:
-        await update.message.reply_text(t("bot.usage", lang, usage="/status [id]"))
+        await update.message.reply_text(
+            t("bot.usage", lang, usage=f"{command_name('estado', lang)} [id]")
+        )
         return
     rows = service.recent_offers()
     families = _families(context)
+    scores = service.analysis_scores([row.id for row in rows])
     listing = "\n".join(
-        offer_status_line(row, families=families, lang=lang) for row in rows
+        offer_status_line(
+            row, families=families, lang=lang, analysis_score=scores.get(row.id)
+        )
+        for row in rows
     )
     text = listing or t("bot.no_offers", lang)
     if (outage := service.ai_outage()) is not None:
@@ -1155,6 +1163,13 @@ async def beacons_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(
         beacons_list_message(_service(context).beacons(), lang=_lang(context))
     )
+
+
+async def searches_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/searches``: what each watched search found and what was new (14 days)."""
+    rows = _service(context).search_overview()
+    for piece in searches_overview_messages(rows, lang=_lang(context)):
+        await update.message.reply_text(piece)
 
 
 async def cartabase_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1380,6 +1395,29 @@ async def _clear_markup(query) -> None:
         _LOG.warning("gmail proposal buttons not removed: %s", type(exc).__name__)
 
 
+async def _close_gmail_siblings(
+    service: JobService, context, offer_id: int, answered: str, estado: str | None
+) -> None:
+    """After an answer, close the offer's other unanswered proposals and turn
+    their cards into a short "already handled" note without buttons (a failed
+    edit is cosmetic: the decisions are already stored)."""
+    lang = _lang(context)
+    text = (
+        t("bot.gm_handled", lang, id=offer_id, estado=_estado(estado, lang))
+        if estado
+        else t("bot.gm_handled_plain", lang, id=offer_id)
+    )
+    for chat_id, message_id in service.close_sibling_gmail_proposals(
+        offer_id, answered
+    ):
+        try:
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=message_id, reply_markup=None
+            )
+        except Exception as exc:  # noqa: BLE001 — cosmetic; decisions are stored
+            _LOG.warning("gmail sibling card not edited: %s", type(exc).__name__)
+
+
 async def _gmail_callback(
     service: JobService, query, context, action: str, message_id: str
 ) -> None:
@@ -1403,11 +1441,17 @@ async def _gmail_callback(
         if service.resolve_gmail_proposal(message_id, "ignored", expect="pending"):
             await _clear_markup(query)
             await query.message.reply_text(t("bot.gm_ignored", lang))
+            await _close_gmail_siblings(
+                service, context, row.offer_id, message_id, None
+            )
         return
     if action == "o":
         if service.resolve_gmail_proposal(message_id, "other", expect="pending"):
             await _reply_outcome_menu(service, query.message, row.offer_id)
             await _clear_markup(query)
+            await _close_gmail_siblings(
+                service, context, row.offer_id, message_id, None
+            )
         return
     try:
         current = service.offer(row.offer_id).estado
@@ -1420,6 +1464,7 @@ async def _gmail_callback(
         await query.message.reply_text(
             t("bot.already_in", lang, estado=_estado(current, lang))
         )
+        await _close_gmail_siblings(service, context, row.offer_id, message_id, current)
         return
     if not service.resolve_gmail_proposal(message_id, "accepted", expect="pending"):
         await query.message.reply_text(t("bot.gm_resolved", lang))
@@ -1436,6 +1481,9 @@ async def _gmail_callback(
         raise
     if recorded:
         await _clear_markup(query)
+        await _close_gmail_siblings(
+            service, context, row.offer_id, message_id, row.proposed_estado
+        )
     else:
         service.resolve_gmail_proposal(message_id, "pending")
 
@@ -2354,7 +2402,7 @@ _COMMAND_HANDLERS: dict[
     "help": start_help,
     "analyze": analyze_command,
     "cv": cv_command,
-    "status": status_command,
+    "estado": status_command,
     "sent": sent_command,
     "export": export_command,
     "panel": panel_command,
@@ -2369,6 +2417,7 @@ _COMMAND_HANDLERS: dict[
     "reanudar": reanudar_command,
     "beacons": beacons_command,
     "beacon": beacon_command,
+    "busquedas": searches_command,
     "cartabase": cartabase_command,
     "configurar": setup_command,
     "conectar": connect_command,

@@ -25,6 +25,13 @@ successive runs (``gmail_walk``: the next query is bounded by ``before`` the
 oldest message processed, plus the newest stamp seen); when a listing finally
 is complete the checkpoint jumps to that newest stamp. The owner is told once
 that the window is long.
+
+Duplicates: while a proposal for an offer and estado is still unanswered, a
+further matching email (a reminder, a calendar invite) is stored as ``stale``
+evidence and never sent. A send that times out keeps its row: Telegram may
+have delivered it, and re-proposing it next run would duplicate the card. The
+returned Telegram message (``chat_id``/``message_id``) is remembered in
+``app_state`` (``gmail_card:<id>``) so an answer can close sibling cards.
 """
 
 import asyncio
@@ -34,6 +41,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final, Literal
+
+from telegram.error import TimedOut
 
 from cva.gmail.classify import ClassificationUnavailable, classify_message
 from cva.gmail.client import (
@@ -66,6 +75,7 @@ LOOKBACK: Final[timedelta] = timedelta(days=7)
 # With nothing new the checkpoint still moves up to "now" minus this margin.
 _EMPTY_RUN_MARGIN: Final[timedelta] = timedelta(minutes=10)
 _FIELD_LIMIT: Final[int] = 300
+CARD_KEY_PREFIX: Final[str] = "gmail_card:"
 
 _RANK: Final[dict[str, int]] = {
     "enviada": 0,
@@ -120,6 +130,24 @@ class Proposal:
 class SyncResult:
     status: Literal["ok", "auth_error", "api_error", "send_error"]
     proposed: int = 0
+
+
+def card_ref(repo: OfferRepository, message_id: str) -> tuple[int, int] | None:
+    """``(chat_id, telegram message id)`` of a delivered proposal card."""
+    raw = repo.get_state(CARD_KEY_PREFIX + message_id)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return int(data["chat"]), int(data["msg"])
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def forget_card(repo: OfferRepository, message_id: str) -> None:
+    """Drop a card reference once the card no longer needs editing."""
+    if repo.get_state(CARD_KEY_PREFIX + message_id):
+        repo.set_state(CARD_KEY_PREFIX + message_id, "")
 
 
 def _load_failures(raw: str | None) -> dict[str, int]:
@@ -183,7 +211,7 @@ class GmailSync:
 
     async def run(
         self,
-        send_proposal: Callable[[Proposal], Awaitable[None]],
+        send_proposal: Callable[[Proposal], Awaitable[object]],
         send_warning: Callable[[str], Awaitable[None]],
     ) -> SyncResult:
         """One poll. Never raises; schedules the next one regardless of outcome."""
@@ -249,7 +277,7 @@ class GmailSync:
     async def _poll_once(
         self,
         started: datetime,
-        send_proposal: Callable[[Proposal], Awaitable[None]],
+        send_proposal: Callable[[Proposal], Awaitable[object]],
         send_warning: Callable[[str], Awaitable[None]],
     ) -> SyncResult:
         after_ts, seen = _load_checkpoint(self._repo.get_state(CHECKPOINT_KEY))
@@ -312,9 +340,11 @@ class GmailSync:
                     subject=message.subject[:_FIELD_LIMIT],
                     estado=estado,
                 )
-                if not await self._deliver(proposal, message, send_proposal):
+                outcome = await self._deliver(proposal, message, send_proposal)
+                if outcome == "failed":
                     return SyncResult("send_error", proposed)
-                proposed += 1
+                if outcome == "sent":
+                    proposed += 1
             failures.pop(message_id, None)
             progressed = True
             if stamp > newest:
@@ -379,10 +409,15 @@ class GmailSync:
         self,
         proposal: Proposal,
         message: GmailMessage,
-        send_proposal: Callable[[Proposal], Awaitable[None]],
-    ) -> bool:
+        send_proposal: Callable[[Proposal], Awaitable[object]],
+    ) -> Literal["sent", "skipped", "failed"]:
         """Store the proposal, then deliver it; a failed delivery un-stores it
-        so the next run proposes the message again."""
+        so the next run proposes the message again. A duplicate of a pending
+        proposal (same offer and estado) is stored as ``stale``, never sent."""
+        duplicate = any(
+            row.proposed_estado == proposal.estado
+            for row in self._repo.pending_gmail_proposals(proposal.offer_id)
+        )
         stored = self._repo.add_gmail_proposal(
             message_id=proposal.message_id,
             offer_id=proposal.offer_id,
@@ -390,13 +425,34 @@ class GmailSync:
             subject=proposal.subject,
             received_at=message.received_at.isoformat(),
             proposed_estado=proposal.estado,
+            decision="stale" if duplicate else "pending",
         )
+        if duplicate:
+            _LOG.info(
+                "gmail message %s: offer #%s already has a pending %s proposal",
+                proposal.message_id,
+                proposal.offer_id,
+                proposal.estado,
+            )
+            return "skipped"
         if not stored:
-            return True
+            return "skipped"
         try:
-            await send_proposal(proposal)
+            sent = await send_proposal(proposal)
+        except TimedOut:
+            # Delivery unknown (usually it landed): keep the row, never resend.
+            _LOG.warning("gmail proposal %s send timed out", proposal.message_id)
+            return "sent"
         except Exception as exc:  # noqa: BLE001 — Telegram hiccup: retry next run
             _LOG.warning("gmail proposal not delivered: %s", type(exc).__name__)
             self._repo.delete_pending_gmail_proposal(proposal.message_id)
-            return False
-        return True
+            return "failed"
+        self._remember_card(proposal.message_id, sent)
+        return "sent"
+
+    def _remember_card(self, message_id: str, sent: object) -> None:
+        chat, msg = getattr(sent, "chat_id", None), getattr(sent, "message_id", None)
+        if isinstance(chat, int) and isinstance(msg, int):
+            self._repo.set_state(
+                CARD_KEY_PREFIX + message_id, json.dumps({"chat": chat, "msg": msg})
+            )

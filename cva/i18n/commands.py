@@ -43,12 +43,12 @@ EN: Final[dict[str, str]] = {
         "A letter for no specific offer, ready to copy."
     ),
     "commands.cmd.cartabase.example": "/basecover en",
-    "commands.cmd.status.usage": "/status [id]",
-    "commands.cmd.status.menu": "Status of recent offers",
-    "commands.cmd.status.explanation": (
+    "commands.cmd.estado.usage": "/status [id]",
+    "commands.cmd.estado.menu": "Status of recent offers",
+    "commands.cmd.estado.explanation": (
         "Without an id, the last 10 offers; with an id, the status of that one."
     ),
-    "commands.cmd.status.example": "/status 42",
+    "commands.cmd.estado.example": "/status 42",
     "commands.cmd.sent.usage": "/sent <id>",
     "commands.cmd.sent.menu": "Mark an offer as sent",
     "commands.cmd.sent.explanation": (
@@ -141,6 +141,13 @@ EN: Final[dict[str, str]] = {
         "A one-time code to type in the extension's Options (no .env to open)."
     ),
     "commands.cmd.conectar.example": "/connect",
+    "commands.cmd.busquedas.usage": "/searches",
+    "commands.cmd.busquedas.menu": "What each watched search found in 14 days",
+    "commands.cmd.busquedas.explanation": (
+        "Per search: rounds, offers found, new ones and the last failure; the "
+        "ones with nothing new come first, as candidates to remove."
+    ),
+    "commands.cmd.busquedas.example": "/searches",
     "commands.cmd.cvs.usage": "/cvs",
     "commands.cmd.cvs.menu": "Your base CVs: view, change template, rebuild",
     "commands.cmd.cvs.explanation": (
@@ -271,12 +278,12 @@ ES: Final[dict[str, str]] = {
         "Carta sin oferta concreta, lista para copiar."
     ),
     "commands.cmd.cartabase.example": "/cartabase en",
-    "commands.cmd.status.usage": "/status [id]",
-    "commands.cmd.status.menu": "Estado de las ofertas recientes",
-    "commands.cmd.status.explanation": (
+    "commands.cmd.estado.usage": "/estado [id]",
+    "commands.cmd.estado.menu": "Estado de las ofertas recientes",
+    "commands.cmd.estado.explanation": (
         "Sin id, las últimas 10 ofertas; con id, el estado de una."
     ),
-    "commands.cmd.status.example": "/status 42",
+    "commands.cmd.estado.example": "/estado 42",
     "commands.cmd.sent.usage": "/sent <id>",
     "commands.cmd.sent.menu": "Marca una oferta como enviada",
     "commands.cmd.sent.explanation": (
@@ -367,6 +374,13 @@ ES: Final[dict[str, str]] = {
         "Un código de un solo uso para las Opciones de la extensión (sin abrir .env)."
     ),
     "commands.cmd.conectar.example": "/conectar",
+    "commands.cmd.busquedas.usage": "/busquedas",
+    "commands.cmd.busquedas.menu": "Qué encontró cada búsqueda en 14 días",
+    "commands.cmd.busquedas.explanation": (
+        "Por búsqueda: rondas, ofertas encontradas, nuevas y el último fallo; "
+        "las que no dieron nada nuevo van primero, como candidatas a quitar."
+    ),
+    "commands.cmd.busquedas.example": "/busquedas",
     "commands.cmd.cvs.usage": "/cvs",
     "commands.cmd.cvs.menu": "Tus CV base: ver, cambiar plantilla, rehacer",
     "commands.cmd.cvs.explanation": (

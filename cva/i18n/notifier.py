@@ -11,6 +11,10 @@ from typing import Final
 EN: Final[dict[str, str]] = {
     "notifier.letter_quality": "🧪 Letter quality: {score}/100",
     "notifier.letter_quality_missing": " · not mentioned: {items}",
+    "notifier.letter_company_mismatch": (
+        "The letter names {other}, not {company} (the company on the card): "
+        "fix it before sending."
+    ),
     # --- shared words -----------------------------------------------------------
     "notifier.no_title": "(untitled)",
     "notifier.no_company": "(no company)",
@@ -241,6 +245,21 @@ EN: Final[dict[str, str]] = {
     # --- beacons -----------------------------------------------------------------------
     "notifier.beacons_none": "🔭 No beacons configured.",
     "notifier.beacons_head": "🔭 Beacons:",
+    "notifier.searches_none": (
+        "🔭 No scans reported yet: the counts start filling as the extension scans."
+    ),
+    "notifier.searches_head": "🔭 Your searches, last {days} days (zero new first):",
+    "notifier.searches_line": (
+        "• {name} · rounds {rounds} · found {found} · new {new}"
+    ),
+    "notifier.searches_failure": " · last failure: {failure}",
+    "notifier.searches_little_data": (
+        "Little data so far: the new-offer counts accumulate from this version on."
+    ),
+    "notifier.searches_hint": (
+        "Searches that found nothing new in {days} days are candidates to remove "
+        "(Options › Searches)."
+    ),
     "notifier.beacons_line": (
         "#{id} {name} · {status} · walls: {walls} · last check: {last}"
     ),
@@ -278,6 +297,10 @@ EN: Final[dict[str, str]] = {
 ES: Final[dict[str, str]] = {
     "notifier.letter_quality": "🧪 Calidad de la carta: {score}/100",
     "notifier.letter_quality_missing": " · no menciona: {items}",
+    "notifier.letter_company_mismatch": (
+        "La carta nombra a {other}, no a {company} (la empresa de la tarjeta): "
+        "corrígela antes de enviarla."
+    ),
     # --- shared words -----------------------------------------------------------
     "notifier.no_title": "(sin título)",
     "notifier.no_company": "(sin empresa)",
@@ -512,6 +535,25 @@ ES: Final[dict[str, str]] = {
     # --- beacons -----------------------------------------------------------------------
     "notifier.beacons_none": "🔭 No hay beacons configurados.",
     "notifier.beacons_head": "🔭 Beacons:",
+    "notifier.searches_none": (
+        "🔭 Aún no hay escaneos reportados: los contadores se llenan según escanee "
+        "la extensión."
+    ),
+    "notifier.searches_head": (
+        "🔭 Tus búsquedas, últimos {days} días (primero las que no dieron nada nuevo):"
+    ),
+    "notifier.searches_line": (
+        "• {name} · rondas {rounds} · encontradas {found} · nuevas {new}"
+    ),
+    "notifier.searches_failure": " · último fallo: {failure}",
+    "notifier.searches_little_data": (
+        "Pocos datos por ahora: los contadores de ofertas nuevas se acumulan "
+        "desde esta versión."
+    ),
+    "notifier.searches_hint": (
+        "Las búsquedas que no encontraron nada nuevo en {days} días son candidatas "
+        "a quitar (Opciones › Búsquedas)."
+    ),
     "notifier.beacons_line": (
         "#{id} {name} · {status} · muros: {walls} · última comprobación: {last}"
     ),

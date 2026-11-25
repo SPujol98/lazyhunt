@@ -166,6 +166,8 @@ EN: Final[dict[str, str]] = {
     "bot.gm_gone": "This proposal no longer exists.",
     "bot.gm_resolved": "This proposal is already resolved.",
     "bot.gm_ignored": "OK, I will ignore it.",
+    "bot.gm_handled": "✅ Already handled (#{id} → {estado})",
+    "bot.gm_handled_plain": "✅ Already handled (#{id})",
     "bot.wall": "wall",
     # --- service errors (ServiceError.keyed) -------------------------------------
     "bot.err.no_letter_llm": "this LLM provider cannot write cover letters",
@@ -453,6 +455,8 @@ ES: Final[dict[str, str]] = {
     "bot.gm_gone": "Esta propuesta ya no existe.",
     "bot.gm_resolved": "Esta propuesta ya está resuelta.",
     "bot.gm_ignored": "Vale, la ignoro.",
+    "bot.gm_handled": "✅ Ya resuelta (#{id} → {estado})",
+    "bot.gm_handled_plain": "✅ Ya resuelta (#{id})",
     "bot.wall": "muro",
     # --- service errors (ServiceError.keyed) -------------------------------------
     "bot.err.no_letter_llm": "este proveedor LLM no puede escribir cartas",

@@ -1,9 +1,14 @@
 # Getting started
 
 From a fresh clone to the first judged offer in Telegram. Allow about 20
-minutes. You do not write profile files by hand: a short terminal wizard
-sets up the bot (step 4), and the bot then asks about you in Telegram
-(step 6, about 10 minutes).
+minutes. Follow the steps in order: everything is set up first (steps 1 to
+8), and how to use the bot day to day comes last (step 9). You do not write
+profile files by hand: a short terminal wizard sets up the bot (step 4), and
+the bot then asks about you in Telegram (step 6, about 10 minutes).
+
+Don't let your coding assistant fill in your profile: use `/setup`. A coding
+agent (Claude Code, Codex…) working in the clone reads `AGENTS.md`, which
+tells it to leave `profiles/` to the bot.
 
 ## Before you start
 
@@ -59,6 +64,10 @@ git clone <this repository> lazyhunt && cd lazyhunt
 uv sync
 ```
 
+Every command is `uv run lazyhunt <command>` (`uv run lazyhunt --help`
+lists them). The older forms `uv run cli.py …` and `uv run bot.py` still
+work.
+
 ## 3. Create your Telegram bot
 
 Do this once, in the Telegram app, before the wizard:
@@ -77,7 +86,7 @@ Already have a bot? In @BotFather send `/mybots`, pick your bot and tap
 ## 4. Run the setup wizard
 
 ```bash
-uv run cli.py init
+uv run lazyhunt init
 ```
 
 The wizard only sets up the bot; everything about you comes later, in
@@ -117,7 +126,7 @@ of the wizard speaks the language you choose.
    not a bot token (for example your AI key) and shows only its last 4
    characters. Your numeric user id is **not** asked: the bot
    pairs with you through a one-time code when it starts (step 5). If you
-   already know it, `uv run cli.py init --owner-id <id>` writes it.
+   already know it, `uv run lazyhunt init --owner-id <id>` writes it.
 5. **Bridge secret.** A long random secret is generated for the extension.
    You never copy it: the bot gives the extension a one-time pairing code
    (`/connect`, step 7).
@@ -140,10 +149,10 @@ Both files are gitignored. Secrets are read from the environment only;
 values put in TOML files are ignored. Manual setup is still possible: copy
 `.env.example` and `config.example.toml` and edit them.
 
-## 5. Start the bot
+## 5. Start the bot and claim it
 
 ```bash
-uv run bot.py
+uv run lazyhunt bot
 ```
 
 **The first time**, the terminal shows a one-time code such as
@@ -153,12 +162,12 @@ that to your bot: it answers that you are its owner and saves your id as
 Until then it ignores every message and gives no answer to a wrong code. The
 code works once, for 30 minutes; after 5 wrong tries it stops working, and a
 restart prints a new one. It is shown only in a terminal, never in a log
-file, so run `uv run bot.py` in a terminal the first time even if you later
+file, so run `uv run lazyhunt bot` in a terminal the first time even if you later
 run it as a service.
 
-Then send `/help`. With an empty profile it answers in **setup mode**: only
-`/help`, `/start`, `/setup` and `/connect` work until the profile is
-complete, and `/start` tells you to run `/setup`.
+With an empty profile the bot is in **setup mode**: only `/help`, `/start`,
+`/setup` and `/connect` work until the profile is complete, and `/start`
+tells you to run `/setup`, the next step.
 
 The bot runs as long as that terminal stays open. To keep it running in the
 background or start it when you log in (systemd, launchd or Task Scheduler),
@@ -198,9 +207,7 @@ bot switches to normal mode right after Confirm, with no restart. The reply ends
 the next step: suggesting searches in the extension (step 7). Every question,
 file and limit: [onboarding.md](onboarding.md).
 
-**Change your profile later** with `/setup <section>` (for example
-`/setup salary`), which re-asks only that part, prefilled with your current
-answers, or in the extension's **Options › Profile** tab.
+You can change any answer later (step 9).
 
 For an advanced, hand-written profile (projects, base cover letter, voice
 sample, your own role families), the [profiles README](../profiles/README.md)
@@ -235,8 +242,34 @@ Click **Check now** in the extension's toolbar popup to run a round
 immediately (when it cannot scan it says why at once: bot not reachable,
 secret rejected, `/setup` not finished, no searches, or no portal enabled;
 **Pause** stops a round in progress), or paste an offer link into Telegram with `/analyze <url>`.
-After that, rounds run on their own every 60 minutes by default. `/pause`
-stops every automatic task at once (`/pausa` in Spanish; both work).
+After that, rounds run on their own every 60 minutes by default.
+
+## 9. Day to day
+
+Everything is set up; from here on, this is how you use lazyhunt. Each
+command has a Spanish name too (shown with `ui_language = "es"`); both work.
+
+- **Offer cards.** Each new offer arrives as a card with its score, verdict
+  and buttons: **Generate CV** (switch **Language** and **Variant** first if
+  you like), **Cover letter**, **Research salary**, **Mark as sent** and
+  **Discard**. Under a CV that lazyhunt created in `/setup`, **Adapt to this
+  offer** proposes small, reviewable changes. The
+  [README](../README.md#8-day-to-day) explains every button.
+- **Base CVs.** `/cvs` lists them and sends, re-templates or rebuilds them;
+  `/setup cvs` adds the ones you skipped.
+- **Tracking.** `/status` (`/estado`) lists your last 10 offers and
+  `/status <id>` shows one; `/sent <id>` records an application;
+  `/outcome <id>` records what happened next; `/panel` sends an offline
+  dashboard.
+- **Interviews.** `/prep <id>` builds a preparation sheet; `/star` keeps your
+  STAR stories.
+- **Pause.** `/pause` stops every automatic task at once and `/resume`
+  restarts them; the extension popup has the same **Pause** button.
+- **Change your profile.** `/setup <section>` (for example
+  `/setup salary`) re-asks only that part, prefilled with your current
+  answers, or use the extension's **Options › Profile** tab.
+
+`/help` lists every command and button in the bot.
 
 ## Revoking access
 

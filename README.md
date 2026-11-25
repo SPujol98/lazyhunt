@@ -61,7 +61,7 @@ There is no server, no account and no shared backend. Everything the bot knows a
 - One tap for a **tailored one-page CV** (Spanish, English or Catalan) and a **cover letter** built on your own base letter.
 - **Tracking** of what you sent, follow-up reminders after 10 days of silence, an Excel export and an offline HTML dashboard.
 - **Interview prep**: a bank of STAR stories from your profile and a preparation sheet per interview stage.
-- A **kill switch**: `/pause` stops everything automatic and survives restarts.
+- A **kill switch** that stops everything automatic and survives restarts.
 
 > [!NOTE]
 > The Telegram interface follows **your system language** (English or Spanish); set `ui_language = "en"` or `"es"` to force one (see [Configuration](#configuration)). Your CVs and cover letters keep following the language of each offer.
@@ -70,7 +70,10 @@ There is no server, no account and no shared backend. Everything the bot knows a
 
 🇪🇸 ¿Prefieres español? [Guía rápida en español](docs/guia-rapida-es.md)
 
-From a fresh clone to your first scored offer takes about 20 minutes. You do not write any profile file by hand: a short terminal wizard sets up the bot, and the bot itself then asks about you in Telegram (about 10 minutes). Every step below is also in the longer [getting-started guide](docs/getting-started.md).
+From a fresh clone to your first scored offer takes about 20 minutes. Follow the steps in order: install, create your Telegram bot, run the setup wizard, start the bot and claim it, answer `/setup` in Telegram, load the extension, get your first offer. How to use the bot day to day comes last, once everything is set up. You do not write any profile file by hand: a short terminal wizard sets up the bot, and the bot itself then asks about you in Telegram (about 10 minutes). Every step below is also in the longer [getting-started guide](docs/getting-started.md).
+
+> [!IMPORTANT]
+> Don't let your coding assistant fill in your profile: use `/setup`. If you set lazyhunt up with Claude Code, Codex or another coding agent, it reads `AGENTS.md`, which tells it to leave `profiles/` to the bot.
 
 ### What you need
 
@@ -112,7 +115,7 @@ cd lazyhunt
 uv sync
 ```
 
-`uv sync` creates a virtual environment and installs everything; you do not need to activate anything, just prefix commands with `uv run`.
+`uv sync` creates a virtual environment and installs everything; you do not need to activate anything, just prefix commands with `uv run`. Every command is `uv run lazyhunt <command>` (`uv run lazyhunt --help` lists them); the older `uv run cli.py …` and `uv run bot.py` forms still work.
 
 ### 2. Create your Telegram bot
 
@@ -129,7 +132,7 @@ Already have a bot? In @BotFather send `/mybots`, pick your bot and tap **API To
 ### 3. Run the setup wizard
 
 ```bash
-uv run cli.py init
+uv run lazyhunt init
 ```
 
 The wizard only sets up the bot itself; everything about you comes later, in Telegram. It asks everything first, shows you a summary, and **writes nothing until you confirm**. Press Enter to skip any step; it is safe to run again and never replaces a value without asking.
@@ -137,7 +140,7 @@ The wizard only sets up the bot itself; everything about you comes later, in Tel
 1. **Bot language.** `auto` (default, your system language), `en` or `es`: the language of the Telegram bot, the command line and the dashboard. It is saved as `ui_language`, and the wizard itself continues in that language.
 2. **Prerequisites.** Checks Python, `uv`, that `claude` is installed and logged in (only the yes/no is read) and whether `codex` is installed. If something is missing it tells you how to fix it and carries on.
 3. **AI provider.** `claude_code` (default), `codex_cli`, `anthropic` or `openai_compatible`. The two CLIs use your own login and need no key. For `anthropic` it asks your API key (hidden). For `openai_compatible` it offers presets (OpenAI, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, or another URL), then the model (filled in from the preset) and the API key (hidden; for a local Ollama or LM Studio server any value works, and Enter sets a placeholder).
-4. **Telegram.** Paste the whole bot token from step 2 (the input is hidden: nothing appears while you paste). The wizard repeats the @BotFather steps, asks again if the value is not a bot token (for example your AI key) and shows only its last 4 characters. You do **not** need your numeric user id: when the bot starts it prints a one-time code, and whoever sends `/start <code>` to the bot first becomes its only owner (see step 4). Already know your id? `uv run cli.py init --owner-id <id>` writes it.
+4. **Telegram.** Paste the whole bot token from step 2 (the input is hidden: nothing appears while you paste). The wizard repeats the @BotFather steps, asks again if the value is not a bot token (for example your AI key) and shows only its last 4 characters. You do **not** need your numeric user id: when the bot starts it prints a one-time code, and whoever sends `/start <code>` to the bot first becomes its only owner (see step 4). Already know your id? `uv run lazyhunt init --owner-id <id>` writes it.
 5. **Bridge secret.** Generates a long random secret that the extension uses to talk to the bot. You never copy it: the bot gives the extension a one-time pairing code (step 6).
 6. **Profile directory.** Creates `profiles/me` (gitignored). Choose **empty** (the default and the recommended choice): the bot then starts in *setup mode* and builds the profile with you through `/setup`. The other choices are a skeleton with placeholders to fill in by hand, or a copy of the fictional demo profile to try things first.
 7. **Gmail.** Only a pointer to [docs/gmail.md](docs/gmail.md); it stays off.
@@ -153,10 +156,10 @@ Where things end up:
 > [!TIP]
 > Want to look around before answering anything about yourself? Pick the demo profile in the wizard (or set `profile_dir = "profiles/demo"`). It belongs to a fictional person and shows the format of every file.
 
-### 4. Start the bot
+### 4. Start the bot and claim it
 
 ```bash
-uv run bot.py
+uv run lazyhunt bot
 ```
 
 It first checks the bot token with Telegram. If Telegram rejects it, the bot prints one line and stops (`Telegram rejected the bot token. Check CVA_TELEGRAM_TOKEN in .env — it must be the token @BotFather gave you.`); the token itself is never printed or logged.
@@ -169,9 +172,9 @@ lazyhunt has no owner yet. To become its owner, send this message to your bot in
     /start ABCD-EFGH
 ```
 
-Send exactly that to your bot. It answers that you are now its owner and saves your id as `owner_telegram_id` in `config.local.toml`; from then on it answers **only** you. Until then it ignores every message, and a wrong code gets no answer. The code works once, for 30 minutes, and after 5 wrong tries it stops working: restart the bot for a new one. It is shown only in a terminal, never in a log file: if you run the bot as a service from the start, run `uv run bot.py` once in a terminal first.
+Send exactly that to your bot. It answers that you are now its owner and saves your id as `owner_telegram_id` in `config.local.toml`; from then on it answers **only** you. Until then it ignores every message, and a wrong code gets no answer. The code works once, for 30 minutes, and after 5 wrong tries it stops working: restart the bot for a new one. It is shown only in a terminal, never in a log file: if you run the bot as a service from the start, run `uv run lazyhunt bot` once in a terminal first.
 
-Then send `/help`. With an empty profile it answers in **setup mode**: only `/help`, `/start`, `/setup` and `/connect` work until your profile is complete.
+With an empty profile the bot is in **setup mode**: only `/help`, `/start`, `/setup` and `/connect` work until your profile is complete, and `/start` tells you to run `/setup`, the next step.
 
 The bot runs as long as that terminal stays open. To keep it running in the background, or to start it when you log in (systemd on Linux, launchd on macOS, Task Scheduler on Windows), see [docs/running.md](docs/running.md).
 
@@ -187,7 +190,7 @@ Send `/setup` (`/configurar` in Spanish). The bot asks one question per message,
 
 Every step has **Back** and **Cancel**, and nothing is saved until you press **Confirm** on the summary. Confirm is all or nothing: if anything fails, every file is put back as it was and you can simply press Confirm again. It writes `preferences.toml`, `profile.toml`, a minimal `claims.json` with only what you stated, the judge files and your base CVs, activates the portals you chose, and switches the bot to normal mode on its own. The full list of questions and files: [docs/onboarding.md](docs/onboarding.md).
 
-**Change your profile later** with `/setup <section>` (for example `/setup salary`), which re-asks only that part prefilled with your current answers, or in the extension's **Options › Profile** tab. For advanced, hand-written profiles (projects, cover-letter base, voice sample, role families), see [profiles/README.md](profiles/README.md).
+You can change any answer later (see [step 8](#8-day-to-day)).
 
 ### 6. Load the extension
 
@@ -227,9 +230,11 @@ A card arrives with the score, the verdict, what you match and what you do not, 
   <sub>An offer card. (Illustration of a real bot message, demo data.)</sub>
 </p>
 
-### 8. Generate a CV and a cover letter
+### 8. Day to day
 
-On an offer card (button names are shown in English here; with `ui_language = "es"` the bot shows the Spanish name in brackets):
+Everything is set up. From here on, this is how you use lazyhunt.
+
+**The offer card.** On an offer card (button names are shown in English here; with `ui_language = "es"` the bot shows the Spanish name in brackets):
 
 - **📄 Generate CV** (*Generar CV*) builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
 - **✉️ Cover letter** (*Carta de presentación*) keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
@@ -238,13 +243,20 @@ On an offer card (button names are shown in English here; with `ui_language = "e
 - **✅ Mark as sent** (*Marcar enviada*, or `/sent 42`) records that you applied.
 - **🔎 On LinkedIn / On Google / On InfoJobs** (*En …*), the card's last row, open a search for the same offer (title + company) on another site, so you can apply there instead; the offer's own portal is left out (an InfoJobs offer gets Indeed instead).
 
-### 9. Day to day
+**Base CVs.** `/cvs` lists your base CVs (position × language) and what each is made of; its buttons send the PDF and, for the ones lazyhunt created, change the template or rebuild them. `/setup cvs` (`/configurar cvs`) adds the ones you skipped.
+
+**Tracking.**
 
 - Let rounds run in the background; review the cards that arrive.
+- `/status` (`/estado`) lists your last 10 offers; `/status 42` shows one. The match column is the score at send time, else the analysis score (the judge score in hybrid mode), and `—` only for offers not analysed yet.
 - When a company answers, use `/outcome <id>` to record progress. Interviews and rejections you record can become **calibration examples** (`/calibration`), so the score learns what actually works for you.
 - Before an interview, `/prep <id>` gives you a preparation sheet and `/star` keeps your STAR stories.
 - `/panel` sends an offline HTML dashboard of everything so far.
 - Going on holiday? `/pause` stops scans, automatic analysis and Gmail; `/resume` resumes. The extension popup has the same **Pause** button.
+
+**Change your profile** with `/setup <section>` (for example `/setup salary`), which re-asks only that part prefilled with your current answers, or in the extension's **Options › Profile** tab. For advanced, hand-written profiles (projects, cover-letter base, voice sample, role families), see [profiles/README.md](profiles/README.md). Don't let your coding assistant fill in your profile: use `/setup`.
+
+Every command is in [Telegram commands](#telegram-commands) below, and `/help` lists them in the bot.
 
 ## Telegram commands
 
@@ -281,6 +293,7 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | | `/panel` | Offline HTML dashboard: metrics, charts, alerts, a filterable table and discarded offers. |
 | Beacons and searches | `/keywords [profile]` | The keywords seen in offers and how often, optionally filtered by profile. |
 | | `/beacons` | Every watched search ("beacon") with its status and last check. |
+| | `/searches` | Per watched search over 14 days: rounds, offers found, new ones and the last failure, zero-new first, to spot searches worth removing (counts accumulate from this version on). |
 | | `/beacon resume\|disable <id>` | Resumes a paused beacon or disables it. |
 | Interviews | `/star` | Builds your STAR stories (situation, task, action, result) and lists them to view, edit or delete. |
 | | `/prep <id>` | Pick a stage (HR, technical, final) and get an HTML sheet with topics, gaps, STAR stories, salary and questions. |
@@ -289,14 +302,14 @@ Send `/help` at any time for the full list with an example of each. The ones you
 | | `/setup [section]` | Guided setup of your profile, or only one section of it, prefilled with your current answers: [docs/onboarding.md](docs/onboarding.md). |
 | | `/help` (or `/start`) | Commands and buttons. |
 
-Six commands have a Spanish name that still works and is shown when `ui_language = "es"`: `/rescue` is `/rescatar`, `/calibration` is `/calibracion`, `/pause` is `/pausa`, `/resume` is `/reanudar`, `/basecover` is `/cartabase` and `/setup` is `/configurar`. Card buttons follow the same language (for example **Generate CV** or **Generar CV**). `/help` explains every one of them.
+Seven commands have a Spanish name that also works and is shown when `ui_language = "es"`: `/status` is `/estado`, `/rescue` is `/rescatar`, `/calibration` is `/calibracion`, `/pause` is `/pausa`, `/resume` is `/reanudar`, `/basecover` is `/cartabase` and `/setup` is `/configurar`. Card buttons follow the same language (for example **Generate CV** or **Generar CV**). `/help` explains every one of them.
 
 The same service is scriptable from the command line:
 
 ```bash
-uv run cli.py --help
-uv run cli.py analyze <id>
-uv run cli.py judge-eval      # measure the judge against labelled offers (--details: per offer)
+uv run lazyhunt --help
+uv run lazyhunt analyze <id>
+uv run lazyhunt judge-eval      # measure the judge against labelled offers (--details: per offer)
 ```
 
 </details>
@@ -398,8 +411,8 @@ Everything that describes you or your search is yours to change, and none of it 
 
 - Check that it is running: the terminal where you started it, or your service (see [docs/running.md](docs/running.md)).
 - `CVA_TELEGRAM_TOKEN` in `.env` must be the token BotFather gave you; after `/revoke`, paste the new one and restart.
-- Has it got an owner? While `owner_telegram_id` is unset (`0`) the bot ignores every message except `/start <code>` with the code printed in its terminal (the log says `waiting for the owner claim`; started without a terminal it prints no code and says to run `uv run bot.py` once in a terminal). After 5 wrong codes, or 30 minutes, restart it for a new code. Once paired, it answers only the id saved in `owner_telegram_id`.
-- `uv run cli.py check`, run in the lazyhunt folder, loads your settings and profile without Telegram and runs any due beacons stored in the bot; if a setting is wrong, the error names it.
+- Has it got an owner? While `owner_telegram_id` is unset (`0`) the bot ignores every message except `/start <code>` with the code printed in its terminal (the log says `waiting for the owner claim`; started without a terminal it prints no code and says to run `uv run lazyhunt bot` once in a terminal). After 5 wrong codes, or 30 minutes, restart it for a new code. Once paired, it answers only the id saved in `owner_telegram_id`.
+- `uv run lazyhunt check`, run in the lazyhunt folder, loads your settings and profile without Telegram and runs any due beacons stored in the bot; if a setting is wrong, the error names it.
 
 </details>
 
@@ -413,7 +426,7 @@ When the AI provider has no valid login or key (Claude Code login expired or not
 - New offers are kept pending, with no error cards.
 - You get **one** message with the cause and the fix, and two buttons: **🔄 Check now** (tests the AI at once) and **▶️ Resume** (ends the pause without testing).
 - The bot tests the AI every 15 minutes (or at the reset time the usage-limit message gives) and resumes by itself: "✅ AI is back, analysing N pending offers". The offers that failed just before the pause are analysed again too.
-- `/status` and `uv run cli.py check` show the pause while it lasts; `/analyze` answers with the same message.
+- `/status` and `uv run lazyhunt check` show the pause while it lasts; `/analyze` answers with the same message.
 
 The fix depends on the provider:
 
@@ -518,7 +531,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.7`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.8`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

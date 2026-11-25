@@ -215,8 +215,10 @@ async def _run_gmail_sync(bot: Any, sync: Any, owner: int, lang: Lang) -> None:
         return
     from cva.notifier import gmail_proposal_keyboard, gmail_proposal_message
 
-    async def send_proposal(proposal: Any) -> None:
-        await bot.send_message(
+    async def send_proposal(proposal: Any) -> Any:
+        # Returned so GmailSync can remember the card's chat/message id and
+        # edit sibling cards to "already handled" when one is answered.
+        return await bot.send_message(
             owner,
             gmail_proposal_message(proposal, lang=lang),
             reply_markup=gmail_proposal_keyboard(proposal.message_id, lang=lang),

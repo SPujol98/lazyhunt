@@ -8,10 +8,10 @@ WAL journal, ``PRAGMA user_version`` migrations only, DDL from
 import json
 import re
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -31,6 +31,10 @@ SCHEMA_VERSION: Final[int] = 24
 NOTE_SEPARATOR: Final[str] = " · "
 # app_state key of the persistent global pause ("1"/"0"; absent = never toggled).
 PAUSED_STATE_KEY: Final[str] = "paused"
+# app_state key: JSON ``{beacon_name: [[iso_date, new_count], ...]}``, one row per
+# day, only the last ``SEARCH_WINDOW_DAYS`` days (appended by the bridge).
+BEACON_NEW_COUNTS_KEY: Final[str] = "beacon_new_counts"
+SEARCH_WINDOW_DAYS: Final[int] = 14
 # Post-send estados the owner can record from /outcome (all already valid in
 # the offers.estado CHECK).
 OUTCOME_ESTADOS: Final[tuple[str, ...]] = (
@@ -657,6 +661,11 @@ ScanStatus = Literal[
 ]
 
 
+_FAILED_SCANS: Final[frozenset[str]] = frozenset(
+    {"rate_limited", "session_expired", "error"}
+)
+
+
 class BeaconScanRow(BaseModel):
     """One scan of a beacon as reported by the extension (health history)."""
 
@@ -666,6 +675,22 @@ class BeaconScanRow(BaseModel):
     status: ScanStatus
     jobs_found: int
     empty_company: int
+
+
+class SearchOverviewRow(BaseModel):
+    """One watched search over the last ``SEARCH_WINDOW_DAYS`` days (/searches)."""
+
+    name: str
+    rounds: int
+    found: int
+    new: int
+    last_failure: str | None = None
+
+
+def _window_start(today: str) -> str:
+    """First ISO date (inclusive) of the window that ends on ``today``."""
+    day = datetime.fromisoformat(today[:10]).date()
+    return (day - timedelta(days=SEARCH_WINDOW_DAYS - 1)).isoformat()
 
 
 class GmailProposalRow(BaseModel):
@@ -1052,6 +1077,63 @@ class OfferRepository:
         ).fetchall()
         return [BeaconScanRow.model_validate(dict(r)) for r in rows]
 
+    def _new_counts(self) -> dict[str, list[tuple[str, int]]]:
+        """The stored per-search NEW counts inside the window (corrupt -> empty)."""
+        start = _window_start(self._clock())
+        try:
+            raw = json.loads(self.get_state(BEACON_NEW_COUNTS_KEY) or "{}")
+            kept: dict[str, list[tuple[str, int]]] = {}
+            for name, rows in raw.items():
+                days = [(str(d), int(n)) for d, n in rows if str(d) >= start]
+                if days:
+                    kept[str(name)] = days
+        except (ValueError, TypeError):
+            return {}
+        return kept
+
+    def record_beacon_new(self, beacon_name: str, new: int) -> None:
+        """Add ``new`` to today's row of ``beacon_name`` and prune old days.
+
+        Read-modify-write: the caller holds the bridge lock.
+        """
+        counts = self._new_counts()
+        today = self._clock()[:10]
+        days = counts.setdefault(beacon_name.strip(), [])
+        if days and days[-1][0] == today:
+            days[-1] = (today, days[-1][1] + new)
+        else:
+            days.append((today, new))
+        self.set_state(BEACON_NEW_COUNTS_KEY, json.dumps(counts))
+
+    def search_overview(self) -> list[SearchOverviewRow]:
+        """Every search with scans or new offers in the window, zero-new first."""
+        start = _window_start(self._clock())
+        new = {n: sum(c for _, c in d) for n, d in self._new_counts().items()}
+        rows = self._conn.execute(
+            "SELECT beacon_name, at, status, jobs_found FROM beacon_scans "
+            "WHERE at >= ? ORDER BY id",
+            (start,),
+        ).fetchall()
+        stats: dict[str, list[Any]] = {}
+        for name, at, status, found in rows:
+            entry = stats.setdefault(name, [0, 0, None])
+            entry[0] += 1
+            entry[1] += found
+            if status in _FAILED_SCANS:
+                entry[2] = f"{status} ({at[:10]})"
+        names = set(stats) | set(new)
+        out = [
+            SearchOverviewRow(
+                name=n,
+                rounds=stats.get(n, [0, 0, None])[0],
+                found=stats.get(n, [0, 0, None])[1],
+                new=new.get(n, 0),
+                last_failure=stats.get(n, [0, 0, None])[2],
+            )
+            for n in names
+        ]
+        return sorted(out, key=lambda r: (r.new, r.found, r.name))
+
     # --- Gmail proposals (v22) ---------------------------------------------
 
     def add_gmail_proposal(
@@ -1063,12 +1145,15 @@ class OfferRepository:
         subject: str,
         received_at: str,
         proposed_estado: str,
+        decision: str = "pending",
     ) -> bool:
-        """Record a pending proposal; False when the message already has one."""
+        """Record a proposal (``pending`` unless told otherwise, e.g. ``stale``
+        for a duplicate kept only as evidence); False when the message already
+        has one."""
         cursor = self._conn.execute(
             "INSERT OR IGNORE INTO gmail_messages (message_id, offer_id, sender, "
             "subject, received_at, proposed_estado, decision, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 message_id,
                 offer_id,
@@ -1076,6 +1161,7 @@ class OfferRepository:
                 subject,
                 received_at,
                 proposed_estado,
+                decision,
                 self._clock(),
             ),
         )
@@ -1097,6 +1183,15 @@ class OfferRepository:
             "SELECT * FROM gmail_messages WHERE message_id = ?", (message_id,)
         ).fetchone()
         return None if row is None else GmailProposalRow.model_validate(dict(row))
+
+    def pending_gmail_proposals(self, offer_id: int) -> list[GmailProposalRow]:
+        """The unanswered proposals of ``offer_id``, oldest first."""
+        rows = self._conn.execute(
+            "SELECT * FROM gmail_messages WHERE offer_id = ? AND decision = 'pending' "
+            "ORDER BY created_at, message_id",
+            (offer_id,),
+        ).fetchall()
+        return [GmailProposalRow.model_validate(dict(r)) for r in rows]
 
     def set_gmail_decision(
         self, message_id: str, decision: str, *, expect: str | None = None
@@ -1766,6 +1861,17 @@ class OfferRepository:
         if row is None:
             return None
         return MatchRow.model_validate(dict(zip(row.keys(), row, strict=True)))
+
+    def analysis_scores(self, offer_ids: Sequence[int]) -> dict[int, int]:
+        """Stored analysis score per offer (only analysed offers appear)."""
+        if not offer_ids:
+            return {}
+        marks = ",".join("?" * len(offer_ids))
+        rows = self._conn.execute(
+            f"SELECT offer_id, score FROM match_results WHERE offer_id IN ({marks})",
+            tuple(offer_ids),
+        ).fetchall()
+        return {int(r[0]): int(r[1]) for r in rows}
 
     def save_judge_result(
         self, offer_id: int, *, score: int, verdict: str, judgment_json: str

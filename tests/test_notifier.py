@@ -444,7 +444,7 @@ def test_help_message_lists_commands() -> None:
     from cva.notifier import help_message
 
     text = help_message()
-    for command in ("/analyze", "/cv", "/status", "/sent", "/export", "/keywords"):
+    for command in ("/analyze", "/cv", "/estado", "/sent", "/export", "/keywords"):
         assert command in text
 
 

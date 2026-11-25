@@ -628,8 +628,10 @@ def validate_letter(
 
 # --- cover-letter-v2: assembled letter ----------------------------------------
 
-LETTER_MIN_WORDS: Final[int] = 250
-LETTER_MAX_WORDS: Final[int] = 350
+# Recruiters and tech leads skim a letter: 150-250 words is read whole
+# (beta.8 owner feedback), a longer one gets half-read.
+LETTER_MIN_WORDS: Final[int] = 150
+LETTER_MAX_WORDS: Final[int] = 250
 Register = Literal["formal", "cercano"]
 _COMPANY_SUFFIXES: Final[frozenset[str]] = frozenset(
     {"sl", "sa", "slu", "sau", "inc", "ltd", "llc", "gmbh", "corp", "co"}
@@ -639,9 +641,9 @@ _VOSOTROS: Final[re.Pattern[str]] = re.compile(
 )
 # Generated-part budgets (words), checked exactly as the prompt states them:
 # anything outside triggers the retry and, if it persists, a visible warning.
-_LINKING_MAX_WORDS: Final[int] = 25
-_P2_RANGE: Final[tuple[int, int]] = (50, 70)
-_P3_RANGE: Final[tuple[int, int]] = (50, 80)
+_LINKING_MAX_WORDS: Final[int] = 20
+_P2_RANGE: Final[tuple[int, int]] = (25, 45)
+_P3_RANGE: Final[tuple[int, int]] = (25, 50)
 _FILLER: Final[tuple[str, ...]] = (
     "empresa lider",
     "lider del sector",
@@ -888,20 +890,38 @@ def _letter_system_prompt(career_change: str) -> str:
         '- register: "formal" only for a clearly corporate company (bank, '
         'insurer, consultancy, multinational, public body); otherwise "cercano". '
         'In Spanish, formal means "ustedes" and cercano means "vosotros".\n'
-        "- linking: ONE sentence of at most 25 words that connects what the company does, or the "
+        f"- linking: ONE sentence of at most {_LINKING_MAX_WORDS} words that "
+        "connects what the company does, or the "
         "role, with what the candidate does. It opens the letter right after the "
         "salutation and flows into the fixed text that follows.\n"
-        "- why_company: paragraph 2 (50-70 words), why THIS company: what it does "
+        f"- why_company: paragraph 2 ({_P2_RANGE[0]}-{_P2_RANGE[1]} words), why THIS company: what it does "
         "and why the candidate's background fits it, with at least one verifiable "
         "fact from the offer or the researched facts. No filler such as 'empresa "
         "líder' or 'cultura'; the paragraph must not be reusable for another "
         "company.\n"
-        "- why_role: paragraph 3 (50-80 words), why THIS role: 2-3 requirements of "
-        "the offer, in the offer's own vocabulary, each tied to a concrete real "
-        "claim of the candidate; do not repeat what the fixed text already says "
-        "(Python and Django, the RAG project) and do not re-describe it; when a requirement is not "
-        "backed by the claims, name the nearest verified experience in one clause "
-        "and never claim the missing skill.\n"
+        f"- why_role: paragraph 3 ({_P3_RANGE[0]}-{_P3_RANGE[1]} words), why THIS "
+        "role: 2-3 requirements of the offer, in the offer's own vocabulary, each "
+        "tied to a concrete real claim of the candidate; do not repeat what the "
+        "fixed text already says (Python and Django, the RAG project) and do not "
+        "re-describe it.\n"
+        "- Short: the whole letter (fixed text included) is "
+        f"{LETTER_MIN_WORDS}-{LETTER_MAX_WORDS} words, because the reader skims "
+        "it. Lead with the strongest evidence: pick the 2-3 most offer-relevant "
+        "concrete achievements from the claims (numbers, benchmarks, test counts) "
+        "and state them first; no filler, no sentence that carries no fact.\n"
+        "- Do not explain what RAG, tool calling, LLMs, agents, embeddings or "
+        "any other term of the candidate's stack is: the reader is technical. No "
+        "definitions ('X is a technique that...', 'X, which allows...', 'X es "
+        "una técnica que...').\n"
+        "- Never state a gap: do not mention tools or skills the claims do not "
+        "back, and never write that the candidate has not used, lacks or will "
+        "learn something ('I have not used', 'aún no he usado', 'no tengo "
+        "experiencia con'). When the offer asks for something missing, highlight "
+        "the closest real experience instead.\n"
+        "- Address only the hiring company named in the user message. Never "
+        "name a different employer: not its parent group, owner or investor, nor "
+        "a recruiter or job platform, even when the offer or the facts mention "
+        "one.\n"
         "Rules:\n"
         "1. Facts about the candidate ONLY from the claims list; facts about the "
         "company ONLY from the offer text and the researched facts. Never invent "
@@ -964,15 +984,28 @@ def build_letter_parts_prompt(
     emphasis = branch_emphasis_for(branch, persona, families)
     system = _with_emphasis(_letter_system_prompt(persona.career_change), emphasis)
     fixed = _fixed_words(base, language, company)
-    low = max(LETTER_MIN_WORDS - fixed, 60)
+    low = max(LETTER_MIN_WORDS - fixed, _P2_RANGE[0] + _P3_RANGE[0] + 5)
     high = max(LETTER_MAX_WORDS - fixed, low + 20)
+    name = known_company(company)
+    hiring = (
+        f"Hiring company: {name}. Address {name} only and never name another "
+        "employer (a parent group, owner, investor, recruiter or job platform), "
+        "even when the offer or the facts mention one.\n"
+        if name
+        else "Hiring company: unknown. Name only the employer that is hiring, "
+        "never its parent group or a recruiter, and never name another employer.\n"
+    )
     user = (
         f"Language of the letter: {_LANGUAGE_NAME.get(language, 'Spanish')}\n"
         f"Position: {title}\n"
-        f"Company: {known_company(company) or 'unknown'}\n"
-        f"Word budget: the fixed text has about {fixed} words; the three generated "
-        f"parts together must add {low}-{high} words (linking sentence 15-30, "
-        f"paragraph 2 about {low // 3 + 5}-{high // 3 + 10}, paragraph 3 the rest).\n\n"
+        f"Company: {name or 'unknown'}\n"
+        f"{hiring}"
+        f"Word budget: the whole letter must stay within "
+        f"{LETTER_MIN_WORDS}-{LETTER_MAX_WORDS} words; the fixed text has about "
+        f"{fixed} words, so the three generated parts together must add "
+        f"{low}-{high} words (linking sentence 10-{_LINKING_MAX_WORDS}, paragraph 2 "
+        f"about {_P2_RANGE[0]}-{_P2_RANGE[1]}, paragraph 3 the rest). Shorter is "
+        "better than padded.\n\n"
         f"Fixed text that follows your linking sentence in paragraph 1 (do not repeat it):\n"
         f"{base.paragraph1}\n\n"
         f"Fixed closing (do not repeat it):\n{base.closing}\n\n"
@@ -1022,11 +1055,14 @@ async def _review_parts(
 
 
 _QUALITY_REWRITE_TASK: Final[str] = (
-    "QUALITY REWRITE: the parts below read as florid or generic. Rewrite them in "
-    "a plain, specific first-person style: short sentences, concrete project "
-    "names and numbers from the claims, no superlatives, no intensifiers, no "
-    "'passion' language, no rhetorical openings. Keep every rule above, the "
-    "same facts and the word budgets. Fix these findings:\n"
+    "QUALITY REWRITE: the parts below read as florid, generic or too long. "
+    "Rewrite them in a plain, specific first-person style: short sentences, "
+    "concrete project names and numbers from the claims, the strongest evidence "
+    "first, no superlatives, no intensifiers, no 'passion' language, no "
+    "rhetorical openings, no definitions of technical terms, no mention of "
+    "skills the candidate lacks. Tighten: cut filler and explanations rather "
+    "than adding text, and never pad to reach a length. Keep every rule above, "
+    "the same facts and the word budgets. Fix these findings:\n"
 )
 
 
@@ -1082,9 +1118,12 @@ async def generate_cover_letter(
 
     Quality gate: the letter is scored by :func:`letter_quality`
     (``offer_requirements`` are the offer's must-have names, for coverage).
-    Below :data:`QUALITY_THRESHOLD`, ONE extra rewrite gets the findings, and
+    Below :data:`QUALITY_THRESHOLD`, or when the letter names an employer other
+    than ``company`` (its parent group or a recruiter named in the offer), ONE
+    extra rewrite gets the findings, and
     the better-scoring version is kept, provided the rewrite does not add
-    validator problems. The score is returned as ``result.quality``.
+    validator problems. The score is returned as ``result.quality``; a wrong
+    employer that survives the rewrite is also a warning.
     """
     # Local import: letter_quality imports this module.
     from cva.match.letter_quality import (
@@ -1152,6 +1191,10 @@ async def generate_cover_letter(
         )
     )
 
+    # Employer names the letter must not use: the offer's (and the facts')
+    # parent group, owner or recruiter of the card's company.
+    company_sources = "\n".join((offer_text, *(item.fact for item in facts)))
+
     def _quality(candidate: LetterParts) -> LetterQuality:
         return letter_quality(
             assemble_letter(base, candidate, language=language, company=company),
@@ -1159,10 +1202,13 @@ async def generate_cover_letter(
             language=language,
             grounding=grounding,
             exempt=exempt,
+            company=company,
+            offer_text=company_sources,
         )
 
     quality = _quality(parts)
-    if quality.score < QUALITY_THRESHOLD:
+    # A wrong employer is rewritten even when the score still passes.
+    if quality.score < QUALITY_THRESHOLD or quality.company_mismatch:
         rewritten = await _quality_rewrite(llm, system, user, parts, quality.feedback())
         if rewritten is not None:
             rewritten_problems = _check(rewritten)
@@ -1182,6 +1228,15 @@ async def generate_cover_letter(
         if problems
         else []
     )
+    if quality.wrong_company:
+        warnings.append(
+            t(
+                "notifier.letter_company_mismatch",
+                ui_lang,
+                company=known_company(company),
+                other=", ".join(quality.wrong_company),
+            )
+        )
     return CoverLetterResult(
         text=assemble_letter(base, parts, language=language, company=company),
         warnings=warnings,

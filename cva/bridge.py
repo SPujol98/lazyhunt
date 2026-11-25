@@ -662,6 +662,14 @@ def _process_payload(
     return {"received": received, "new": new, "skipped": skipped}
 
 
+def _record_new(repo: OfferRepository, beacon: str, new: int) -> None:
+    """Keep the search's NEW count for /searches; never breaks the payload."""
+    try:
+        repo.record_beacon_new(beacon, new)
+    except Exception as exc:  # noqa: BLE001 — a stats write never fails the POST
+        _LOG.warning("bridge could not record new counts for %r: %s", beacon, exc)
+
+
 def _title_filter_json(filt: TitleFilter) -> dict[str, Any]:
     """A title filter in the extension's shape (``TitleFilterPrefs.to_json``)."""
     return {
@@ -1071,6 +1079,7 @@ def _make_handler(
                     families=families,
                     lang=lang,
                 )
+                _record_new(repo, beacon, result["new"])
             if dropped:
                 result["dropped"] = len(dropped)
             self._send_json(200, result)
