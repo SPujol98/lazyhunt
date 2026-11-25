@@ -37,6 +37,9 @@ _SECRET_TOML_KEYS: frozenset[str] = frozenset(
         "ANTHROPIC_API_KEY",
         "bridge_secret",
         "CVA_BRIDGE_SECRET",
+        "claude_code_oauth_token",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CVA_CLAUDE_CODE_OAUTH_TOKEN",
     }
 )
 
@@ -169,6 +172,16 @@ class Settings(BaseSettings):
     # (they would silently switch the CLI from the subscription to API
     # billing). Set true only to deliberately let the CLI use them.
     claude_code_pass_api_key: bool = False
+    # Long-lived subscription token for an unattended bot (`claude
+    # setup-token`): env/.env only, handed to the `claude` child as
+    # CLAUDE_CODE_OAUTH_TOKEN (a .env value is not exported to the process
+    # environment by itself). Unset = the CLI's own login.
+    claude_code_oauth_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "CLAUDE_CODE_OAUTH_TOKEN", "CVA_CLAUDE_CODE_OAUTH_TOKEN"
+        ),
+    )
 
     # Codex CLI provider settings (used only when llm_provider == "codex_cli").
     # codex_cli_path may be a full path; codex_cli_model None keeps the CLI's

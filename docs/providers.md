@@ -46,6 +46,24 @@ silently switch from your subscription to API billing. To let it use them on
 purpose, set `claude_code_pass_api_key = true`. `CVA_*` variables (this app's
 own secrets) are never passed either way.
 
+### Unattended bots: a long-lived token
+
+The interactive login of `claude auth login` can expire ("this login reached
+its time limit and cannot be renewed"). For a bot that runs as a service, run
+`claude setup-token` once (it needs a Claude subscription) and put the token
+it prints in `.env`:
+
+```
+CLAUDE_CODE_OAUTH_TOKEN=...
+```
+
+cva reads it from `.env` (or the environment), never from `config.toml`, and
+hands it only to the `claude` child process. Restart the bot afterwards.
+
+When the login or a usage limit fails anyway, the bot pauses the automatic
+analysis with one alert and resumes by itself once the AI answers again (see
+"The AI stopped answering" in the README troubleshooting).
+
 Claude Code and Codex CLI are the providers that can research company facts
 and salaries on the web; the HTTP providers answer "not available" instead of
 guessing.

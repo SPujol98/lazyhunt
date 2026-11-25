@@ -88,6 +88,7 @@ from cva.match.interview_prep import (
     default_stage,
 )
 from cva.notifier import (
+    AI_OUTAGE,
     BEACON_DISABLE,
     BEACON_RESUME,
     CL,
@@ -102,6 +103,10 @@ from cva.notifier import (
     PREP,
     SAL,
     SentMessage,
+    ai_back_message,
+    ai_outage_keyboard,
+    ai_outage_message,
+    ai_status_line,
     analyze_failure_message,
     asks_cover_letter,
     backstop_error_message,
@@ -422,6 +427,14 @@ async def _analyze_and_reply(
     """Analyze a persisted offer; ANY failure replies naming the cause and
     RE-ARMS the paste state so the owner can re-paste without /analyze."""
     ui = _lang(context)
+    if (outage := service.ai_outage()) is not None:
+        # AI outage (llm-outage): no LLM call; the offer waits for the resume.
+        service.defer_for_ai_outage(offer_id)
+        await reply.reply_text(
+            ai_outage_message(outage, lang=ui),
+            reply_markup=ai_outage_keyboard(lang=ui),
+        )
+        return
     try:
         result = await service.analyze(offer_id)
         offer = service.offer(offer_id)
@@ -431,6 +444,14 @@ async def _analyze_and_reply(
         await reply.reply_text(offer_closed_message(lang=ui))
         return
     except Exception as exc:  # noqa: BLE001 — the chat IS the error surface
+        if (outage := service.note_ai_failure(exc)) is not None:
+            service.defer_for_ai_outage(offer_id)
+            service.mark_ai_outage_alerted()  # this reply IS the alert
+            await reply.reply_text(
+                ai_outage_message(outage, lang=ui),
+                reply_markup=ai_outage_keyboard(lang=ui),
+            )
+            return
         context.user_data[_PASTE_KEY] = True
         await reply.reply_text(analyze_failure_message(exc, lang=ui))
         return
@@ -1050,7 +1071,10 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     listing = "\n".join(
         offer_status_line(row, families=families, lang=lang) for row in rows
     )
-    await update.message.reply_text(listing or t("bot.no_offers", lang))
+    text = listing or t("bot.no_offers", lang)
+    if (outage := service.ai_outage()) is not None:
+        text = ai_status_line(outage, lang=lang) + "\n\n" + text
+    await update.message.reply_text(text)
 
 
 async def sent_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1801,6 +1825,36 @@ async def _cb_onboarding(press: _Press, parts: list[str]) -> bool:
     return True
 
 
+async def _cb_ai_outage(press: _Press, parts: list[str]) -> bool:
+    """``[🔄 Check now]`` probes at once; ``[▶️ Resume]`` ends the pause
+    without probing. Either way a recovery re-drives the parked offers."""
+    if parts not in (["check"], ["resume"]):
+        return False
+    service, query, ui = press.service, press.query, press.ui
+    if parts == ["resume"]:
+        pending: int | None = service.resume_ai()
+    else:
+        probe = await service.probe_ai(force=True)
+        if probe.status == "none":
+            await query.message.reply_text(t("notifier.ai.ok", ui))
+            return True
+        if probe.status != "recovered":
+            outage = service.ai_outage()
+            text = t("notifier.ai.still_down", ui)
+            if outage is not None:
+                text += "\n" + ai_outage_message(outage, lang=ui)
+            await query.message.reply_text(
+                text, reply_markup=ai_outage_keyboard(lang=ui)
+            )
+            return True
+        pending = probe.pending
+    handle = press.context.bot_data.get(bridge.BOT_DATA_KEY)
+    if handle is not None:
+        scheduler.redrive_retry_pending(service, handle)
+    await query.message.reply_text(ai_back_message(pending or 0, lang=ui))
+    return True
+
+
 # Every inline-button prefix (the first ``:`` field of the callback data, see
 # cva/notifier.py) and its handler. Payloads are a contract: cards stay in the
 # chat for weeks, so a prefix is never renamed or reused.
@@ -1829,6 +1883,7 @@ CALLBACK_HANDLERS: dict[str, _CallbackHandler] = {
     cv_catalog.PREFIX: _cb_cvs,
     CV_TAILOR: _cb_tailor,
     CV_TAILOR_ACTION: _cb_tailor_action,
+    AI_OUTAGE: _cb_ai_outage,
 }
 
 

@@ -2154,6 +2154,21 @@ class OfferRepository:
         )
         self._conn.commit()
 
+    def list_unanalyzed_since(self, day_iso: str) -> list[OfferRow]:
+        """Never-analysed link offers first seen on/after ``day_iso`` that are
+        not retry-pending: the auto-analyses that ended in a fallback card.
+
+        AI outage recovery (llm-outage) re-drives them once.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM offers WHERE estado = 'pendiente_analisis' "
+            "AND next_analyze_at IS NULL AND url_oferta IS NOT NULL "
+            "AND substr(COALESCE(fecha_alta, fecha_update), 1, 10) >= ? "
+            "ORDER BY id",
+            (day_iso,),
+        ).fetchall()
+        return [_row_to_offer(row) for row in rows]
+
     def list_retry_pending(self, now_iso: str, max_attempts: int) -> list[OfferRow]:
         """Retry-pending rows due now: not sent, ≤ max attempts, next <= now.
 

@@ -61,7 +61,6 @@ async def heartbeat(context: Any) -> SweepResult:
     scheduler→bridge import cycle never exists at module level.
     """
     from cva.bridge import BOT_DATA_KEY
-    from cva.ingest import job_id_from_url
     from cva.notifier import (
         beacon_alert_keyboard,
         beacon_paused_message,
@@ -81,32 +80,13 @@ async def heartbeat(context: Any) -> SweepResult:
     paused = service.is_paused()
     sweep = SweepResult() if paused else await service.run_due_beacons()
     bridge = context.application.bot_data.get(BOT_DATA_KEY)
-    if bridge is not None and not paused:
-        now_iso = datetime.now(tz=UTC).isoformat()
-        for row in service.list_retry_pending(now_iso, service.analyze_retry_max):
-            if not row.url_oferta:
-                continue
-            # Registry-derived job id (infojobs-source): the InfoJobs
-            # canonical tail is "of-<id>", so the tail fallback alone would
-            # file the retry under the wrong id; LinkedIn shapes are
-            # unaffected (the registry returns the same numeric id).
-            job_id = (
-                job_id_from_url(row.url_oferta)
-                or row.url_oferta.rstrip("/").rsplit("/", 1)[-1]
-            )
-            job: dict[str, Any] = {
-                "url": row.url_oferta,
-                "title": row.posicion,
-                "company": row.empresa,
-            }
-            if _retry_inline(row):
-                # Inline durability (infojobs-source D7): shutdown-deferred
-                # inline rows re-analyze without the dead server fetch — the
-                # stored text IS the analysis text. Link-ingested rows (any
-                # portal) and LinkedIn rows keep the note→refetch lifecycle
-                # (no "text" key).
-                job["text"] = row.source_data
-            bridge.enqueue_auto_analysis(row.id, job_id, job, kind="retry")
+    # AI outage (llm-outage): probe when due; the retry sweep waits while the
+    # AI is down so parked offers never fail into cards.
+    ai_down = (
+        False if paused else await _ai_outage_step(context.bot, service, owner, lang)
+    )
+    if bridge is not None and not paused and not ai_down:
+        redrive_retry_pending(service, bridge)
     if owner == 0:
         _LOG.warning(
             "heartbeat produced %d notifications but owner id is unset",
@@ -159,6 +139,72 @@ async def heartbeat(context: Any) -> SweepResult:
         except Exception:  # noqa: BLE001 — Gmail sync must never break the heartbeat
             _LOG.exception("gmail sync failed")
     return sweep
+
+
+def redrive_retry_pending(service: "JobService", bridge: Any) -> None:
+    """Re-enqueue the due retry-pending offers through the paced queue.
+
+    The heartbeat's retry sweep (notification-pacing D4), also run right after
+    an AI outage ends (``[🔄 Check now]`` / ``[▶️ Resume]``).
+    """
+    from cva.ingest import job_id_from_url
+
+    now_iso = datetime.now(tz=UTC).isoformat()
+    for row in service.list_retry_pending(now_iso, service.analyze_retry_max):
+        if not row.url_oferta:
+            continue
+        # Registry-derived job id (infojobs-source): the InfoJobs
+        # canonical tail is "of-<id>", so the tail fallback alone would
+        # file the retry under the wrong id; LinkedIn shapes are
+        # unaffected (the registry returns the same numeric id).
+        job_id = (
+            job_id_from_url(row.url_oferta)
+            or row.url_oferta.rstrip("/").rsplit("/", 1)[-1]
+        )
+        job: dict[str, Any] = {
+            "url": row.url_oferta,
+            "title": row.posicion,
+            "company": row.empresa,
+        }
+        if _retry_inline(row):
+            # Inline durability (infojobs-source D7): shutdown-deferred
+            # inline rows re-analyze without the dead server fetch — the
+            # stored text IS the analysis text. Link-ingested rows (any
+            # portal) and LinkedIn rows keep the note→refetch lifecycle
+            # (no "text" key).
+            job["text"] = row.source_data
+        bridge.enqueue_auto_analysis(row.id, job_id, job, kind="retry")
+
+
+async def _ai_outage_step(
+    bot: Any, service: "JobService", owner: int, lang: Lang
+) -> bool:
+    """Send a missed outage alert, probe when due; True while still down."""
+    from cva.notifier import ai_back_message, ai_outage_keyboard, ai_outage_message
+
+    outage = service.ai_outage()
+    if outage is None:
+        return False
+    if not outage.alerted and owner != 0:
+        service.mark_ai_outage_alerted()  # before the await: no double alert
+        try:
+            await bot.send_message(
+                owner,
+                ai_outage_message(outage, lang=lang),
+                reply_markup=ai_outage_keyboard(lang=lang),
+            )
+        except Exception:  # noqa: BLE001 — retried on the next tick
+            service.mark_ai_outage_alerted(False)
+            _LOG.warning("AI outage alert failed to send", exc_info=True)
+    probe = await service.probe_ai()
+    if probe.status != "recovered":
+        return True
+    if owner != 0:
+        try:
+            await bot.send_message(owner, ai_back_message(probe.pending, lang=lang))
+        except Exception:  # noqa: BLE001 — the resume itself already happened
+            _LOG.warning("AI back message failed to send", exc_info=True)
+    return False
 
 
 async def _run_gmail_sync(bot: Any, sync: Any, owner: int, lang: Lang) -> None:

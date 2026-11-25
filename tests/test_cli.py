@@ -757,3 +757,25 @@ def test_token_command_without_a_token_prints_one_friendly_line(
     assert "CVA_TELEGRAM_TOKEN" in lines[0]
     assert "Traceback" not in captured.err
     assert captured.out == ""
+
+
+def test_check_shows_an_active_ai_outage() -> None:
+    """llm-outage: ``check`` names the AI pause before the beacon results."""
+    from datetime import UTC, datetime, timedelta
+
+    from cva.ai_outage import AiOutage
+
+    class _OutageService(FakeService):
+        def ai_outage(self) -> AiOutage:
+            since = datetime(2026, 11, 25, 9, 0, tzinfo=UTC)
+            return AiOutage(
+                kind="auth",
+                provider="claude_code",
+                since=since,
+                next_probe=since + timedelta(minutes=15),
+            )
+
+    service = _OutageService()
+    out = run(["check"], service)
+    assert out.splitlines()[0].startswith("⛔ IA en pausa")
+    assert "linkedin.com/jobs/view/4001122334" in out  # beacons still checked

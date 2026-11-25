@@ -404,6 +404,28 @@ Everything that describes you or your search is yours to change, and none of it 
 </details>
 
 <details>
+<summary><b>The AI stopped answering</b></summary>
+
+<br>
+
+When the AI provider has no valid login or key (Claude Code login expired or not logged in, Codex not logged in, a rejected API key) or a usage limit is reached (the 5-hour limit, a monthly quota), the bot **pauses the automatic analysis** instead of failing offer by offer:
+
+- New offers are kept pending, with no error cards.
+- You get **one** message with the cause and the fix, and two buttons: **🔄 Check now** (tests the AI at once) and **▶️ Resume** (ends the pause without testing).
+- The bot tests the AI every 15 minutes (or at the reset time the usage-limit message gives) and resumes by itself: "✅ AI is back, analysing N pending offers". The offers that failed just before the pause are analysed again too.
+- `/status` and `uv run cli.py check` show the pause while it lasts; `/analyze` answers with the same message.
+
+The fix depends on the provider:
+
+- **Claude Code:** run `claude auth login` on the bot's machine. For a bot that runs unattended (a service), run `claude setup-token` and put the token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`, then restart the bot. See [docs/providers.md](docs/providers.md).
+- **Codex CLI:** run `codex login`.
+- **Anthropic API / OpenAI-compatible:** check `ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY` in `.env`, and the provider's billing page for a quota.
+
+Short outages (timeouts, HTTP 5xx, a plain HTTP 429) do not pause anything: the offer is retried later as before.
+
+</details>
+
+<details>
 <summary><b>The bot only answers <code>/setup</code>, or <code>/setup</code> says Confirm failed</b></summary>
 
 <br>
@@ -496,7 +518,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.6`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.7`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

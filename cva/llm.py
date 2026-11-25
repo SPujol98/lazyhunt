@@ -608,6 +608,7 @@ async def _run_claude_subprocess(
     timeout_seconds: float,
     *,
     pass_api_key: bool = False,
+    oauth_token: str | None = None,
 ) -> tuple[int, bytes, bytes]:
     """Real `claude` CLI invocation: no shell, isolated cwd, bounded wait.
 
@@ -618,6 +619,10 @@ async def _run_claude_subprocess(
     ``--tools ""``), and a filtered environment (see ``_child_env``) that
     never carries this app's own ``CVA_*`` secrets.
     """
+    env = _child_env(pass_api_key)
+    if oauth_token:
+        # `claude setup-token` token from .env (unattended bots, llm-outage).
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
     with tempfile.TemporaryDirectory(prefix="cva-claude-code-") as neutral_cwd:
         process = await asyncio.create_subprocess_exec(
             *argv,
@@ -625,7 +630,7 @@ async def _run_claude_subprocess(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=neutral_cwd,
-            env=_child_env(pass_api_key),
+            env=env,
         )
         stdout, stderr = await _communicate_with_timeout(
             process, stdin_data, timeout_seconds
@@ -674,6 +679,7 @@ class ClaudeCodeLlmClient:
         timeout_seconds: float = 180.0,
         run: ClaudeCodeRunner | None = None,
         pass_api_key: bool = False,
+        oauth_token: str | None = None,
     ) -> None:
         self.claude_code_path = claude_code_path
         self.pass_api_key = pass_api_key
@@ -686,7 +692,11 @@ class ClaudeCodeLlmClient:
         self._run: ClaudeCodeRunner = (
             run
             if run is not None
-            else functools.partial(_run_claude_subprocess, pass_api_key=pass_api_key)
+            else functools.partial(
+                _run_claude_subprocess,
+                pass_api_key=pass_api_key,
+                oauth_token=oauth_token,
+            )
         )
 
     @classmethod
@@ -697,6 +707,11 @@ class ClaudeCodeLlmClient:
             model=settings.claude_code_model,
             timeout_seconds=float(settings.claude_code_timeout_seconds),
             pass_api_key=settings.claude_code_pass_api_key,
+            oauth_token=(
+                settings.claude_code_oauth_token.get_secret_value()
+                if settings.claude_code_oauth_token is not None
+                else None
+            ),
         )
 
     def _build_argv(

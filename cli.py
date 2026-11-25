@@ -35,6 +35,7 @@ from cva.gmail.client import (
 from cva.i18n import DEFAULT_LANG, LEGACY_LANG, Lang, t
 from cva.llm import describe_llm_setup
 from cva.notifier import (
+    ai_status_line,
     beacon_action_message,
     beacon_paused_message,
     beacons_list_message,
@@ -132,9 +133,13 @@ def _score_0_100(lang: Lang) -> Callable[[str], int]:
 
 def _cmd_check(service: JobService, lang: Lang) -> str:
     sweep = asyncio.run(service.run_due_beacons())
+    # AI outage (llm-outage): shown first; duck-typed for service doubles.
+    outage_of = getattr(service, "ai_outage", None)
+    outage = outage_of() if callable(outage_of) else None
+    head = [ai_status_line(outage, lang=lang)] if outage is not None else []
     if not sweep.notifications and not sweep.paused_alerts:
-        return t("panel.cli.nothing_new", lang)
-    lines: list[str] = []
+        return "\n".join([*head, t("panel.cli.nothing_new", lang)])
+    lines: list[str] = [*head]
     for notification in sweep.notifications:
         lines.append(
             f"🆕 [{notification.beacon_name}] "

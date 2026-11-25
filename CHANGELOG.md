@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.7] - 2026-11-25
+
+Seventh pre-release for testers: the bot pauses instead of failing offer after offer when the AI is down.
+
+### Changed
+
+- When the AI cannot answer because its login or key is invalid (for example an expired Claude Code session) or a usage limit was reached, the bot pauses automatic analysis and sends ONE alert with the cause, the exact fix and "Check now" / "Resume" buttons. New offers wait in the queue with no error cards. Every 15 minutes (or at the known reset time) it checks the AI again; when it answers, the bot says so and analyses the queue, including offers that failed for the same reason in the previous days. `/status` and `cli.py check` show the pause.
+- Per-minute rate limits and temporary overloads keep being retried later, as before.
+
+### Fixed
+
+- `CLAUDE_CODE_OAUTH_TOKEN` in `.env` now reaches the `claude` process, so `claude setup-token` works for a bot that runs unattended (see docs/providers.md).
+
 ## [2.0.0-beta.6] - 2026-11-23
 
 Sixth pre-release for testers: an optional CV adapted to each offer.
@@ -208,7 +221,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...HEAD
+[2.0.0-beta.7]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...v2.0.0-beta.7
 [2.0.0-beta.6]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...v2.0.0-beta.6
 [2.0.0-beta.5]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.4...v2.0.0-beta.5
 [2.0.0-beta.4]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.3...v2.0.0-beta.4

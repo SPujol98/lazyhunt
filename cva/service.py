@@ -31,6 +31,15 @@ from typing import Any, Final, Literal, NamedTuple
 from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 
+from cva.ai_outage import (
+    RESCUE_LOOKBACK,
+    AiOutage,
+    classify_ai_failure,
+    next_probe_at,
+    provider_of,
+    scrub,
+)
+from cva.ai_outage import STATE_KEY as AI_OUTAGE_KEY
 from cva.beacons import SweepResult, check_beacon, checks_done_today
 from cva.calibration import (
     FIT_REASONS,
@@ -159,6 +168,8 @@ from cva.match.warnings import offer_warnings
 from cva.mirror import mirror_root, on_discarded, on_generated, on_sent
 from cva.notifier import (
     SentMessage,
+    ai_outage_keyboard,
+    ai_outage_message,
     asks_cover_letter,
     borderline_message,
     bridge_auto_failure_message,
@@ -642,6 +653,20 @@ class FollowupItem:
     kind: Literal["reminder", "proposal"]
 
 
+class _AiProbeReply(BaseModel):
+    """The health probe's tiny reply (llm-outage)."""
+
+    ok: bool = True
+
+
+class AiProbeResult(NamedTuple):
+    """``status``: none (no outage), not_due, down, recovered; ``pending`` =
+    offers re-driven on recovery."""
+
+    status: Literal["none", "not_due", "down", "recovered"]
+    pending: int = 0
+
+
 class JudgeDeferredError(Exception):
     """The AI judge failed transiently; the analysis is retried later.
 
@@ -877,8 +902,11 @@ class JobService:
         paused_default: bool = False,
         ui_language: Lang = LEGACY_LANG,
         cv_font: CvFont = DEFAULT_CV_FONT,
+        ai_probe: Callable[[], Awaitable[object]] | None = None,
     ) -> None:
         self._repo = repo
+        # AI outage health probe (llm-outage); None = one tiny completion.
+        self._ai_probe = ai_probe
         # Settings.cv_font: the family of the CVs, reused by the letter PDFs.
         self._cv_font: CvFont = cv_font
         # Settings.ui_language: every text this service renders for the owner.
@@ -2078,6 +2106,29 @@ class JobService:
         score, any failure reports ``("pending", None)``.
         """
         job_id = job_id_from_url(url) or url.rstrip("/").rsplit("/", 1)[-1]
+        if self.ai_outage() is not None:
+            # AI outage (llm-outage): no LLM call, no card; the offer waits
+            # retry-pending and the recovery re-drives it.
+            # Inline text is stored now (the retry replays it); a link row is
+            # refetched by the retry, so no fetch happens here.
+            if text is not None:
+                with suppress(Exception):
+                    inline, report = _guard_offer(
+                        FetchedOffer(
+                            job_id=job_id_from_url(url),
+                            title=title,
+                            company=company,
+                            url=url,
+                            text=text,
+                            source="bridge-inline",
+                        )
+                    )
+                    self._repo.upsert_offer(
+                        _offer_input(inline, today=self._now().date())
+                    )
+                    self._note_guard(offer_id, report)
+            self.defer_for_ai_outage(offer_id)
+            return BridgeJobOutcome(zone="pending", score=None)
         try:
             if text is not None:
                 fetched = FetchedOffer(
@@ -2116,6 +2167,22 @@ class JobService:
             )
             return BridgeJobOutcome(zone="pending", score=None)
         except Exception as exc:  # noqa: BLE001 — the card tree below IS the surface
+            outage = self.note_ai_failure(exc)
+            if outage is not None:
+                # Login/key or usage-limit failure: pause instead of failing
+                # offer by offer; ONE alert per outage.
+                self.defer_for_ai_outage(offer_id)
+                if not outage.alerted:
+                    self.mark_ai_outage_alerted()  # before the await: no race
+                    try:
+                        await notify(
+                            ai_outage_message(outage, lang=self._lang),
+                            ai_outage_keyboard(lang=self._lang),
+                        )
+                    except Exception:
+                        self.mark_ai_outage_alerted(False)  # the heartbeat retries
+                        raise
+                return BridgeJobOutcome(zone="pending", score=None)
             attempts = self._repo.record_analyze_failure(
                 offer_id,
                 next_analyze_at=(
@@ -2525,6 +2592,10 @@ class JobService:
             try:
                 judgment = await judge_task
             except LlmResponseError as exc:
+                if defer_transient_judge and (
+                    classify_ai_failure(exc, self._now()) is not None
+                ):
+                    raise  # an AI outage pauses the auto-analysis (llm-outage)
                 if defer_transient_judge and is_transient_judge_error(exc):
                     if offer.analyze_attempts < self._judge_retry_budget():
                         raise JudgeDeferredError(offer_id, exc) from exc
@@ -3810,6 +3881,115 @@ class JobService:
     def analyze_retry_max(self) -> int:
         """Retry budget per auto-analysis (heartbeat sweep input, pacing D4)."""
         return self._analyze_retry_max
+
+    # --- AI outage (llm-outage) ---------------------------------------------
+
+    def ai_outage(self) -> AiOutage | None:
+        """The active AI outage (persisted in ``app_state``), or ``None``."""
+        return AiOutage.from_json(self._repo.get_state(AI_OUTAGE_KEY))
+
+    def _save_ai_outage(self, outage: AiOutage | None) -> None:
+        self._repo.set_state(AI_OUTAGE_KEY, outage.to_json() if outage else "")
+
+    def note_ai_failure(self, exc: BaseException) -> AiOutage | None:
+        """Start (or keep) the outage an auth/usage-limit failure means.
+
+        Returns the active outage for such a failure, ``None`` for any other
+        failure. An outage already active is kept as-is (same ``since``, same
+        ``alerted`` flag) so a second failing offer never re-alerts.
+        """
+        now = self._now()
+        classified = classify_ai_failure(exc, now)
+        if classified is None:
+            return None
+        current = self.ai_outage()
+        if current is not None:
+            return current
+        kind, reset_at = classified
+        outage = AiOutage(
+            kind=kind,
+            provider=provider_of(self._llm, exc),
+            since=now,
+            next_probe=next_probe_at(now, reset_at),
+            reset_at=reset_at,
+            detail=scrub(str(exc)),
+        )
+        self._save_ai_outage(outage)
+        _logger.warning(
+            "AI outage (%s): automatic analysis paused: %s", kind, scrub(str(exc))
+        )
+        return outage
+
+    def mark_ai_outage_alerted(self, alerted: bool = True) -> None:
+        """Remember that the owner got the alert (never sent twice). Callers
+        mark BEFORE sending (so a concurrent heartbeat cannot send it too) and
+        call ``mark_ai_outage_alerted(False)`` if the send fails."""
+        outage = self.ai_outage()
+        if outage is not None and outage.alerted != alerted:
+            self._save_ai_outage(replace(outage, alerted=alerted))
+
+    def defer_for_ai_outage(self, offer_id: int) -> None:
+        """Park an offer until the AI is back (attempt counter untouched)."""
+        with suppress(Exception):
+            self._repo.defer_analyze_retry(
+                offer_id, next_analyze_at=self._now().isoformat()
+            )
+
+    async def _run_ai_probe(self) -> None:
+        if self._ai_probe is not None:
+            await self._ai_probe()
+            return
+        await self._llm.json_completion(
+            'Health check. Answer with the JSON object {"ok": true}.',
+            "ok",
+            _AiProbeReply,
+        )
+
+    async def probe_ai(self, *, force: bool = False) -> AiProbeResult:
+        """Health probe of an active outage (heartbeat, ``[🔄 Check now]``).
+
+        Not due (and not forced) → no call. The probe is one tiny completion
+        through the configured client: it fails exactly like an analysis
+        would. Success ends the outage (:meth:`resume_ai`); a failure moves
+        the next probe forward (to the reset time when the message names one).
+        """
+        outage = self.ai_outage()
+        if outage is None:
+            return AiProbeResult("none")
+        now = self._now()
+        if not force and now < outage.next_probe:
+            return AiProbeResult("not_due")
+        try:
+            await self._run_ai_probe()
+        except Exception as exc:  # noqa: BLE001 — any failure keeps the pause
+            classified = classify_ai_failure(exc, now)
+            reset_at = classified[1] if classified is not None else None
+            self._save_ai_outage(outage.rescheduled(now, reset_at))
+            _logger.info(
+                "AI probe still failing: %s: %s", type(exc).__name__, scrub(str(exc))
+            )
+            return AiProbeResult("down")
+        return AiProbeResult("recovered", self.resume_ai())
+
+    def resume_ai(self) -> int:
+        """End the outage and park the backlog for the retry sweep.
+
+        Re-driven: the offers deferred during the outage, plus the offers
+        first seen shortly before it that are still unanalysed (the cards that
+        already failed before the pause). Returns how many offers wait.
+        """
+        outage = self.ai_outage()
+        self._save_ai_outage(None)
+        now = self._now()
+        if outage is not None:
+            since = (outage.since - RESCUE_LOOKBACK).date().isoformat()
+            for row in self._repo.list_unanalyzed_since(since):
+                self._repo.defer_analyze_retry(row.id, next_analyze_at=now.isoformat())
+        pending = self._repo.list_retry_pending(
+            datetime.max.replace(tzinfo=UTC).isoformat(), self._analyze_retry_max
+        )
+        _logger.info("AI back: %d offers pending re-analysis", len(pending))
+        return len(pending)
 
     def list_retry_pending(self, now_iso: str, max_attempts: int) -> list[OfferRow]:
         """Retry-pending offers due now (heartbeat sweep source, pacing D4)."""

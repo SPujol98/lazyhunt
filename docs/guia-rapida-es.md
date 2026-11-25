@@ -343,6 +343,18 @@ con código**. Un secreto escrito a mano debe ser el mismo que
 notas de `PATH` en [running.md](running.md) o pon la ruta completa en
 `claude_code_path`.
 
+**La IA dejó de responder (sesión caducada o límite de uso).** El bot pausa
+el análisis automático en vez de mandar una tarjeta de error por oferta: las
+ofertas nuevas esperan y recibes **un** mensaje con la causa y el arreglo, con
+los botones **🔄 Comprobar ahora** y **▶️ Reanudar**. Comprueba la IA cada 15
+minutos (o a la hora de reinicio del límite) y reanuda solo: «✅ La IA vuelve
+a funcionar, analizando N ofertas pendientes», incluidas las que fallaron
+justo antes de la pausa. Con Claude Code: `claude auth login`; para un bot que
+corre solo como servicio, `claude setup-token` y pon el token en `.env` como
+`CLAUDE_CODE_OAUTH_TOKEN=...` y reinicia. Con Codex: `codex login`. Con una
+API: revisa la clave en `.env`. `/status` y `uv run cli.py check` muestran la
+pausa.
+
 **Una búsqueda no encuentra nada.** Ábrela a mano en el navegador: puede que
 se haya cerrado tu sesión, haya un captcha o simplemente no haya ofertas
 nuevas. Los filtros de títulos y de ubicación también pueden descartarlo todo.

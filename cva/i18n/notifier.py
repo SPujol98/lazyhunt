@@ -204,6 +204,39 @@ EN: Final[dict[str, str]] = {
         "⚠️ The automatic analysis failed ({cause}). Press Analyze to retry."
     ),
     "notifier.backstop": "⚠️ Processing your message failed: {reason}",
+    # --- AI outage (llm-outage) -----------------------------------------------------
+    "notifier.ai.paused_auth": (
+        "⛔ The AI stopped answering: {provider} has no valid login or key. "
+        "I paused the automatic analysis: new offers wait, no error cards."
+    ),
+    "notifier.ai.paused_quota": (
+        "⏸️ The AI usage limit was reached ({provider}). "
+        "I paused the automatic analysis: new offers wait, no error cards."
+    ),
+    "notifier.ai.fix_claude_code": (
+        "Fix: run `claude auth login` on the bot's machine. For an unattended "
+        "bot, run `claude setup-token` and put the token in .env as "
+        "CLAUDE_CODE_OAUTH_TOKEN=..., then restart the bot."
+    ),
+    "notifier.ai.fix_codex_cli": "Fix: run `codex login` on the bot's machine.",
+    "notifier.ai.fix_anthropic": "Fix: check ANTHROPIC_API_KEY in .env.",
+    "notifier.ai.fix_openai_compatible": (
+        "Fix: check the API key (CVA_LLM_API_KEY) and CVA_LLM_* in .env."
+    ),
+    "notifier.ai.resume_at": "Limit reached; I'll resume by myself at {time}.",
+    "notifier.ai.resume_poll": (
+        "I check again every 15 minutes and resume by myself; "
+        "the pending offers are analysed then."
+    ),
+    "notifier.ai.detail": "Details: {detail}",
+    "notifier.ai.still_down": "🔄 Checked: the AI still does not answer.",
+    "notifier.ai.back": "✅ AI is back, analysing {count} pending offers.",
+    "notifier.ai.ok": "✅ The AI is working; nothing is paused.",
+    "notifier.ai.status": ("⛔ AI paused since {since} ({cause}); next check {next}."),
+    "notifier.ai.cause.auth": "login/key",
+    "notifier.ai.cause.quota": "usage limit",
+    "notifier.ai.button.check": "🔄 Check now",
+    "notifier.ai.button.resume": "▶️ Resume",
     "notifier.status_line": "#{id} · {estado} · match {match} · {position}{tag}",
     # --- beacons -----------------------------------------------------------------------
     "notifier.beacons_none": "🔭 No beacons configured.",
@@ -439,6 +472,42 @@ ES: Final[dict[str, str]] = {
         "⚠️ El análisis automático falló ({cause}). Pulsa Analizar para reintentar."
     ),
     "notifier.backstop": "⚠️ Ha fallado el procesamiento de tu mensaje: {reason}",
+    # --- AI outage (llm-outage) -----------------------------------------------------
+    "notifier.ai.paused_auth": (
+        "⛔ La IA dejó de responder: {provider} no tiene una sesión o clave "
+        "válida. He pausado el análisis automático: las ofertas nuevas esperan, "
+        "sin tarjetas de error."
+    ),
+    "notifier.ai.paused_quota": (
+        "⏸️ Se alcanzó el límite de uso de la IA ({provider}). He pausado el "
+        "análisis automático: las ofertas nuevas esperan, sin tarjetas de error."
+    ),
+    "notifier.ai.fix_claude_code": (
+        "Arreglo: ejecuta `claude auth login` en la máquina del bot. Para un bot "
+        "desatendido, ejecuta `claude setup-token` y pon el token en .env como "
+        "CLAUDE_CODE_OAUTH_TOKEN=..., y reinicia el bot."
+    ),
+    "notifier.ai.fix_codex_cli": "Arreglo: ejecuta `codex login` en la máquina del bot.",
+    "notifier.ai.fix_anthropic": "Arreglo: revisa ANTHROPIC_API_KEY en .env.",
+    "notifier.ai.fix_openai_compatible": (
+        "Arreglo: revisa la clave (CVA_LLM_API_KEY) y CVA_LLM_* en .env."
+    ),
+    "notifier.ai.resume_at": "Límite alcanzado; reanudo solo a las {time}.",
+    "notifier.ai.resume_poll": (
+        "Lo compruebo cada 15 minutos y reanudo solo; "
+        "entonces analizo las ofertas pendientes."
+    ),
+    "notifier.ai.detail": "Detalle: {detail}",
+    "notifier.ai.still_down": "🔄 Comprobado: la IA sigue sin responder.",
+    "notifier.ai.back": "✅ La IA vuelve a funcionar, analizando {count} ofertas pendientes.",
+    "notifier.ai.ok": "✅ La IA funciona; no hay nada en pausa.",
+    "notifier.ai.status": (
+        "⛔ IA en pausa desde {since} ({cause}); próxima comprobación {next}."
+    ),
+    "notifier.ai.cause.auth": "sesión/clave",
+    "notifier.ai.cause.quota": "límite de uso",
+    "notifier.ai.button.check": "🔄 Comprobar ahora",
+    "notifier.ai.button.resume": "▶️ Reanudar",
     "notifier.status_line": "#{id} · {estado} · match {match} · {position}{tag}",
     # --- beacons -----------------------------------------------------------------------
     "notifier.beacons_none": "🔭 No hay beacons configurados.",

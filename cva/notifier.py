@@ -32,13 +32,14 @@ import html
 import json
 from collections.abc import Sequence
 from contextlib import suppress
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from re import search
 from typing import TYPE_CHECKING, Any, Final, NamedTuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from cva.ai_outage import AiOutage
 from cva.beacons import BeaconPausedAlert
 from cva.card_links import search_links
 from cva.commands import help_text
@@ -1399,6 +1400,72 @@ def bridge_auto_failure_message(
         )
         + "\n"
         + t("notifier.auto_failure", lang, cause=cause)
+    )
+
+
+_PROVIDER_NAMES: Final[dict[str, str]] = {
+    "claude_code": "Claude Code",
+    "codex_cli": "Codex",
+    "anthropic": "Anthropic API",
+    "openai_compatible": "LLM API",
+}
+# Callback prefix of the AI-outage alert buttons (``aio:check``/``aio:resume``).
+AI_OUTAGE: Final[str] = "aio"
+
+
+def _clock_time(moment: datetime) -> str:
+    """``HH:MM`` in the bot machine's local zone."""
+    return moment.astimezone().strftime("%H:%M")
+
+
+def ai_outage_message(outage: AiOutage, *, lang: Lang = LEGACY_LANG) -> str:
+    """The ONE alert of an AI outage: cause, exact fix, when it resumes."""
+    provider = _PROVIDER_NAMES.get(outage.provider, outage.provider)
+    lines = [t(f"notifier.ai.paused_{outage.kind}", lang, provider=provider)]
+    if outage.kind == "auth":
+        lines.append(t(f"notifier.ai.fix_{outage.provider}", lang))
+    if outage.reset_at is not None:
+        lines.append(
+            t("notifier.ai.resume_at", lang, time=_clock_time(outage.reset_at))
+        )
+    else:
+        lines.append(t("notifier.ai.resume_poll", lang))
+    if outage.detail:
+        lines.append(t("notifier.ai.detail", lang, detail=outage.detail))
+    return "\n".join(lines)
+
+
+def ai_outage_keyboard(*, lang: Lang = LEGACY_LANG) -> InlineKeyboardMarkup:
+    """``[🔄 Check now] [▶️ Resume]`` under the outage alert."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    t("notifier.ai.button.check", lang),
+                    callback_data=f"{AI_OUTAGE}:check",
+                ),
+                InlineKeyboardButton(
+                    t("notifier.ai.button.resume", lang),
+                    callback_data=f"{AI_OUTAGE}:resume",
+                ),
+            ]
+        ]
+    )
+
+
+def ai_back_message(count: int, *, lang: Lang = LEGACY_LANG) -> str:
+    """Recovery note: the AI answers again and the backlog is re-driven."""
+    return t("notifier.ai.back", lang, count=count)
+
+
+def ai_status_line(outage: AiOutage, *, lang: Lang = LEGACY_LANG) -> str:
+    """One status line (``/status``, ``cli.py check``) for an active outage."""
+    return t(
+        "notifier.ai.status",
+        lang,
+        since=outage.since.astimezone().strftime("%Y-%m-%d %H:%M"),
+        cause=t(f"notifier.ai.cause.{outage.kind}", lang),
+        next=_clock_time(outage.next_probe),
     )
 
 

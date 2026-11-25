@@ -66,6 +66,7 @@ EXPECTED: dict[str, str] = {
     ST: "_cb_star",
     BEACON_RESUME: "_cb_beacon",
     BEACON_DISABLE: "_cb_beacon",
+    "aio": "_cb_ai_outage",
 }
 
 
