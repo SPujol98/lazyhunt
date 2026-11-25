@@ -414,6 +414,128 @@ def test_walled_analyze_callback_asks_for_paste(tmp_path: Path) -> None:
     assert context.user_data[bot._PASTE_KEY] is True
 
 
+class CountingFetcher(FakeFetcher):
+    """Records every fetched URL (the zero-fetch proof of the stored path)."""
+
+    def __init__(self, response: FetchResponse) -> None:
+        super().__init__(response)
+        self.urls: list[str] = []
+
+    async def get(self, url: str) -> FetchResponse:
+        self.urls.append(url)
+        return await super().get(url)
+
+
+IJ_ID = "i" + ("0123456789abcdef" * 2)[:30]
+IJ_URL = f"https://www.infojobs.net/madrid/ai-engineer/of-{IJ_ID}"
+OFFER_TEXT = "AI Engineer en Acme. Imprescindible experiencia con Python."
+
+
+def _linkedin_only(urls: list[str], job_id: str) -> bool:
+    """The fetch went to LinkedIn for that job id (guest API and/or the page)."""
+    return bool(urls) and all("linkedin.com" in u and job_id in u for u in urls)
+
+
+def _store(service: JobService, url: str, text: str, source: str) -> int:
+    return service._repo.upsert_offer(  # type: ignore[attr-defined]
+        OfferInput(
+            title="AI Engineer",
+            company="Acme",
+            url=url,
+            text=text,
+            source=source,  # type: ignore[arg-type]
+        )
+    )
+
+
+def test_analyze_callback_uses_stored_offer_without_fetching(tmp_path: Path) -> None:
+    # The LinkedIn guest page is walled: a refetch would end in the paste prompt.
+    fetcher = CountingFetcher(FetchResponse(200, SHELL_BODY, OFFER_URL))
+    service, llm = make_service(tmp_path, fetcher)
+    offer_id = _store(service, IJ_URL, OFFER_TEXT, "bridge-inline")
+    context = FakeContext(service)
+    query = FakeQuery(f"an:{IJ_ID}")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), context))
+    assert fetcher.urls == []
+    assert "puntuación" in query.message.replies[0]
+    assert f"#{offer_id}" in query.message.replies[0]
+    assert llm.calls == 1
+    assert not context.user_data.get(bot._PASTE_KEY)
+
+
+def test_analyze_callback_stored_linkedin_offer_is_not_refetched(
+    tmp_path: Path,
+) -> None:
+    fetcher = CountingFetcher(FetchResponse(200, SHELL_BODY, OFFER_URL))
+    service, llm = make_service(tmp_path, fetcher)
+    _store(service, "https://linkedin.com/jobs/view/4459804598", OFFER_TEXT, "link")
+    query = FakeQuery("an:4459804598")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
+    assert fetcher.urls == []
+    assert "puntuación" in query.message.replies[0]
+    assert llm.calls == 1
+
+
+def test_analyze_callback_without_stored_text_ingests_its_own_url(
+    tmp_path: Path,
+) -> None:
+    fetcher = CountingFetcher(FetchResponse(200, JSONLD_BODY, IJ_URL))
+    service, llm = make_service(tmp_path, fetcher)
+    _store(service, IJ_URL, "   ", "link")
+    query = FakeQuery(f"an:{IJ_ID}")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
+    assert fetcher.urls == [IJ_URL]
+    assert "puntuación" in query.message.replies[0]
+    assert llm.calls == 1
+
+
+def test_analyze_callback_without_stored_offer_ingests_the_linkedin_url(
+    tmp_path: Path,
+) -> None:
+    fetcher = CountingFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL))
+    service, llm = make_service(tmp_path, fetcher)
+    query = FakeQuery("an:4459804598")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
+    assert _linkedin_only(fetcher.urls, "4459804598")
+    assert "puntuación" in query.message.replies[0]
+    assert llm.calls == 1
+
+
+def test_analyze_callback_shared_job_id_picks_the_most_recent_offer(
+    tmp_path: Path,
+) -> None:
+    fetcher = CountingFetcher(FetchResponse(200, SHELL_BODY, OFFER_URL))
+    service, _llm = make_service(tmp_path, fetcher)
+    _store(
+        service,
+        "https://linkedin.com/jobs/view/4459804598",
+        "Backend Developer en Old. Java.",
+        "link",
+    )
+    newest = _store(
+        service, "https://otro.example/jobs/4459804598", OFFER_TEXT, "bridge-inline"
+    )
+    query = FakeQuery("an:4459804598")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), FakeContext(service)))
+    assert fetcher.urls == []
+    assert f"#{newest}" in query.message.replies[0]
+
+
+def test_analyze_callback_walled_refetch_of_stored_url_asks_for_paste(
+    tmp_path: Path,
+) -> None:
+    fetcher = CountingFetcher(FetchResponse(200, SHELL_BODY, OFFER_URL))
+    service, llm = make_service(tmp_path, fetcher)
+    _store(service, "https://linkedin.com/jobs/view/4459804598", "", "link")
+    context = FakeContext(service)
+    query = FakeQuery("an:4459804598")
+    asyncio.run(bot.callback_router(FakeUpdate(query=query), context))
+    assert _linkedin_only(fetcher.urls, "4459804598")
+    assert "pega" in query.message.replies[0].lower()
+    assert context.user_data[bot._PASTE_KEY] is True
+    assert llm.calls == 0
+
+
 def test_lang_toggle_edits_keyboard_statelessly(tmp_path: Path) -> None:
     service, _llm = make_service(
         tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))

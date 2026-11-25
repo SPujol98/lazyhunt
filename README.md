@@ -150,7 +150,7 @@ Where things end up:
 | File | Contents |
 | --- | --- |
 | `.env` (mode 600) | Secrets: `CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, and the API key if your provider needs one (`ANTHROPIC_API_KEY` or `CVA_LLM_API_KEY`) |
-| `config.local.toml` | Settings: `ui_language`, `llm_provider` (with `llm_base_url` and `llm_model` for `openai_compatible`), `profile_dir`; later `owner_telegram_id` (written when you pair with `/start <code>`) and `enabled_portals`, the portals you choose in `/setup` |
+| `config.local.toml` | Settings: `ui_language`, `llm_provider` (with `llm_base_url` and `llm_model` for `openai_compatible`), `profile_dir`; later `owner_telegram_id` (written when you pair with `/start <code>`); `enabled_portals` only if you set it by hand (see [Configuration](#configuration)) |
 | `profiles/me/` | Your profile (empty until `/setup`) |
 
 > [!TIP]
@@ -185,10 +185,10 @@ Send `/setup` (`/configurar` in Spanish). The bot asks one question per message,
 - the bot language, your contact details and the positions you want (the built-in AI and Backend families, or your own job titles);
 - your level, spoken languages, main skills, experience and education;
 - work modes (remote, hybrid, on-site), the city and country you want to work in, and an optional minimum salary;
-- the languages an offer may be written in, and the portals to enable (each one shows its terms warning first);
+- the languages an offer may be written in;
 - your base CVs as PDF files, one per position and language (you can skip them and add them later).
 
-Every step has **Back** and **Cancel**, and nothing is saved until you press **Confirm** on the summary. Confirm is all or nothing: if anything fails, every file is put back as it was and you can simply press Confirm again. It writes `preferences.toml`, `profile.toml`, a minimal `claims.json` with only what you stated, the judge files and your base CVs, activates the portals you chose, and switches the bot to normal mode on its own. The full list of questions and files: [docs/onboarding.md](docs/onboarding.md).
+Every step has **Back** and **Cancel**, and nothing is saved until you press **Confirm** on the summary. Confirm is all or nothing: if anything fails, every file is put back as it was and you can simply press Confirm again. It writes `preferences.toml`, `profile.toml`, a minimal `claims.json` with only what you stated, the judge files and your base CVs, and switches the bot to normal mode on its own. The full list of questions and files: [docs/onboarding.md](docs/onboarding.md).
 
 You can change any answer later (see [step 8](#8-day-to-day)).
 
@@ -196,8 +196,8 @@ You can change any answer later (see [step 8](#8-day-to-day)).
 
 1. Open `chrome://extensions` (Brave: `brave://extensions`), turn on **Developer mode**, click **Load unpacked** and select the `extension/` folder of this repository. The extension is not in a store; you load it straight from the code you can read.
 2. Send `/connect` (`/conectar`) to the bot: it answers a one-time pairing code. In the extension's **Options › Schedule and bot**, type it under **Pair with code** and press **Pair**: the bridge URL (`http://127.0.0.1:8765/bridge` by default) and the secret are filled in and saved for you. The code works once, for 10 minutes; send `/connect` again for a new one. (Typing the secret by hand still works: it is `CVA_BRIDGE_SECRET` in `.env`, and the wizard can show it once at the end.)
-3. In **Options › Portals**, switch on the same portals you chose in `/setup`. `/setup` activated them on the bot, but a portal is scanned only when it is on in both places. Each switch shows the portal's terms warning and asks the browser for permission to that single site.
-4. In **Options › Searches**, press **Suggest from my profile** (until you do, the popup says "No searches yet" and **Check now** has nothing to scan). It proposes searches built from your answers: the roles of each position you chose, in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work. Tick the ones you want, or add your own (keywords and location). Each search runs on every portal you tick.
+3. In **Options › Portals**, switch on the portals you want to use. This is the only place where a portal is enabled (`/setup` does not ask for portals). Each switch shows the portal's terms warning and asks the browser for permission to that single site.
+4. In **Options › Searches**, press **Suggest from my profile** (until you do, the popup says "No searches yet" and **Check now** has nothing to scan). It proposes searches built from your answers: the roles of each position you chose, in your city when you accept on-site or hybrid work, plus a remote search when you accept remote work. Tick the ones you want, or add your own (keywords and location), and in each search tick the portals it should run on: a search runs only on the portals you tick in it.
 
 Supported portals today: LinkedIn, InfoJobs, Indeed, Tecnoempleo, JobFluent, Manfred, Adzuna and foorilla (*experimental*: its search filter has not been verified on the live site, its cards carry no company name, and it is a worldwide feed, so expect to rely on the location gate and title filters). Status and caveats per portal: [docs/portals.md](docs/portals.md#portal-status).
 
@@ -531,7 +531,7 @@ Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of op
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.8`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+lazyhunt is an early release (`v2.0.0-beta.9`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.

@@ -1,113 +1,82 @@
-"""Portal terms warnings for the setup questionnaire (step 8).
+"""Portals are enabled only in the browser extension (portals-extension-only).
 
-The texts are the browser extension's own (``extension/_locales/<lang>/
-messages.json``), chosen exactly as ``extension/portals/terms.js`` does: a
-portal with a strong warning has its own key (``terms`` + the capitalised
-id of a portal the bot registers, e.g. ``termsLinkedin``), every other one
-gets ``termsPortal`` with its label as ``$p1$``. Reading the extension's
-catalogue keeps one source for what the owner is told before enabling a
-portal, in the options page and in Telegram.
+Older ``/setup`` runs had a portals step that wrote ``enabled_portals`` into
+``config.local.toml``, so a portal had to be enabled in ``/setup``, in the
+extension's Options › Portals and in each search. Now the extension alone
+decides (its terms warning, then the per-search portal toggles) and an unset
+``enabled_portals`` lets the bridge accept every registered portal.
+
+:func:`remove_enabled_portals` drops that key once, on the bot's next start
+(:meth:`cva.service.JobService.migrate_portals_config` records that it ran,
+so a list the owner sets by hand later is honoured: ``enabled_portals``
+stays a valid manual advanced setting).
 """
 
-import json
+import re
 import stat
 import tomllib
-from collections.abc import Sequence
-from functools import cache
 from pathlib import Path
 from typing import Final
 
-from cva.config import check_toml_settings
 from cva.fsutil import atomic_write
-from cva.i18n import Lang, t
-from cva.ingest.sources import SOURCES
 from cva.onboarding.snapshot import write_target
-from cva.setup.wizard import toml_set_key
+from cva.setup.wizard import _open_brackets
 
-LOCALES_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "extension" / "_locales"
-)
+ENABLED_PORTALS_KEY: Final[str] = "enabled_portals"
 
 
-@cache
-def _messages(lang: Lang, locales_dir: Path) -> dict[str, str]:
-    """``key -> message`` of the extension catalogue; ``{}`` when unreadable."""
+def toml_remove_key(base_text: str, key: str) -> str:
+    """``base_text`` without the top-level ``key``.
+
+    The line that assigns ``key`` before the first table (with the following
+    lines of a multi-line array, and the comment ending the value) is
+    removed; every other line keeps its exact bytes, line endings included,
+    and a key of the same name inside a table is left alone. ``base_text``
+    is returned unchanged when it has no such key. The result is parsed back
+    (``ValueError`` when it is not TOML or still holds ``key``), so a file
+    the bot could not read is never returned (the counterpart of
+    :func:`cva.setup.wizard.toml_set_key`)."""
+    lines = base_text.splitlines(keepends=True)
+    first_table = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")),
+        len(lines),
+    )
+    assign = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    start = next((i for i in range(first_table) if assign.match(lines[i])), None)
+    if start is None:
+        return base_text
+    end, depth = start, _open_brackets(lines[start].split("=", 1)[1])
+    while depth > 0 and end + 1 < len(lines):
+        end += 1
+        depth += _open_brackets(lines[end])
+    del lines[start : end + 1]
+    text = "".join(lines)
     try:
-        data = json.loads((locales_dir / lang / "messages.json").read_text("utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {
-        key: entry["message"]
-        for key, entry in data.items()
-        if isinstance(entry, dict) and isinstance(entry.get("message"), str)
-    }
+        parsed = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"the result is not valid TOML: {exc}") from exc
+    if key in parsed:
+        raise ValueError(f"{key} could not be removed")
+    return text
 
 
-def portal_ids() -> tuple[str, ...]:
-    """Every registered portal id, in registry order."""
-    return tuple(SOURCES)
+def remove_enabled_portals(config_path: Path) -> bool:
+    """Remove ``enabled_portals`` from ``config_path`` (``config.local.toml``);
+    ``True`` when the key was there and the file was rewritten.
 
-
-def portal_label(portal: str) -> str:
-    spec = SOURCES.get(portal)
-    return spec.label if spec is not None else portal
-
-
-def terms_warning(portal: str, lang: Lang, locales_dir: Path = LOCALES_DIR) -> str:
-    """The warning the extension shows before enabling ``portal``, in ``lang``."""
-    label = portal_label(portal)
-    messages = _messages(lang, locales_dir)
-    # The key comes from the registered portal id only: no portal names here.
-    strong = messages.get(f"terms{portal.capitalize()}") if portal in SOURCES else None
-    if strong is not None:
-        return strong
-    generic = messages.get("termsPortal")
-    if generic is not None:
-        return generic.replace("$p1$", label)
-    return t("onboarding.portals.terms_missing", lang, portal=label)
-
-
-def read_enabled_portals(config_path: Path) -> list[str] | None:
-    """``enabled_portals`` of ``config_path`` (registered ids, registry
-    order); ``None`` when the file or the key is missing or unreadable."""
-    try:
-        data = tomllib.loads(config_path.read_text("utf-8"))
-    except (OSError, ValueError):
-        return None
-    value = data.get("enabled_portals")
-    if not isinstance(value, list):
-        return None
-    return [p for p in portal_ids() if p in value]
-
-
-def write_enabled_portals(config_path: Path, portals: Sequence[str]) -> list[str]:
-    """Set ``enabled_portals`` in ``config_path`` (``config.local.toml``) to
-    ``portals`` and return the list written (registry order).
-
-    Only ids the bot registers are accepted (``ValueError`` otherwise). The
-    setup wizard's line-preserving writer changes that one line (every other
-    line and comment keeps its bytes); the result, merged over the
-    ``config.toml`` next to it, must load with the :class:`~cva.config.Settings`
-    validators before the file is replaced atomically (its mode kept).
-    ``ValueError`` / ``OSError`` leave the file as it was."""
-    unknown = [p for p in portals if p not in SOURCES]
-    if unknown:
-        raise ValueError(f"unknown portal id(s): {', '.join(unknown)}")
-    chosen = [p for p in portal_ids() if p in portals]
+    A missing file or a file without the key is not touched (not even
+    rewritten). Otherwise only that key's lines go (every other byte and
+    comment kept, :func:`toml_remove_key`) and the file is replaced
+    atomically, its mode kept and a symlinked file written through its link,
+    like the ``/setup`` writer. ``ValueError`` / ``OSError`` leave the file
+    as it was."""
+    if not config_path.is_file():
+        return False
     # Bytes as they are (``read_text`` would turn CRLF into LF).
-    base = config_path.read_bytes().decode("utf-8") if config_path.is_file() else ""
-    text = toml_set_key(base, "enabled_portals", chosen)
-    shared = config_path.parent / "config.toml"
-    documents = [tomllib.loads(shared.read_text("utf-8"))] if shared.is_file() else []
-    check_toml_settings(*documents, tomllib.loads(text))
-    mode = stat.S_IMODE(config_path.stat().st_mode) if config_path.is_file() else None
-    # A symlinked config (dotfiles) is written through: the link stays.
+    base = config_path.read_bytes().decode("utf-8")
+    text = toml_remove_key(base, ENABLED_PORTALS_KEY)
+    if text == base:
+        return False
+    mode = stat.S_IMODE(config_path.stat().st_mode)
     atomic_write(write_target(config_path), text, mode=mode)
-    return chosen
-
-
-def enabled_portals_line(portals: list[str]) -> str:
-    """The ``config.local.toml`` line that enables exactly ``portals``."""
-    return "enabled_portals = [" + ", ".join(json.dumps(p) for p in portals) + "]"
+    return True

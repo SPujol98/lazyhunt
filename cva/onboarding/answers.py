@@ -26,9 +26,6 @@ name                   ``profile.toml [identity] name`` + ``file_slug``
 email, phone, city,    ``onboarding_answers.json`` (``contact``): pending
 linkedin               input for the claims the next setup step generates;
                        never in ``preferences.toml``
-portals                ``onboarding_answers.json`` + ``config.local.toml``
-                       ``enabled_portals`` (written by
-                       :func:`cva.onboarding.commit.commit_all`)
 spoken_langs,          ``onboarding_answers.json`` (``background``) and the
 spoken_other,          ``setup-*`` claims of ``claims.json``
 spoken_levels, skills, (:mod:`cva.onboarding.profile_gen`)
@@ -108,7 +105,6 @@ SECTIONS: Final[tuple[str, ...]] = (
     "location",
     "salary",
     "offer_langs",
-    "portals",
     "cvs",
 )
 _EMAIL_RE: Final[re.Pattern[str]] = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s.]{2,}")
@@ -547,7 +543,7 @@ def answers_record(
     answers: Mapping[str, Any], ui_language: Lang, section: str | None = None
 ) -> dict[str, Any]:
     """What ``onboarding_answers.json`` holds: contact data for the claims
-    step, the background answers, the portal choice and every answer as
+    step, the background answers and every answer as
     given (plus the ``section`` a ``/setup <section>`` confirmed)."""
     record: dict[str, Any] = {
         "schema": ANSWERS_SCHEMA,
@@ -557,7 +553,6 @@ def answers_record(
             for key in ("name", "email", "phone", "city", "linkedin")
         },
         "background": background(answers),
-        "portals": list(answers.get("portals") or []),
         "answers": dict(answers),
     }
     if section is not None:

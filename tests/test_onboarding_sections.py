@@ -82,7 +82,6 @@ def full(
         ("location", "work_modes"),
         ("salary", "salary"),
         ("offer-languages", "offer_langs"),
-        ("portals", "portals"),
         ("cvs", "cv_pdfs"),
     ],
 )

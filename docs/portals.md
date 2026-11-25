@@ -344,6 +344,15 @@ keeps the legacy behaviour: every registered portal is enabled. Unknown ids
 are a startup error. The bridge answers 400 naming the portal for a job from a
 portal that is not enabled, and the suggested searches only name enabled ones.
 
+Portals are enabled in the extension alone: **Options › Portals** (each
+switch shows the portal's terms warning and asks the browser for permission
+to that one site), then the portals ticked in each search. `/setup` never
+asks for portals nor writes `enabled_portals`; it is a manual advanced
+setting. An `enabled_portals` list an older `/setup` wrote to
+`config.local.toml` is removed once, on the bot's next start (only that key;
+every other line and comment is kept); a list set by hand afterwards is kept
+and enforced ([onboarding.md](onboarding.md#notes-and-limits)).
+
 The global pause is `/pausa` and `/reanudar` in Telegram (stored in the
 database, so it survives restarts); `paused = true` in the config is only the
 default until the toggle is first used. While paused, beacon sweeps, the

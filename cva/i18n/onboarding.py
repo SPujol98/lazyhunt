@@ -1,8 +1,7 @@
 """Guided setup questionnaire (``/setup``, ``cva/onboarding``): ``onboarding.*``.
 
-The portal terms warnings are NOT here: they are the extension's own texts
-(``extension/_locales/<lang>/messages.json``), read by
-:mod:`cva.onboarding.portals` so the bot and the options page say the same.
+Portals are not part of it: they are enabled only in the extension
+(Options › Portals shows each portal's terms warning), then ticked per search.
 """
 
 from typing import Final
@@ -17,7 +16,6 @@ EN: Final[dict[str, str]] = {
     "onboarding.section.location": "location",
     "onboarding.section.salary": "salary",
     "onboarding.section.offer_langs": "offer-languages",
-    "onboarding.section.portals": "portals",
     "onboarding.section.cvs": "cvs",
     "onboarding.section.unknown": (
         "There is no setup section “{section}”. Use /setup alone for the whole "
@@ -35,7 +33,6 @@ EN: Final[dict[str, str]] = {
     "onboarding.btn.edit": "✏️ Edit",
     "onboarding.btn.keep": "Keep {value}",
     "onboarding.btn.other": "✏️ Other titles…",
-    "onboarding.btn.enable": "✅ Enable {portal}",
     "onboarding.btn.list": "↩️ Back to the list",
     "onboarding.q.lang": (
         "Let's set up your profile: one question per message, with Back and "
@@ -103,11 +100,6 @@ EN: Final[dict[str, str]] = {
         "In which languages may an offer be written? Offers that require any "
         "other language are discarded. Tick them, then Done."
     ),
-    "onboarding.q.portals": (
-        "Which job portals should feed the bot? Tap a portal to read its terms "
-        "warning and enable it; tap an enabled one to turn it off. Then Done."
-    ),
-    "onboarding.q.portal_terms": "{warning}",
     "onboarding.q.cv_pdfs": (
         "Now your base CVs: the bot sends this CV, adapted, for each offer; "
         "one per position type × language (the list below). For each one, "
@@ -233,7 +225,6 @@ EN: Final[dict[str, str]] = {
     "onboarding.edit.country": "Country",
     "onboarding.edit.salary": "Salary",
     "onboarding.edit.offer_langs": "Offer languages",
-    "onboarding.edit.portals": "Portals",
     "onboarding.btn.other_lang": "✏️ Other languages…",
     "onboarding.q.spoken_langs": (
         "Which languages do you speak? Tick them, or add others with “Other "
@@ -293,14 +284,6 @@ EN: Final[dict[str, str]] = {
     "onboarding.edit.education": "Education",
     "onboarding.none": "—",
     "onboarding.summary.salary": "{amount} {currency} gross/year",
-    "onboarding.portals.terms_missing": (
-        "Enable {portal}? Check that its terms of use allow automated access "
-        "first; you are responsible for complying with them."
-    ),
-    "onboarding.portals.line": (
-        "To enable these portals, add this line to config.local.toml and "
-        "restart the bot:\n{line}"
-    ),
     "onboarding.cancelled": "Setup cancelled. Nothing was saved.",
     "onboarding.expired": "This setup expired. Send /setup to start again.",
     "onboarding.stale": "That button belongs to an earlier question; here is the current one.",
@@ -324,14 +307,11 @@ EN: Final[dict[str, str]] = {
     "onboarding.reload_failed": (
         "⚠️ The files were saved but the bot could not reload them: {error}"
     ),
-    "onboarding.portals.enabled": (
-        "Portals now active: {portals} (saved in config.local.toml). In the "
-        "extension, open Options › Portals and grant the browser permission "
-        "for each one; it is asked once per portal."
-    ),
     "onboarding.next_step": (
-        "Next step: in the extension, open Options › Searches and press "
-        '"Suggest from my profile" to add searches built from these answers.'
+        "Next step: in the extension, open Options › Portals and switch on "
+        "the portals you want (each shows its terms warning first). Then, in "
+        'Options › Searches, press "Suggest from my profile" to add searches '
+        "built from these answers and tick the portals each search runs on."
     ),
     "onboarding.identity.kept": (
         "ℹ️ Your identity claim ({claim} in claims.json) was edited by hand, so "
@@ -355,7 +335,6 @@ ES: Final[dict[str, str]] = {
     "onboarding.section.location": "ubicacion",
     "onboarding.section.salary": "salario",
     "onboarding.section.offer_langs": "idiomas-ofertas",
-    "onboarding.section.portals": "portales",
     "onboarding.section.cvs": "cvs",
     "onboarding.section.unknown": (
         "No hay ninguna sección de configuración «{section}». Usa /configurar "
@@ -374,7 +353,6 @@ ES: Final[dict[str, str]] = {
     "onboarding.btn.edit": "✏️ Editar",
     "onboarding.btn.keep": "Mantener {value}",
     "onboarding.btn.other": "✏️ Otros puestos…",
-    "onboarding.btn.enable": "✅ Activar {portal}",
     "onboarding.btn.list": "↩️ Volver a la lista",
     "onboarding.q.lang": (
         "Vamos a configurar tu perfil: una pregunta por mensaje, con Atrás y "
@@ -442,12 +420,6 @@ ES: Final[dict[str, str]] = {
         "¿En qué idiomas puede estar una oferta? Las que exijan otro idioma se "
         "descartan. Márcalos y pulsa Listo."
     ),
-    "onboarding.q.portals": (
-        "¿Qué portales de empleo alimentan el bot? Pulsa un portal para leer su "
-        "aviso sobre las condiciones de uso y activarlo; pulsa uno activo para "
-        "desactivarlo. Luego pulsa Listo."
-    ),
-    "onboarding.q.portal_terms": "{warning}",
     "onboarding.q.cv_pdfs": (
         "Ahora tus CV base: el bot envía este CV, adaptado, en cada oferta; "
         "uno por tipo de puesto × idioma (la lista de abajo). Para cada uno, "
@@ -571,7 +543,6 @@ ES: Final[dict[str, str]] = {
     "onboarding.edit.country": "País",
     "onboarding.edit.salary": "Sueldo",
     "onboarding.edit.offer_langs": "Idiomas de las ofertas",
-    "onboarding.edit.portals": "Portales",
     "onboarding.btn.other_lang": "✏️ Otros idiomas…",
     "onboarding.q.spoken_langs": (
         "¿Qué idiomas hablas? Márcalos, o añade otros con «Otros idiomas», y "
@@ -634,14 +605,6 @@ ES: Final[dict[str, str]] = {
     "onboarding.edit.education": "Formación",
     "onboarding.none": "—",
     "onboarding.summary.salary": "{amount} {currency} brutos/año",
-    "onboarding.portals.terms_missing": (
-        "¿Activar {portal}? Antes comprueba que sus condiciones de uso permiten el "
-        "acceso automatizado; cumplirlas es responsabilidad tuya."
-    ),
-    "onboarding.portals.line": (
-        "Para activar estos portales, añade esta línea a config.local.toml y "
-        "reinicia el bot:\n{line}"
-    ),
     "onboarding.cancelled": "Configuración cancelada. No se ha guardado nada.",
     "onboarding.expired": "Esta configuración ha caducado. Envía /configurar para empezar de nuevo.",
     "onboarding.stale": "Ese botón es de una pregunta anterior; aquí tienes la actual.",
@@ -665,14 +628,12 @@ ES: Final[dict[str, str]] = {
     "onboarding.reload_failed": (
         "⚠️ Los archivos se han guardado pero el bot no ha podido recargarlos: {error}"
     ),
-    "onboarding.portals.enabled": (
-        "Portales activos ahora: {portals} (guardado en config.local.toml). En "
-        "la extensión, abre Opciones › Portales y da el permiso del navegador "
-        "a cada uno; se pide una vez por portal."
-    ),
     "onboarding.next_step": (
-        "Siguiente paso: en la extensión, abre Opciones › Búsquedas y pulsa "
-        "«Sugerir desde mi perfil» para añadir búsquedas hechas con estas respuestas."
+        "Siguiente paso: en la extensión, abre Opciones › Portales y activa "
+        "los portales que quieras (cada uno muestra antes su aviso sobre las "
+        "condiciones de uso). Después, en Opciones › Búsquedas, pulsa «Sugerir "
+        "desde mi perfil» para añadir búsquedas hechas con estas respuestas y "
+        "marca en cada una los portales donde se ejecuta."
     ),
     "onboarding.identity.kept": (
         "ℹ️ Tu claim de identidad ({claim} en claims.json) se había editado a mano, "

@@ -26,7 +26,6 @@ import bot
 from cva.config import Settings
 from cva.i18n import Lang, t
 from cva.onboarding import flow
-from cva.onboarding.portals import terms_warning
 from cva.profile_identity import load_identity
 from cva.profile_prefs import load_preferences
 from cva.service import JobService
@@ -226,12 +225,7 @@ def _answer_everything(
     # re-run, T9): tick exactly Spanish and English.
     tick_exactly(d, "offer_langs", ("es", "en"))
     d.press("done")
-    d.press("t:linkedin")
-    assert terms_warning("linkedin", lang) in d.last
-    d.press("yes")
-    d.press("t:infojobs")
-    d.press("yes")
-    d.press("done")
+    assert d.step != "portals"  # portals are enabled only in the extension
     if d.step == "cv_pdfs":  # step 9 (T5): no base CV here; an unreadable
         d.press("skip_all")  # preferences.toml has no slots to ask for
         if d.step == "cv_pdfs":  # beta3-ux T4: Skip all warns first
@@ -345,27 +339,6 @@ def test_a_multi_select_needs_one_choice(tmp_path: Path) -> None:
     assert d.step == "families" and t("onboarding.err.pick_one", "en") in d.last
 
 
-def test_a_portal_is_enabled_only_after_its_terms_warning(tmp_path: Path) -> None:
-    d, _, _ = _setup_mode(tmp_path)
-    d.start()
-    d.context.user_data[flow.STATE_KEY]["step"] = "portals"
-    d.press("t:indeed")
-    assert d.last.endswith(terms_warning("indeed", "en"))
-    assert "Indeed" in d.last and "terms of use" in d.last  # the extension's text
-    d.press("no")
-    assert d.context.user_data[flow.STATE_KEY]["a"].get("portals", []) == []
-    d.press("t:indeed")
-    d.press("yes")
-    assert d.context.user_data[flow.STATE_KEY]["a"]["portals"] == ["indeed"]
-
-
-def test_spanish_terms_warning_is_the_extension_text() -> None:
-    catalogue = json.loads(
-        (REPO_ROOT / "extension/_locales/es/messages.json").read_text("utf-8")
-    )
-    assert terms_warning("linkedin", "es") == catalogue["termsLinkedin"]["message"]
-
-
 # --- priority over the other text captures ----------------------------------------
 
 
@@ -446,11 +419,8 @@ def test_whole_questionnaire_writes_loadable_files_and_reloads_the_service(
     assert d.step is None
     done = d.replies[-1]
     assert done.startswith(t("onboarding.saved", lang))
-    assert t("onboarding.portals.enabled", lang, portals="LinkedIn, InfoJobs") in done
-    assert tomllib.loads(config.read_text("utf-8"))["enabled_portals"] == [
-        "linkedin",
-        "infojobs",
-    ]
+    assert "enabled_portals" not in done  # portals: only in the extension
+    assert not config.exists()  # same language as the bot: nothing to save
 
     # The strict loaders accept what was written.
     prefs = load_preferences(profile / "preferences.toml")
@@ -481,15 +451,15 @@ def test_whole_questionnaire_writes_loadable_files_and_reloads_the_service(
         "city": "Valencia",
         "linkedin": "https://linkedin.com/in/jose",
     }
-    assert record["portals"] == ["linkedin", "infojobs"]
+    assert "portals" not in record
     if has_posix_modes():
         assert stat.S_IMODE(answers_file.stat().st_mode) == 0o600
 
     # The running service picked the new preferences up.
     assert service.preferences.search.level == "senior"
     assert service.loaded_preferences.families.ids == ("ai", "data_analyst")
-    # Same language as the bot: no ui_language saved (only the portals).
-    assert "ui_language" not in tomllib.loads(config.read_text("utf-8"))
+    # Same language as the bot: no ui_language saved.
+    assert not config.exists()
 
 
 _FRONTEND = """
@@ -593,7 +563,6 @@ def test_choosing_another_language_switches_the_bot_and_saves_it(
     saved = tomllib.loads(config.read_text("utf-8"))
     assert saved == {
         "llm_provider": "claude_code",
-        "enabled_portals": ["linkedin", "infojobs"],  # step 12, activated
         "ui_language": "es",
     }
     assert config.read_text("utf-8").startswith("# mine\n")  # wizard writer

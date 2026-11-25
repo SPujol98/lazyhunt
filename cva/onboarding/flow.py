@@ -89,13 +89,6 @@ from cva.onboarding import answers as A
 from cva.onboarding import cv_upload as U
 from cva.onboarding import starter
 from cva.onboarding.commit import Committed, ConfirmFailed, commit_all
-from cva.onboarding.portals import (
-    enabled_portals_line,
-    portal_ids,
-    portal_label,
-    read_enabled_portals,
-    terms_warning,
-)
 from cva.onboarding.prefill import current_answers
 from cva.onboarding.profile_gen import confirm_hook
 from cva.profile_identity import ProfileError
@@ -149,10 +142,8 @@ class Env:
     lang: Lang  # the bot's current UI language
     profile_dir: Path | None
     service: Any = None  # JobService (reload_preferences) in the full app
-    config_path: Path | None = None  # config.local.toml (ui_language, portals)
+    config_path: Path | None = None  # config.local.toml (ui_language)
     set_lang: Callable[[Lang], None] | None = None  # switch the running bot
-    # Serve the new enabled_portals in the running bot (bridge, setup settings).
-    set_portals: Callable[[list[str]], None] | None = None
 
 
 # Extension points (see the module docstring).
@@ -585,50 +576,6 @@ def _currency_text(state: State, text: str) -> Outcome:
     _answers(state)["currency"] = code
     state.pop("currency_other", None)
     return Outcome(advance=True)
-
-
-def _portals_render(state: State, lang: Lang) -> Screen:
-    pending = state.get("portal")
-    if pending:
-        return Screen(
-            _q("portal_terms", lang, warning=terms_warning(pending, lang)),
-            [
-                [
-                    (
-                        t("onboarding.btn.enable", lang, portal=portal_label(pending)),
-                        "yes",
-                    )
-                ],
-                [(t("onboarding.btn.list", lang), "no")],
-            ],
-        )
-    chosen = _answers(state).get("portals") or []
-    buttons = [(_mark(p in chosen, portal_label(p)), f"t:{p}") for p in portal_ids()]
-    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    return Screen(
-        _q("portals", lang), [*rows, [(t("onboarding.btn.done", lang), "done")]]
-    )
-
-
-def _portals_action(state: State, action: str, arg: str) -> Outcome:
-    answers = _answers(state)
-    chosen: list[str] = answers.get("portals") or []
-    if action == "t" and arg in portal_ids():
-        if arg in chosen:
-            answers["portals"] = [p for p in chosen if p != arg]
-        else:
-            state["portal"] = arg  # show its terms warning first
-        return Outcome()
-    if action == "yes" and state.get("portal"):
-        answers["portals"] = _toggle(chosen, str(state.pop("portal")), portal_ids())
-        return Outcome()
-    if action == "no":
-        state.pop("portal", None)
-        return Outcome()
-    if action == "done":
-        answers.setdefault("portals", [])
-        return Outcome(advance=True)
-    return Outcome()
 
 
 # --- background (T8, S9): spoken languages, skills, experience, education -------------
@@ -1200,7 +1147,6 @@ CORE_STEPS: Final[tuple[Step, ...]] = (
         follows="salary",
     ),
     _multi_step("offer_langs", A.OFFER_LANGUAGES, "onboarding.olang", per_row=4),
-    Step("portals", _portals_render, _portals_action),
     Step(
         CV_STEP,
         _cv_render,
@@ -1237,7 +1183,6 @@ SECTION_STEPS: Final[dict[str, tuple[str, ...]]] = {
     "location": ("work_modes", "work_city", "country"),
     "salary": ("salary", "currency"),
     "offer_langs": ("offer_langs",),
-    "portals": ("portals",),
     "cvs": (CV_STEP,),
 }
 # Accepted besides the section id and its EN/ES names (``onboarding.section.*``),
@@ -1260,7 +1205,6 @@ _SECTION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
     "location": ("ubicacion", "work-mode", "modalidad", "city", "ciudad"),
     "salary": ("sueldo",),
     "offer_langs": ("offer-langs", "idiomas-de-las-ofertas"),
-    "portals": ("portales",),
     "cvs": ("cv", "curriculum", "curriculums", "base-cvs", "cv-base"),
 }
 
@@ -1367,7 +1311,6 @@ def summary_text(state: State, lang: Lang) -> str:
         "country": a.get("country") or none,
         "salary": salary,
         "offer_langs": _labels(a.get("offer_langs") or [], "onboarding.olang", lang),
-        "portals": ", ".join(portal_label(p) for p in a.get("portals") or []) or none,
     }
     if _cv_slots(state):
         values[CV_STEP] = _cv_summary(state, lang)
@@ -1445,7 +1388,6 @@ def _next_id(state: State, current: str) -> str:
 def _go(state: State, target: str) -> None:
     state["history"] = [*state["history"], state["step"]][-50:]
     state["step"] = target
-    state.pop("portal", None)
     if target == SUMMARY.id:
         state["edit"] = False
 
@@ -1464,7 +1406,6 @@ def _back(state: State) -> None:
     if history:
         state["step"] = history[-1]
         state["history"] = history[:-1]
-        state.pop("portal", None)
 
 
 def _progress(state: State, lang: Lang) -> str | None:
@@ -1473,7 +1414,7 @@ def _progress(state: State, lang: Lang) -> str | None:
     follow-up (each language's level, the company, the currency) shows the
     number of the question it follows, and the base CVs step counts in the
     full run even when the answers end up skipping it (the summary then
-    follows the portals; the summary itself has no number)."""
+    follows the offer languages; the summary itself has no number)."""
     order = [s for s in _order(state) if s.follows is None and s is not SUMMARY]
     ids = [s.id for s in order]
     steps = _steps()
@@ -1552,10 +1493,6 @@ async def start(reply: Any, user_data: dict[Any, Any], env: Env) -> None:
     state = new_state(env.lang, section)
     state["dir"] = str(env.profile_dir)
     state["a"] = current_answers(env.profile_dir)
-    if env.config_path is not None:  # the file the bot runs with beats the record
-        enabled = read_enabled_portals(env.config_path)
-        if enabled is not None:
-            state["a"]["portals"] = enabled
     _offer_declared_families(state, env.profile_dir)
     _store(user_data, state)
     text, markup = render(state, env.lang)
@@ -1694,7 +1631,6 @@ def _commit_all(
     got: dict[str, str],
     lang: Lang,
     section: str | None = None,
-    config_path: Path | None = None,
     *,
     cover_letter: bool = False,
     declared: list[tuple[str, str]] | None = None,
@@ -1708,7 +1644,6 @@ def _commit_all(
         lang,
         section,
         CONFIRM_HOOKS,
-        config_path,
         cover_letter=cover_letter,
         declared=declared or [],
     )
@@ -1785,7 +1720,6 @@ async def _confirm(
             cv["got"],
             lang,
             state.get("section"),
-            env.config_path,
             cover_letter=bool(cv.get("letter")),
             declared=_declared(state),
         )
@@ -1842,25 +1776,6 @@ async def _confirm(
         except ProfileError as exc:
             error = describe_load_error(profile_dir, exc)
             lines.append(t("onboarding.reload_failed", lang, error=error))
-    if committed.portals is not None:
-        if env.set_portals is not None:
-            env.set_portals(committed.portals)
-        labels = ", ".join(portal_label(p) for p in committed.portals)
-        lines.append(
-            t(
-                "onboarding.portals.enabled",
-                lang,
-                portals=labels or t("onboarding.none", lang),
-            )
-        )
-    elif state.get("section") in (None, "portals"):
-        lines.append(
-            t(
-                "onboarding.portals.line",
-                lang,
-                line=enabled_portals_line(list(answers.get("portals") or [])),
-            )
-        )
     missing = missing_profile_files(profile_dir)
     if missing:
         lines.append(t("onboarding.missing", lang, missing=", ".join(missing)))

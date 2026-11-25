@@ -1,73 +1,15 @@
 """The ``config.local.toml`` writer of ``/setup`` (onboarding-v2, verifier
-advisories): a comment ending the ``enabled_portals`` line is kept, and a
-symlinked file (dotfiles) is written through its link, which stays a link,
-by the portals step, the language switch and Confirm's undo.
+advisories): a symlinked file (dotfiles) is written through its link, which
+stays a link, by the language switch and Confirm's undo. (The removal of an
+old ``enabled_portals`` list keeps comments and links too:
+``tests/test_onboarding_portals.py``.)
 """
 
 import tomllib
 from pathlib import Path
 
-import pytest
-
-import bot
-from cva.i18n import t
 from tests.portability import symlink_or_skip
-from tests.test_onboarding import Driver, _answer_everything, _setup_mode
-from tests.test_onboarding_sections import _set_up, _start
-
-
-def _portals_run(d: Driver) -> None:
-    _start(d, "/setup portals")
-    for portal in ("linkedin", "infojobs", "indeed"):
-        chosen = d.context.user_data["onboarding"]["a"].get("portals") or []
-        if (portal in ("linkedin",)) != (portal in chosen):
-            d.press(f"t:{portal}")
-            if portal not in chosen:
-                d.press("yes")
-    d.press("done")
-    d.press("confirm")
-
-
-@pytest.mark.parametrize(
-    ("before", "after"),
-    [
-        (
-            'enabled_portals = ["indeed"]  # my portals\n',
-            'enabled_portals = ["linkedin"]  # my portals\n',
-        ),
-        (
-            'enabled_portals = [\n  "indeed",\n]   # mine # really\n',
-            'enabled_portals = ["linkedin"]   # mine # really\n',
-        ),
-        (
-            "enabled_portals = ['in#deed']\n",
-            'enabled_portals = ["linkedin"]\n',
-        ),
-    ],
-)
-def test_setup_portals_keeps_a_trailing_comment(
-    tmp_path: Path, before: str, after: str
-) -> None:
-    d, _ = _set_up(tmp_path)
-    config: Path = d.context.bot_data[bot._CONFIG_PATH_KEY]
-    config.write_text(f'# top\n{before}ui_language = "en"\n', encoding="utf-8")
-    _portals_run(d)
-    assert d.replies[-1].startswith(t("onboarding.saved", "en"))
-    assert config.read_text("utf-8") == f'# top\n{after}ui_language = "en"\n'
-
-
-def test_setup_portals_writes_through_a_symlinked_config(tmp_path: Path) -> None:
-    d, _ = _set_up(tmp_path)
-    config: Path = d.context.bot_data[bot._CONFIG_PATH_KEY]
-    real = tmp_path / "dotfiles" / "cva.toml"
-    real.parent.mkdir()
-    real.write_text(config.read_text("utf-8"), encoding="utf-8")
-    config.unlink()
-    symlink_or_skip(config, real)
-    _portals_run(d)
-    assert d.replies[-1].startswith(t("onboarding.saved", "en"))
-    assert config.is_symlink() and config.resolve() == real.resolve()
-    assert tomllib.loads(real.read_text("utf-8"))["enabled_portals"] == ["linkedin"]
+from tests.test_onboarding import _answer_everything, _setup_mode
 
 
 def test_undo_puts_a_symlinked_file_back_through_the_link(tmp_path: Path) -> None:

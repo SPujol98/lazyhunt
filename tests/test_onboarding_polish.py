@@ -58,7 +58,7 @@ def test_the_step_total_is_the_same_on_every_question(
     _answer_everything(d, lang)
     counters = [_PROGRESS.findall(text) for text in d.shown]
     pairs = [(int(n), int(total)) for found in counters for n, total in found]
-    assert {total for _, total in pairs} == {20}
+    assert {total for _, total in pairs} == {19}  # no portals question
     # A follow-up question (the level of each language) keeps the number of
     # the question it follows, so the count never jumps back.
     numbers = [n for n, _ in pairs]
@@ -270,7 +270,11 @@ def test_legacy_install_publishes_a_menu_without_setup(
     monkeypatch.setattr(
         bot.JobService,
         "from_settings",
-        lambda s, **k: SimpleNamespace(threshold=65, repository=None),
+        lambda s, **k: SimpleNamespace(
+            threshold=65,
+            repository=None,
+            migrate_portals_config=lambda path: False,
+        ),
     )
     full = SimpleNamespace(run_polling=lambda *a, **k: None)
     monkeypatch.setattr(bot, "build_app", lambda s, svc: full)

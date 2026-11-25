@@ -38,7 +38,7 @@ import json
 import logging
 import sqlite3
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -828,8 +828,8 @@ def _make_handler(
     answer 503.
 
     ``enabled_portals`` may be a callable read on every request (the
-    :class:`_Bridge` passes one, so a ``/setup`` that writes
-    ``enabled_portals`` is served at once).
+    :class:`_Bridge` passes one). It is a manual advanced setting: portals
+    are enabled in the extension, and ``/setup`` never writes it.
     """
     claims = AlertClaims(repo)  # health alerts in flight (guarded by ``lock``)
 
@@ -1159,11 +1159,6 @@ class _Bridge:
         self._closing = False
         # The one-time code /connect issues for POST /pair (beta3-ux T1).
         self.pairing = OneTimeCode(ttl_seconds=PAIR_CODE_TTL_SECONDS)
-
-    def set_enabled_portals(self, portals: Iterable[str] | None) -> None:
-        """Serve ``portals`` from now on (``None``: every registered portal);
-        what ``/setup`` calls after writing ``enabled_portals``."""
-        self._enabled_portals = None if portals is None else frozenset(portals)
 
     @property
     def port(self) -> int:

@@ -637,6 +637,10 @@ _FOLLOWUP_SNOOZE_DAYS: Final[int] = 7
 _FOLLOWUP_PASS_CAP: Final[int] = 3  # reminders per daily pass; the rest next day
 _FOLLOWUP_MAX_ATTEMPTS: Final[int] = 3  # failed sends per item before giving up
 _FOLLOWUPS_SINCE_KEY: Final[str] = "followups_since"
+# app_state key: set once the enabled_portals list of an older /setup was
+# removed from config.local.toml (portals-extension-only); a list the owner
+# sets by hand afterwards is then kept.
+_PORTALS_MIGRATED_KEY: Final[str] = "portals_config_migrated"
 # app_state keys: {"reminded": {id: followups}, "snooze": {id: date},
 # "proposed": [id], "last_run": date} and the failed-send backoff.
 _FOLLOWUP_STATE_KEY: Final[str] = "followup_state"
@@ -1068,6 +1072,39 @@ class JobService:
     def set_paused(self, paused: bool) -> None:
         """Persist the global pause (/pausa, /reanudar); survives restarts."""
         self._repo.set_paused(paused)
+
+    def migrate_portals_config(self, config_path: Path) -> bool:
+        """Once per database, remove the ``enabled_portals`` list an older
+        ``/setup`` wrote to ``config_path`` (``config.local.toml``): portals
+        are enabled only in the extension now. ``True`` when the key was
+        removed (the caller then serves every registered portal).
+
+        The run is recorded in ``app_state`` (no schema migration), so a
+        list the owner sets by hand later is never removed again. A file
+        that cannot be written logs a warning and records nothing: the old
+        list stays in force and the next start retries."""
+        from cva.onboarding.portals import remove_enabled_portals
+
+        if self._repo.get_state(_PORTALS_MIGRATED_KEY) is not None:
+            return False
+        try:
+            removed = remove_enabled_portals(config_path)
+        except (OSError, ValueError) as exc:
+            _logger.warning(
+                "could not remove enabled_portals from %s (%s): the bridge "
+                "keeps honouring it until a later start removes it",
+                config_path,
+                exc,
+            )
+            return False
+        self._repo.set_state(_PORTALS_MIGRATED_KEY, "1")
+        if removed:
+            _logger.info(
+                "removed enabled_portals from %s: portals are now enabled only "
+                "in the extension (Options > Portals, then each search)",
+                config_path,
+            )
+        return removed
 
     def _voice_sample(self) -> str:
         """The profile's cover-letter voice sample (``""`` when absent)."""
@@ -3589,6 +3626,14 @@ class JobService:
     def delete_star(self, star_id: int) -> None:
         self._repo.get_star(star_id)  # fail fast on a stale button
         self._repo.delete_star(star_id)
+
+    def stored_offer_for_job(self, job_id: str) -> OfferRow | None:
+        """The stored offer behind a notification's ``an:<job_id>`` button.
+
+        The most recent row whose URL carries that portal job id, or ``None``
+        when the offer was never stored (old LinkedIn email-alert buttons).
+        """
+        return self._repo.find_offer_by_job_id(job_id)
 
     def offer(self, offer_id: int) -> OfferRow:
         """One tracker row (bot /status <id>)."""

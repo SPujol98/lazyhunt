@@ -4,8 +4,9 @@
   ``user_data``, extension points for later setup steps);
 - :mod:`cva.onboarding.answers`: validation of the answers and their mapping
   to ``preferences.toml``, ``profile.toml`` and ``onboarding_answers.json``;
-- :mod:`cva.onboarding.portals`: the portals' terms warnings (the extension's
-  own texts).
+- :mod:`cva.onboarding.portals`: the one-time removal of the
+  ``enabled_portals`` list older ``/setup`` runs wrote (portals are enabled
+  only in the extension).
 
 See ``docs/onboarding.md``.
 """

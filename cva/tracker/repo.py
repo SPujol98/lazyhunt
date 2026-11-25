@@ -1475,6 +1475,29 @@ class OfferRepository:
         ).fetchone()
         return None if row is None else _row_to_offer(row)
 
+    def find_offer_by_job_id(self, job_id: str) -> OfferRow | None:
+        """The most recent offer (highest id) whose URL carries ``job_id``.
+
+        A notification's ``[Analizar]`` button only carries the portal job id
+        (``an:<job_id>``). A URL matches when the portal registry extracts
+        exactly that id from it, or (unregistered portal) when it is the last
+        path segment, the same fallback the bridge uses to build the button.
+        Two portals sharing an id resolve to the newest row, deterministically.
+        """
+        if not job_id:
+            return None
+        rows = self._conn.execute(
+            "SELECT * FROM offers WHERE url_oferta IS NOT NULL "
+            "AND instr(url_oferta, ?) > 0 ORDER BY id DESC",
+            (job_id,),
+        ).fetchall()
+        for row in rows:
+            url = str(row["url_oferta"])
+            found = job_id_from_url(url) or url.rstrip("/").rsplit("/", 1)[-1]
+            if found == job_id:
+                return _row_to_offer(row)
+        return None
+
     def set_estado(self, offer_id: int, estado: str) -> None:
         """Transition the estado; the 13-value CHECK rejects invalid values."""
         self._conn.execute(

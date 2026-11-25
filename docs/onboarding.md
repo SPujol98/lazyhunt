@@ -10,10 +10,13 @@ Where it fits in the whole first run: [getting-started.md](getting-started.md).
 
 - You get one question per message. Use the buttons when the answer is a
   choice, and type the answer when it is text. Each question starts with
-  `Setup n/20` (`n/total` of a section with `/setup <section>`): the total
+  `Setup n/19` (`n/total` of a section with `/setup <section>`): the total
   never changes, a follow-up (each language's level, the company, the
   currency) keeps the number of the question it follows, and when no base
-  CV is asked the summary comes right after the portals.
+  CV is asked the summary comes right after the offer languages.
+- `/setup` does not ask for portals: you enable a portal only in the
+  extension (**Options › Portals**, after its terms warning) and then tick
+  it in each search that should run on it.
 - Every step has **Cancel**. Every step after the first also has **Back**.
 - Nothing is saved until you press **Confirm** on the summary. **Edit** on
   the summary takes you to a single answer and then back to the summary.
@@ -44,7 +47,6 @@ needs a profile that is already set up; before that, run `/setup` alone.
 | `location` | `ubicacion` | work modes, work city, country | `[search] work_modes`, `[location] city`, `country` (the places of the [suggested searches](#suggested-searches)) |
 | `salary` | `salario` | minimum salary, currency | `[search] min_salary`, `currency` |
 | `offer-languages` | `idiomas-ofertas` | accepted offer languages | `[gates] allowed_languages` |
-| `portals` | `portales` | portals | `onboarding_answers.json` and `config.local.toml` `enabled_portals` |
 | `cvs` | `cvs` | base CV PDFs | `cv_base_pdfs/` and its manifest |
 
 - Names are not case- or accent-sensitive, and a few aliases work too
@@ -94,9 +96,10 @@ the same validated, all-or-nothing path and the bot uses the result at once:
   `claims.json` by hand, the extension never changes them.
 
 The Profile tab needs the bridge (URL and secret in **Options › Schedule and
-bot**) and a profile that is already set up; contact data, portals and base
-CVs stay in `/setup <section>` (the base CVs are listed read-only at the
-end; `/cvs` in the bot changes their template or rebuilds them).
+bot**) and a profile that is already set up; contact data and base CVs stay
+in `/setup <section>` (the base CVs are listed read-only at the end; `/cvs`
+in the bot changes their template or rebuilds them), and portals are
+enabled in **Options › Portals**.
 
 ## Steps
 
@@ -137,22 +140,21 @@ end; `/cvs` in the bot changes their template or rebuilds them).
     else (Spain and the euro area included) EUR. One currency on purpose:
     the one your minimum salary is in.
 11. Languages an offer may be written in
-12. Portals to enable. Before a portal is enabled, you see the terms warning
-    the browser extension shows for it.
-13. Base CVs: one per position type × language. For each one, upload
+12. Base CVs: one per position type × language. For each one, upload
     your PDF, create one with lazyhunt from your answers, or leave it for
     later; optionally a base cover letter (see below)
-14. Summary, then Confirm or Edit
+13. Summary, then Confirm or Edit
 
 ## After Confirm
 
 A Confirm of the whole questionnaire, in one all-or-nothing step:
 
 1. writes `preferences.toml` and `profile.toml` ([Where the answers go](#where-the-answers-go));
-2. stores your base CV PDFs and their manifest ([Base CV PDFs](#base-cv-pdfs-step-13));
+2. stores your base CV PDFs and their manifest ([Base CV PDFs](#base-cv-pdfs-step-12));
 3. creates the files of the [minimal profile](#the-minimal-profile) that
-   are still missing (`claims.json`, `synonyms.json`, the judge files);
-4. sets `enabled_portals` in `config.local.toml` to the portals you chose.
+   are still missing (`claims.json`, `synonyms.json`, the judge files).
+
+It never writes `enabled_portals`: portals are enabled only in the extension.
 
 If any of these fails, every file is put back as it was, your uploads stay,
 and the reply says "Nothing was changed": fix the cause it names and press
@@ -163,13 +165,12 @@ version as `<name>.bak`.
 
 When it succeeds, the bot loads the new profile at once: in setup mode it
 switches to normal mode right after Confirm, with no restart and without
-waiting for another message (the bridge then serves your portals and
-suggested searches). The reply lists the
-active portals (grant each one's browser permission in the extension's
-**Options › Portals**; a portal is scanned only when it is on in the bot and
-in the extension) and ends with the next step: **Options › Searches ›
-Suggest from my profile** in the extension. A `/setup <section>` reply has
-no next step.
+waiting for another message (the bridge then serves your suggested
+searches). The reply ends with the next step in the extension: switch on the
+portals you want in **Options › Portals** (each shows its terms warning and
+asks the browser for permission to that one site), then **Options › Searches
+› Suggest from my profile**, and tick in each search the portals it runs on.
+A `/setup <section>` reply has no next step.
 
 ## Suggested searches
 
@@ -184,7 +185,9 @@ your answers, up to 8 of them:
   remote work. The remote search is written `remoto` when you accept offers
   in Spanish or Catalan, and `remote` otherwise; the portal adapters treat
   both as their remote filter.
-- **Portals:** the portals enabled on the bot.
+- **Portals:** LinkedIn and InfoJobs, plus the other registered portals
+  that opt in to suggestions (narrowed to `enabled_portals` when you set
+  that list by hand); you then tick, in each search, the portals it runs on.
 
 Nothing is written for this: the places are derived each time the bot reads
 `preferences.toml`, so `/setup location`, `/setup positions` and the Profile
@@ -208,8 +211,7 @@ places (`Barcelona`, `remoto`).
 | Name | `profile.toml` `[identity] name` and `file_slug` (derived from the name) |
 | Email, phone, city, LinkedIn | `onboarding_answers.json` (`contact`), for the step that generates your claims, and the identity and phone claims when `/setup` generated them (see Re-running it, above); never written to `preferences.toml` |
 | Spoken languages, skills, experience, education | `onboarding_answers.json` (`background`) and the `setup-*` claims of `claims.json` (see [The minimal profile](#the-minimal-profile)) |
-| Portals | `onboarding_answers.json` and `config.local.toml` `enabled_portals` (only that line changes; see below) |
-| Base CV PDFs | `cv_base_pdfs/<name>.pdf` and `cv_base_pdfs/manifest.json` (see [Base CV PDFs](#base-cv-pdfs-step-13)) |
+| Base CV PDFs | `cv_base_pdfs/<name>.pdf` and `cv_base_pdfs/manifest.json` (see [Base CV PDFs](#base-cv-pdfs-step-12)) |
 | Bot language | `config.local.toml` `ui_language` (saved only when it changes, with the same writer `cli.py init` uses) |
 
 Both TOML files are written by `cva/profile_writer.py`. The writer validates
@@ -232,7 +234,6 @@ with mode `0600` because it holds your contact data.
     "experience": {"years": "3-5", "role": "Backend Developer", "company": "Acme"},
     "education": ["BSc Computer Science"]
   },
-  "portals": ["linkedin"],
   "answers": {"…": "every answer as given"}
 }
 ```
@@ -246,11 +247,11 @@ common one (`english`, `Inglés`) counts as that one. `level` is one of
 entries (empty when skipped). An older file whose `education` is one line
 still loads: that line is one entry, never split again.
 
-In the full bot, the new preferences and portals take effect immediately
-(`reload_preferences`; the bridge reads `enabled_portals` on every request).
+In the full bot, the new preferences take effect immediately
+(`reload_preferences`).
 Some service texts change only after a restart.
 
-## Base CV PDFs (step 13)
+## Base CV PDFs (step 12)
 
 The step starts by saying what base CVs are for: the bot sends this CV,
 adapted, for each offer; one per position type × language. For the slot
@@ -443,22 +444,17 @@ forgets it). If the LLM fails, the base CV is untouched.
   If you use the legacy layout, which has no `profile_dir`, `/setup` tells
   you to run `uv run cli.py init` first, and `/help` and the command menu
   do not offer `/setup` there.
-- Confirm (the whole questionnaire and `/setup portals`) activates the
-  portals you chose: it sets `enabled_portals` in `config.local.toml` to
-  exactly those portal ids. Only portals the bot knows can be written. The
-  wizard's writer changes that one line (a multi-line array included,
-  keeping a comment at its end) and keeps every other line and comment
-  byte for byte; a symlinked `config.local.toml` (dotfiles) is written
-  through its link, which stays a link; the result, over
-  `config.toml`, must load with the bot's settings validators before the
-  file is replaced, and the file is part of the all-or-nothing Confirm. The
-  running bot serves the new list at once (the bridge's `/config`, which the
-  extension syncs every round; no restart), and setup mode hands it to the
-  full bot. The reply lists the active portals: grant the browser
-  permission for each one in the extension (**Options › Portals**). The
-  step is prefilled from `enabled_portals` when the file sets it. A
-  `CVA_ENABLED_PORTALS` environment variable still overrides the file at
-  the next start.
+- `/setup` never asks for portals nor writes `enabled_portals` (a portals
+  step there meant enabling a portal three times: in `/setup`, in the
+  extension and in each search). An `enabled_portals` list an older
+  `/setup` wrote to `config.local.toml` is removed once, on the next start
+  of the bot: only that key's lines go (every other line and comment keeps
+  its bytes; a symlinked file is written through its link), the log says
+  so in one line, and the `app_state` key `portals_config_migrated`
+  records it. A list you set by hand afterwards is kept and the bridge
+  enforces it (see `enabled_portals` in the README's Configuration). If the
+  file cannot be written, the bot logs a warning, keeps the old list and
+  tries again at the next start.
 - In setup mode, the bot needs `claims.json`, `synonyms.json` and the judge
   files before it can run normally. Confirm creates them (the
   [minimal profile](#the-minimal-profile)); if one is still missing, the
@@ -526,14 +522,15 @@ These files are not created, and the features that use them stay off until
 you add them: `cover_letter_base.toml` (cover letters), `voice.md` (the voice
 sample for letters), `salary_reference.toml` (salary estimates on cards),
 and `honest_gaps.md`. Base CV delivery works for the CVs you uploaded in
-step 13 (`cv_base_pdfs/`); skipped slots have no CV to send until you add one.
+step 12 (`cv_base_pdfs/`); skipped slots have no CV to send until you add one.
 
 ## For developers
 
 - Code: `cva/onboarding/` (`flow.py` is the conversation, `answers.py` handles
-  validation and the file mapping, `portals.py` loads the terms warnings from
-  `extension/_locales`). Text: `cva/i18n/onboarding.py`.
-- Step 13 (the CV upload) is `cva/onboarding/cv_upload.py` (slots,
+  validation and the file mapping, `portals.py` removes the `enabled_portals`
+  list of an older `/setup` once, through `JobService.migrate_portals_config`).
+  Text: `cva/i18n/onboarding.py`.
+- Step 12 (the CV upload) is `cva/onboarding/cv_upload.py` (slots,
   validation, pending area, manifest merge) with its `cv_pdfs` step in
   `flow.py`. The PDF arrives
   through `flow.on_document`, which the bot's document handlers call.

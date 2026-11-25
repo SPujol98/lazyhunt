@@ -1523,8 +1523,21 @@ async def _cb_analyze(press: _Press, parts: list[str]) -> bool:
     if len(parts) != 1:
         return False
     service, query, context = press.service, press.query, press.context
-    url = f"https://linkedin.com/jobs/view/{parts[0]}"
-    offer_id = await _ingest_url(service, query.message, context, url)
+    # The button carries only the job id. An offer the bridge/beacon already
+    # stored is analysed from its stored text with zero fetches (the portal
+    # page is often walled); without usable text its own stored URL is
+    # re-ingested; only a never-stored offer (old LinkedIn email-alert button)
+    # falls back to the LinkedIn URL built from the id.
+    stored = service.stored_offer_for_job(parts[0])
+    if stored is not None and stored.source_data.strip():
+        offer_id: int | None = stored.id
+    else:
+        url = (
+            stored.url_oferta
+            if stored is not None and stored.url_oferta
+            else f"https://linkedin.com/jobs/view/{parts[0]}"
+        )
+        offer_id = await _ingest_url(service, query.message, context, url)
     if offer_id is not None:
         await _analyze_and_reply(service, query.message, context, offer_id)
     return True
@@ -1979,22 +1992,6 @@ def _set_ui_language(context: ContextTypes.DEFAULT_TYPE, lang: Lang) -> None:
         )
 
 
-def _set_enabled_portals(
-    context: ContextTypes.DEFAULT_TYPE, portals: list[str]
-) -> None:
-    """Serve the portals the guided setup just wrote to config.local.toml
-    without a restart: the running bridge's ``/config`` and, in setup mode,
-    the settings the full app ``main`` starts next is built from."""
-    handle = context.bot_data.get(bridge.BOT_DATA_KEY)
-    if handle is not None:
-        handle.set_enabled_portals(portals)
-    settings = context.bot_data.get(_SETUP_SETTINGS_KEY)
-    if isinstance(settings, Settings):
-        context.bot_data[_SETUP_SETTINGS_KEY] = settings.model_copy(
-            update={"enabled_portals": list(portals)}
-        )
-
-
 def _onboarding_env(context: ContextTypes.DEFAULT_TYPE) -> onboarding.Env:
     """What the guided setup needs from this app (setup mode or full)."""
     return onboarding.Env(
@@ -2003,7 +2000,6 @@ def _onboarding_env(context: ContextTypes.DEFAULT_TYPE) -> onboarding.Env:
         service=context.bot_data.get(_SERVICE_KEY),
         config_path=context.bot_data.get(_CONFIG_PATH_KEY),
         set_lang=lambda lang: _set_ui_language(context, lang),
-        set_portals=lambda portals: _set_enabled_portals(context, portals),
     )
 
 
@@ -2514,6 +2510,19 @@ def main() -> None:
         raise SystemExit(1) from None
 
 
+def _migrate_portals_config(
+    settings: Settings, service: JobService, config_path: Path
+) -> Settings:
+    """Start-up step: remove, once, the ``enabled_portals`` list an older
+    ``/setup`` wrote to ``config_path`` (portals are enabled only in the
+    extension now) and return the settings the bridge is built from, with
+    that list unset when it was removed. A list set by hand later, or a file
+    that cannot be written (a warning), leaves ``settings`` as loaded."""
+    if service.migrate_portals_config(config_path):
+        return settings.model_copy(update={"enabled_portals": None})
+    return settings
+
+
 def _token_rejected(lang: Lang) -> NoReturn:
     sys.stderr.write(t("bot.token_rejected", lang) + "\n")
     sys.stderr.flush()
@@ -2551,6 +2560,7 @@ def _run(settings: Settings) -> None:
         settings = setup_app.bot_data.get(_SETUP_SETTINGS_KEY, settings)
     if service is None:
         service = JobService.from_settings(settings)
+    settings = _migrate_portals_config(settings, service, Path(LOCAL_TOML))
     app = build_app(settings, service)
     scheduler.register(
         app,

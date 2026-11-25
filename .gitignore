@@ -51,3 +51,6 @@ repo_beacons/
 /profiles/*
 !/profiles/demo/
 !/profiles/README.md
+
+# Diagnostic report written by docs/tester-report.md (personal, never commit)
+/tester-report.md

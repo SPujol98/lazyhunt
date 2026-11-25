@@ -24,6 +24,7 @@ from cva import bridge
 from cva.claimsdb import ClaimsError
 from cva.config import Settings
 from cva.i18n import t
+from cva.ingest.sources import SOURCES
 from cva.service import JobService
 from cva.setup_mode import missing_profile_files, needs_setup
 from tests.test_bot import FakeMessage, FakeQuery, FakeUpdate
@@ -456,7 +457,11 @@ def test_main_with_a_complete_profile_starts_the_full_app(
 
     def fake_service(s: Settings, **kwargs: Any) -> Any:
         built.append(s)
-        return SimpleNamespace(threshold=65, repository=None)
+        return SimpleNamespace(
+            threshold=65,
+            repository=None,
+            migrate_portals_config=lambda path: False,
+        )
 
     monkeypatch.setattr(bot.JobService, "from_settings", fake_service)
     monkeypatch.setattr(bot, "build_app", lambda s, svc: _FakeFullApp(runs))
@@ -498,7 +503,11 @@ def test_main_switches_to_the_full_app_once_the_profile_is_complete(
     monkeypatch.setattr(
         bot.JobService,
         "from_settings",
-        lambda s, **k: SimpleNamespace(threshold=65, repository=None),
+        lambda s, **k: SimpleNamespace(
+            threshold=65,
+            repository=None,
+            migrate_portals_config=lambda path: False,
+        ),
     )
     monkeypatch.setattr(bot, "build_app", lambda s, svc: _FakeFullApp(runs))
     monkeypatch.setattr(bot.scheduler, "register", lambda *a, **k: None)
@@ -520,7 +529,11 @@ def test_main_reuses_the_validated_service_and_replays_the_batch(
     _patch_main(monkeypatch, settings, runs)
     from telegram.ext import Application
 
-    validated = SimpleNamespace(threshold=65, repository=None)
+    validated = SimpleNamespace(
+        threshold=65,
+        repository=None,
+        migrate_portals_config=lambda path: False,
+    )
     pending = [_real_update(7, "/status")]
 
     def setup_run(self: Any, *args: Any, **kwargs: Any) -> None:
@@ -645,7 +658,7 @@ def test_confirm_switches_to_the_full_app_with_no_further_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Right after a successful /setup Confirm in setup mode, main() starts the
-    # full app: its bridge serves the chosen portals and the suggested
+    # full app: its bridge serves every portal and the suggested
     # searches although the owner sends nothing else.
     from telegram.ext import Application
 
@@ -726,7 +739,9 @@ def test_confirm_switches_to_the_full_app_with_no_further_message(
     assert replayed == []  # the Confirm was handled, never replayed
     config = served["/config"].json()
     assert config["paused"] is False
-    assert config["enabledPortals"] == ["linkedin", "infojobs"]
+    # Portals are enabled only in the extension: /setup wrote no list, so
+    # the full app's bridge accepts every registered portal.
+    assert config["enabledPortals"] == list(SOURCES)
     searches = served["/searches/suggested"].json()["searches"]
     assert {s["location"] for s in searches} == {"Valencia", "remoto"}
 

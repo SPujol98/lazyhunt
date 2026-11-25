@@ -214,10 +214,11 @@ por mensaje, con botones cuando hay que elegir. Tarda unos **10 minutos**:
    «España (por Barcelona)»);
 10. un sueldo mínimo bruto anual (opcional);
 11. los idiomas en que puede estar una oferta (las demás se descartan);
-12. los portales que quieres activar; cada uno muestra antes su aviso sobre
-    las condiciones de uso;
-13. tus **CV base en PDF**, uno por puesto e idioma;
-14. un resumen con **✏️ Editar** y **✅ Confirmar**.
+12. tus **CV base en PDF**, uno por puesto e idioma;
+13. un resumen con **✏️ Editar** y **✅ Confirmar**.
+
+`/configurar` no pregunta por los portales: se activan solo en la extensión
+(apartado 8).
 
 Detalles útiles:
 
@@ -236,9 +237,9 @@ Detalles útiles:
 - Si dejas la configuración parada 30 minutos, caduca: envía `/configurar`
   para empezar de nuevo.
 
-**Después de Confirmar** el bot guarda tu perfil, activa los portales que
-elegiste y pasa a modo normal sin reiniciar. La respuesta termina con el
-siguiente paso: abrir la extensión y sugerir búsquedas. Todas las preguntas y
+**Después de Confirmar** el bot guarda tu perfil y pasa a modo normal sin
+reiniciar. La respuesta termina con el siguiente paso: activar los portales
+en la extensión y sugerir búsquedas. Todas las preguntas y
 archivos: [onboarding.md](onboarding.md).
 
 ## 8. La extensión
@@ -256,14 +257,16 @@ repositorio. Sus textos siguen el idioma de tu navegador.
    solos. El código sirve una vez, durante 10 minutos. (Pegar el secreto a mano
    en **Secreto del puente** sigue funcionando: es `CVA_BRIDGE_SECRET` en
    `.env`; pulsa luego **Guardar cambios**.)
-3. En **Portales**, activa **los mismos** que elegiste en `/configurar`: un
-   portal solo se escanea si está activo en el bot y en la extensión. Cada
+3. En **Portales**, activa los portales que quieras usar. Es el único sitio
+   donde se activa un portal (`/configurar` no los pregunta). Cada
    interruptor muestra el aviso de condiciones y pide al navegador permiso
    para ese único sitio.
 4. En **Búsquedas**, pulsa **Sugerir desde mi perfil**. Propone búsquedas
    hechas con tus respuestas (los puestos que elegiste, en tu ciudad si
    aceptas presencial o híbrido, más una en remoto si lo aceptas). Quédate
-   con las que quieras, añade las tuyas y pulsa **Guardar cambios**. Mientras
+   con las que quieras, añade las tuyas, marca en cada búsqueda los portales
+   donde se ejecuta (solo se ejecuta en los que marques) y pulsa **Guardar
+   cambios**. Mientras
    no tengas ninguna, la ventana de la extensión dice "Todavía no hay
    búsquedas" y te trae aquí.
 
@@ -330,12 +333,12 @@ respuestas actuales ya puestas (botón **Mantener …**). Por ejemplo
 | `ubicacion` | modalidades, ciudad y país de trabajo |
 | `salario` | sueldo mínimo y moneda |
 | `idiomas-ofertas` | idiomas aceptados en las ofertas |
-| `portales` | portales activos |
 | `cvs` | tus CV base en PDF |
 
 También puedes hacerlo en la extensión: **Opciones › Perfil › Cargar desde el
 bot**, cambiar lo que quieras y pulsar **Guardar** en cada parte. Los datos de
-contacto, los portales y los CV solo se cambian con `/configurar <sección>`.
+contacto y los CV solo se cambian con `/configurar <sección>`; los portales,
+en **Opciones › Portales** y en cada búsqueda.
 
 No dejes que tu asistente de programación rellene tu perfil: usa
 `/configurar`.

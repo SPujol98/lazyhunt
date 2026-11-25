@@ -226,10 +226,10 @@ bot before answering anything, choose the demo profile in the wizard (or set
    (`http://127.0.0.1:8765/bridge`) and secret are filled in and saved. The
    code works once, for 10 minutes. Typing the secret by hand still works
    (`CVA_BRIDGE_SECRET` in `.env`; the wizard can show it once at the end).
-3. In **Options › Portals**, switch on the same portals you chose in
-   `/setup`. `/setup` activated them on the bot, but a portal is scanned only
-   when it is on in both places. Each switch shows the portal's terms warning
-   and asks the browser for permission to that single domain.
+3. In **Options › Portals**, switch on the portals you want to use. This is
+   the only place portals are enabled. Each switch shows the portal's terms
+   warning and asks the browser for permission to that single domain. Then,
+   in each search, tick the portals it should run on.
 4. In **Options › Searches**, press **Suggest from my profile**. It proposes
    searches built from your answers: the roles of each position you chose, in
    your city when you accept on-site or hybrid work, plus a remote search

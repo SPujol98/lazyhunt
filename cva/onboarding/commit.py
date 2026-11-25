@@ -23,7 +23,6 @@ from cva.i18n import Lang
 from cva.onboarding import answers as A
 from cva.onboarding import cv_upload as U
 from cva.onboarding import starter
-from cva.onboarding.portals import write_enabled_portals
 from cva.onboarding.profile_gen import (
     GENERATED_FILES,
     IdentitySync,
@@ -44,7 +43,6 @@ class Committed:
     stored: list[str]  # base CV PDFs stored (relative names)
     identity: IdentitySync = "unchanged"  # the identity claim (contact answers)
     identity_claim: str = ""  # its id
-    portals: list[str] | None = None  # enabled_portals written (None: not)
     cover_letter: bool = False  # cover_letter_base.toml created (beta3-ux T4)
 
 
@@ -75,7 +73,6 @@ def commit_all(
     lang: Lang,
     section: str | None,
     hooks: Iterable[Hook],
-    config_path: Path | None = None,
     *,
     cover_letter: bool = False,
     declared: Sequence[tuple[str, str]] = (),
@@ -90,16 +87,13 @@ def commit_all(
     answers when ``/setup`` generated it, and keep it when it was edited by
     hand (:func:`cva.onboarding.profile_gen.sync_identity_claims`).
 
-    With ``config_path`` (``config.local.toml``), the full questionnaire and
-    ``/setup portals`` also set its ``enabled_portals`` to the chosen portals
-    (:func:`cva.onboarding.portals.write_enabled_portals`), inside the same
-    snapshot: a failure anywhere puts that file back too.
+    Portals are not written here: they are enabled only in the extension
+    (``config.local.toml`` ``enabled_portals`` is a manual advanced setting).
 
     With ``cover_letter`` a profile without ``cover_letter_base.toml`` gets
     one written from the answers (:func:`cva.onboarding.starter.write_cover_letter`;
     ``declared`` labels the kept non-built-in families), inside the same
     snapshot; an existing file is never touched."""
-    config = config_path if section in (None, "portals") else None
     with WRITE_LOCK:
         try:
             snap = Snapshot.take(
@@ -115,7 +109,6 @@ def commit_all(
                             *GENERATED_FILES,
                         )
                     ),
-                    *([config] if config is not None else []),
                     starter.letter_path(profile_dir),
                 ],
                 [U.base_dir(profile_dir)],
@@ -124,7 +117,6 @@ def commit_all(
             raise ConfirmFailed(exc, None) from exc
         previous = _previous_contact(profile_dir)
         identity: tuple[IdentitySync, str] = ("unchanged", "")
-        portals: list[str] | None = None
         letter = False
         try:
             A.write_answers(profile_dir, answers, lang, section)
@@ -137,13 +129,6 @@ def commit_all(
                 )
             if section in (None, "contact"):
                 identity = sync_identity_claims(profile_dir, previous, answers)
-            if config is not None:
-                try:
-                    portals = write_enabled_portals(
-                        config, list(answers.get("portals") or [])
-                    )
-                except ValueError as exc:  # the bot could not load the result
-                    raise ProfileError(f"{config.name}: {exc}") from exc
         except BaseException as exc:
             undo: OSError | None = None
             try:
@@ -153,4 +138,4 @@ def commit_all(
             if not isinstance(exc, (ProfileError, OSError)):
                 raise
             raise ConfirmFailed(exc, undo) from exc
-        return Committed(stored, *identity, portals, letter)
+        return Committed(stored, *identity, letter)

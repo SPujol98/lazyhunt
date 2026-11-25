@@ -92,7 +92,6 @@ def _to_cv_step(d: Driver, lang: Lang = "en", custom: bool = True) -> None:
     d.press("skip")  # no minimum salary
     tick_exactly(d, "offer_langs", ("es", "en"))
     d.press("done")
-    d.press("done")  # no portals
     assert d.step == "cv_pdfs"
 
 

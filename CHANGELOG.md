@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.9] - 2026-11-26
+
+Ninth pre-release for testers: portals in one place, a working Analyze button and a tester report.
+
+### Changed
+
+- Portals are enabled only in the extension: switch a portal on in Options › Portals (after its terms warning), then tick it in each search. `/setup` no longer asks for portals, and an `enabled_portals` list an earlier `/setup` wrote to `config.local.toml` is removed automatically on the next start (a list you set there by hand later is kept and still enforced).
+
+### Fixed
+
+- **Analyze** on a job notification now analyses the offer already saved, instead of downloading it again from LinkedIn, so it no longer asks you to paste offers it already has (and works for InfoJobs, Indeed and other portals).
+
+### Added
+
+- `docs/tester-report.md`: ask your coding assistant to "read docs/tester-report.md and follow it" to collect a privacy-safe diagnostic report (`tester-report.md`, git-ignored) for the maintainer.
+
 ## [2.0.0-beta.8] - 2026-11-25
 
 Eighth pre-release for testers: clearer instructions, shorter letters and less noise.
@@ -242,7 +258,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.8...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.9...HEAD
+[2.0.0-beta.9]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.8...v2.0.0-beta.9
 [2.0.0-beta.8]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...v2.0.0-beta.8
 [2.0.0-beta.7]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...v2.0.0-beta.7
 [2.0.0-beta.6]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.5...v2.0.0-beta.6

@@ -1,12 +1,16 @@
-"""``/setup`` activates the chosen portals in ``config.local.toml`` (fix after T10).
+"""Portals are enabled only in the extension (portals-extension-only).
 
-Confirm (the full questionnaire and ``/setup portals``) writes
-``enabled_portals`` with the line-preserving writer of the setup wizard,
-inside the all-or-nothing snapshot, and the running bot serves the new list
-at once (the bridge's ``/config``); setup mode passes it to the full app.
-Driven through the bot's public handlers (:class:`tests.test_onboarding.Driver`).
+``/setup`` no longer asks for portals nor writes ``enabled_portals``: the
+owner enables a portal in the extension's Options › Portals (its terms
+warning) and ticks it in each search. A ``config.local.toml`` that an older
+``/setup`` gave an ``enabled_portals`` list loses that key once, on the next
+start (:meth:`cva.service.JobService.migrate_portals_config`, through the
+bot's startup helper); a list the owner sets by hand afterwards is kept and
+the bridge still enforces it. Driven through the bot's public handlers and
+the bridge's HTTP endpoints.
 """
 
+import logging
 import tomllib
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -19,9 +23,11 @@ import bot
 from cva import bridge
 from cva.config import Settings
 from cva.i18n import Lang, t
+from cva.ingest.sources import SOURCES
 from cva.onboarding import flow
-from cva.onboarding.portals import portal_label, write_enabled_portals
-from tests.test_onboarding import Driver, _answer_everything, _full_app, _setup_mode
+from cva.service import JobService
+from tests.portability import symlink_or_skip
+from tests.test_onboarding import _answer_everything, _full_app, _setup_mode
 from tests.test_onboarding_sections import _start
 
 SECRET = "s3cret-portals"
@@ -32,80 +38,23 @@ CONFIG = (
     "# portals I use\r\n"
     "enabled_portals = [\r\n"
     '  "indeed",\r\n'
-    "]\r\n"
+    "]  # old /setup list\r\n"
     'ui_language = "en"\r\n'
     "\r\n"
     "[extra]  # a table the bot ignores\r\n"
-    "x = 1\r\n"
+    "enabled_portals = 1\r\n"
+)
+# CONFIG without its top-level enabled_portals lines (the table's key stays).
+MIGRATED = CONFIG.replace(
+    'enabled_portals = [\r\n  "indeed",\r\n]  # old /setup list\r\n', ""
 )
 
 
-def _portals_section(d: Driver, wanted: tuple[str, ...]) -> None:
-    _start(d, "/setup portals")
-    assert d.step == "portals"
-    for portal in ("linkedin", "infojobs", "indeed"):
-        chosen = d.context.user_data[flow.STATE_KEY]["a"].get("portals") or []
-        if (portal in wanted) != (portal in chosen):
-            d.press(f"t:{portal}")
-            if portal not in chosen:
-                d.press("yes")  # its terms warning
-    d.press("done")
-    assert d.step == "summary"
-    d.press("confirm")
-
-
-@pytest.fixture
-def live(
-    tmp_path: Path,
-    clean_settings: Callable[..., Settings],
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[SimpleNamespace]:
-    d, profile, config, service = _full_app(tmp_path, clean_settings, monkeypatch, "en")
-    config.write_bytes(CONFIG.encode("utf-8"))
-    settings = clean_settings(
-        profile_dir=str(profile),
-        owner_telegram_id=4242,
-        CVA_BRIDGE_SECRET=SECRET,
-        bridge_port=0,
-        enabled_portals=["indeed"],
-    )
-    app = SimpleNamespace(post_init=None, post_shutdown=None, bot=None, bot_data={})
-    handle = bridge.register(app, settings, service)
-    assert handle is not None
-    d.context.bot_data[bridge.BOT_DATA_KEY] = handle
-    yield SimpleNamespace(d=d, config=config, base=f"http://127.0.0.1:{handle.port}")
-    handle.stop()
-
-
-def _served(live: SimpleNamespace) -> list[str]:
-    resp = httpx.get(
-        f"{live.base}/config", headers={"X-CVA-Bridge-Secret": SECRET}, timeout=10
-    )
-    assert resp.status_code == 200
-    return list(resp.json()["enabledPortals"])
-
-
-def test_setup_portals_writes_the_list_and_the_bridge_serves_it_at_once(
-    live: SimpleNamespace,
-) -> None:
-    assert _served(live) == ["indeed"]
-    _portals_section(live.d, ("linkedin", "infojobs"))
-    reply = live.d.replies[-1]
-    assert reply.startswith(t("onboarding.saved", "en"))
-    labels = ", ".join(portal_label(p) for p in ("linkedin", "infojobs"))
-    assert t("onboarding.portals.enabled", "en", portals=labels) in reply
-    assert "add this line" not in reply
-    # Only that line changed: every other byte (CRLF, comments, table) kept.
-    expected = CONFIG.replace(
-        'enabled_portals = [\r\n  "indeed",\r\n]\r\n',
-        'enabled_portals = ["linkedin", "infojobs"]\r\n',
-    )
-    assert live.config.read_bytes() == expected.encode("utf-8")
-    assert _served(live) == ["linkedin", "infojobs"]  # no restart
+# --- /setup never asks for portals nor writes them ---------------------------------
 
 
 @pytest.mark.parametrize("lang", ["en", "es"])
-def test_full_setup_activates_the_portals_in_setup_mode(
+def test_full_setup_never_asks_for_portals_nor_writes_them(
     tmp_path: Path, clean_settings: Callable[..., Settings], lang: Lang
 ) -> None:
     d, _, config = _setup_mode(tmp_path, lang)
@@ -114,82 +63,199 @@ def test_full_setup_activates_the_portals_in_setup_mode(
     _answer_everything(d, lang)
     d.press("confirm")
     reply = d.replies[-1]
-    labels = ", ".join(portal_label(p) for p in ("linkedin", "infojobs"))
-    assert t("onboarding.portals.enabled", lang, portals=labels) in reply
-    data = tomllib.loads(config.read_text("utf-8"))
-    assert data["enabled_portals"] == ["linkedin", "infojobs"]
-    # The full app main() starts next is built from these settings.
-    settings = d.context.bot_data[bot._SETUP_SETTINGS_KEY]
-    assert settings.enabled_portals == ["linkedin", "infojobs"]
+    assert reply.startswith(t("onboarding.saved", lang))
+    assert "enabled_portals" not in reply
+    data = tomllib.loads(config.read_text("utf-8")) if config.is_file() else {}
+    assert "enabled_portals" not in data
+    # The full app main() starts next accepts every registered portal.
+    assert d.context.bot_data[bot._SETUP_SETTINGS_KEY].enabled_portals is None
 
 
-def test_a_config_the_bot_could_not_load_rolls_everything_back(
-    live: SimpleNamespace,
-) -> None:
-    bad = CONFIG.replace("owner_telegram_id = 4242", 'owner_telegram_id = "me"')
-    live.config.write_bytes(bad.encode("utf-8"))
-    profile = Path(live.d.context.bot_data[bot._PROFILE_DIR_KEY])
-    answers = profile / "onboarding_answers.json"
-    before = answers.read_bytes() if answers.is_file() else None
-    _portals_section(live.d, ("linkedin",))
-    assert t("onboarding.write_undone", "en") in live.d.replies[-1]
-    assert live.config.read_bytes() == bad.encode("utf-8")
-    assert (answers.read_bytes() if answers.is_file() else None) == before
-    assert _served(live) == ["indeed"]
-
-
-def test_other_sections_never_touch_the_config(live: SimpleNamespace) -> None:
-    raw = live.config.read_bytes()
-    _start(live.d, "/setup level")
-    live.d.press("go:mid")
-    live.d.press("confirm")
-    assert live.d.replies[-1].startswith(t("onboarding.saved", "en"))
-    assert live.config.read_bytes() == raw
-    assert _served(live) == ["indeed"]
-
-
-def test_the_portals_step_is_prefilled_from_the_config(live: SimpleNamespace) -> None:
-    _start(live.d, "/setup portals")
-    on = {b.text for row in live.d.markup.inline_keyboard for b in row}
-    assert "✅ " + portal_label("indeed") in on
-
-
-def test_legacy_install_without_profile_dir_never_writes_the_config(
+def test_setup_portals_answers_unknown_section(
     tmp_path: Path,
+    clean_settings: Callable[..., Settings],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    d, _, config = _setup_mode(tmp_path)
+    d, _, config, _ = _full_app(tmp_path, clean_settings, monkeypatch, "en")
     config.write_bytes(CONFIG.encode("utf-8"))
-    d.context.bot_data[bot._PROFILE_DIR_KEY] = None
-    d.start()
-    assert d.last == t("onboarding.no_profile_dir", "en")
+    _start(d, "/setup portals")
+    assert d.last == t(
+        "onboarding.section.unknown",
+        "en",
+        section="portals",
+        sections=", ".join(flow.section_names("en")),
+    )
     assert config.read_bytes() == CONFIG.encode("utf-8")
 
 
-# --- write_enabled_portals refuses what the bot could not load --------------------
-
-
-def test_an_unknown_portal_id_is_refused_and_the_config_keeps_its_bytes(
+def test_a_section_rerun_never_touches_the_config(
     tmp_path: Path,
+    clean_settings: Callable[..., Settings],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = tmp_path / "config.local.toml"
+    d, _, config, _ = _full_app(tmp_path, clean_settings, monkeypatch, "en")
     config.write_bytes(CONFIG.encode("utf-8"))
-    with pytest.raises(ValueError, match="unknown portal id"):
-        write_enabled_portals(config, ["linkedin", "nope"])
+    _start(d, "/setup level")
+    d.press("go:mid")
+    d.press("confirm")
+    assert d.replies[-1].startswith(t("onboarding.saved", "en"))
     assert config.read_bytes() == CONFIG.encode("utf-8")
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]
 
 
-def test_a_failed_replace_keeps_the_config_and_leaves_no_temp_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# --- one-time removal of the old /setup list on start ------------------------------
+
+
+@pytest.fixture
+def boot(
+    tmp_path: Path,
+    clean_settings: Callable[..., Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[SimpleNamespace]:
+    """A bot start: settings as loaded from ``config.local.toml``, the
+    service (its ``app_state``) and a way to start the bridge from the
+    settings the startup helper returns."""
+    _, profile, config, service = _full_app(tmp_path, clean_settings, monkeypatch, "en")
+    handles: list[bridge.BridgeHandle] = []
+
+    def settings_for(portals: list[str] | None) -> Settings:
+        return clean_settings(
+            profile_dir=str(profile),
+            owner_telegram_id=4242,
+            CVA_BRIDGE_SECRET=SECRET,
+            bridge_port=0,
+            enabled_portals=portals,
+        )
+
+    def start(settings: Settings, svc: JobService = service) -> tuple[Settings, str]:
+        started = bot._migrate_portals_config(settings, svc, config)
+        app = SimpleNamespace(post_init=None, post_shutdown=None, bot=None, bot_data={})
+        handle = bridge.register(app, started, svc)
+        assert handle is not None
+        handles.append(handle)
+        return started, f"http://127.0.0.1:{handle.port}"
+
+    yield SimpleNamespace(
+        config=config, service=service, settings_for=settings_for, start=start
+    )
+    for handle in handles:
+        handle.stop()
+
+
+def _served(base: str) -> list[str]:
+    resp = httpx.get(
+        f"{base}/config", headers={"X-CVA-Bridge-Secret": SECRET}, timeout=10
+    )
+    assert resp.status_code == 200
+    return list(resp.json()["enabledPortals"])
+
+
+def test_start_removes_the_old_list_once_and_the_bridge_accepts_every_portal(
+    boot: SimpleNamespace, caplog: pytest.LogCaptureFixture
 ) -> None:
-    config = tmp_path / "config.local.toml"
-    config.write_bytes(CONFIG.encode("utf-8"))
+    boot.config.write_bytes(CONFIG.encode("utf-8"))
+    with caplog.at_level(logging.INFO):
+        settings, base = boot.start(boot.settings_for(["indeed"]))
+    # Only that key went: every other byte (CRLF, comments, table) kept.
+    assert boot.config.read_bytes() == MIGRATED.encode("utf-8")
+    assert settings.enabled_portals is None
+    assert _served(base) == list(SOURCES)
+    infos = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.INFO and "enabled_portals" in r.getMessage()
+    ]
+    assert len(infos) == 1
+
+
+def test_a_list_set_by_hand_after_the_removal_is_kept_and_enforced(
+    boot: SimpleNamespace,
+) -> None:
+    boot.config.write_bytes(CONFIG.encode("utf-8"))
+    boot.start(boot.settings_for(["indeed"]))
+    by_hand = MIGRATED.replace(
+        'ui_language = "en"\r\n',
+        'ui_language = "en"\r\nenabled_portals = ["indeed"]\r\n',
+    )
+    boot.config.write_bytes(by_hand.encode("utf-8"))
+    settings, base = boot.start(boot.settings_for(["indeed"]))  # next start
+    assert boot.config.read_bytes() == by_hand.encode("utf-8")
+    assert settings.enabled_portals == ["indeed"]
+    assert _served(base) == ["indeed"]
+
+
+def test_a_config_without_the_key_keeps_its_bytes_and_a_later_list_is_kept(
+    boot: SimpleNamespace,
+) -> None:
+    boot.config.write_bytes(MIGRATED.encode("utf-8"))
+    settings, base = boot.start(boot.settings_for(None))
+    assert boot.config.read_bytes() == MIGRATED.encode("utf-8")
+    assert settings.enabled_portals is None
+    assert _served(base) == list(SOURCES)
+    # The owner adds a list by hand later: the next start keeps it.
+    boot.config.write_bytes(CONFIG.encode("utf-8"))
+    settings, _ = boot.start(boot.settings_for(["indeed"]))
+    assert boot.config.read_bytes() == CONFIG.encode("utf-8")
+    assert settings.enabled_portals == ["indeed"]
+
+
+def test_a_missing_config_is_not_created(boot: SimpleNamespace) -> None:
+    assert not boot.config.exists()
+    settings, _ = boot.start(boot.settings_for(None))
+    assert not boot.config.exists()
+    assert settings.enabled_portals is None
+
+
+def test_a_config_that_cannot_be_written_logs_a_warning_and_keeps_running(
+    boot: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    boot.config.write_bytes(CONFIG.encode("utf-8"))
 
     def refuse(src: object, dst: object) -> None:
         raise PermissionError("locked by another program")
 
     monkeypatch.setattr("cva.fsutil.os.replace", refuse)
-    with pytest.raises(PermissionError):
-        write_enabled_portals(config, ["linkedin"])
-    assert config.read_bytes() == CONFIG.encode("utf-8")
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.local.toml"]
+    with caplog.at_level(logging.WARNING):
+        settings, base = boot.start(boot.settings_for(["indeed"]))
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+    assert boot.config.read_bytes() == CONFIG.encode("utf-8")
+    assert sorted(p.name for p in boot.config.parent.glob("config.local.toml*")) == [
+        "config.local.toml"
+    ]
+    # The bridge still honours the old list until a start can remove it.
+    assert settings.enabled_portals == ["indeed"]
+    assert _served(base) == ["indeed"]
+    monkeypatch.undo()
+    settings, _ = boot.start(boot.settings_for(["indeed"]))  # retried next start
+    assert boot.config.read_bytes() == MIGRATED.encode("utf-8")
+    assert settings.enabled_portals is None
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'enabled_portals = ["indeed"]  # my portals\n',
+        'enabled_portals = [\n  "indeed",\n]   # mine # really\n',
+        "enabled_portals = ['in#deed', \"x]\"]\n",
+        '  enabled_portals=["indeed"]\n',
+    ],
+)
+def test_start_removes_only_that_key_whatever_its_shape(
+    boot: SimpleNamespace, line: str
+) -> None:
+    boot.config.write_text(f'# top\n{line}ui_language = "en"\n', encoding="utf-8")
+    boot.start(boot.settings_for(None))
+    assert boot.config.read_text("utf-8") == '# top\nui_language = "en"\n'
+
+
+def test_start_writes_through_a_symlinked_config(
+    boot: SimpleNamespace, tmp_path: Path
+) -> None:
+    real = tmp_path / "dotfiles" / "cva.toml"
+    real.parent.mkdir()
+    real.write_bytes(CONFIG.encode("utf-8"))
+    symlink_or_skip(boot.config, real)
+    boot.start(boot.settings_for(["indeed"]))
+    assert boot.config.is_symlink() and boot.config.resolve() == real.resolve()
+    assert real.read_bytes() == MIGRATED.encode("utf-8")
