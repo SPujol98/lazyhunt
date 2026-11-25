@@ -5,6 +5,7 @@ runs every ``cli.py`` verb plus ``bot`` (start the Telegram bot). The old
 ``uv run cli.py …`` and ``uv run bot.py`` forms keep working.
 """
 
+import os
 import subprocess
 import sys
 import tomllib
@@ -86,7 +87,14 @@ def test_entry_point_works_outside_the_repository_folder(tmp_path: Path) -> None
         capture_output=True,
         text=True,
         check=False,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "LC_ALL": "C.UTF-8"},
+        # Keep the inherited environment: on Windows, asyncio needs SYSTEMROOT
+        # (WinError 10106 without it). Only HOME and PYTHONPATH are changed so
+        # the repository folder is not reachable through the environment.
+        env={
+            **{k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+            "HOME": str(tmp_path),
+            "LC_ALL": "C.UTF-8",
+        },
     )
     assert result.returncode == 0, result.stderr
     assert "usage: lazyhunt" in result.stdout
