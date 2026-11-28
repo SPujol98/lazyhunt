@@ -1343,6 +1343,106 @@ def test_restart_after_exhausted_final_card_never_duplicates(
     assert ns2.repo.get_offer(offer_id).estado == "pendiente_analisis"
 
 
+def test_restart_rescues_an_offer_stranded_by_a_hard_kill(
+    paced_factory: Any,
+) -> None:
+    """beta10 S1: the in-memory queue died with the process (no shutdown
+    hook ran), so the bridged row never got an attempt nor a due time. The
+    startup heartbeat re-drives it through the queue → exactly ONE card."""
+    ns1 = paced_factory(
+        llm=FakeLlmClient(_extraction()),
+        fetcher=FakeFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL)),
+        post_init=False,
+    )
+    offer_id = _seed_bridge_row(ns1.repo, JOB_IDS[0])  # queued, then killed
+
+    ns2 = paced_factory(
+        llm=FakeLlmClient(_extraction()),
+        fetcher=FakeFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL)),
+    )
+    context, heartbeat = _heartbeat_ns(ns2)
+    asyncio.run(heartbeat(context))
+    _wait_until(lambda: len(ns2.bot.calls) == 1)
+    asyncio.run(heartbeat(context))  # analysed now: nothing more to rescue
+    _time.sleep(0.15)
+
+    assert len(ns2.bot.calls) == 1
+    assert f"📊 Oferta #{offer_id}" in ns2.bot.calls[0][1]
+    assert ns2.repo.get_offer(offer_id).estado == "analizada"
+
+
+def test_rescue_never_requeues_an_offer_already_in_flight(
+    paced_factory: Any,
+) -> None:
+    """beta10 S1: the heartbeat runs while the offer is mid-analysis → the
+    rescue skips it; one analysis, one card."""
+    gate = threading.Event()
+    ns = paced_factory(
+        llm=FakeLlmClient(_extraction()),
+        fetcher=_AsyncGateFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL), gate),
+    )
+    offer_id = _seed_bridge_row(ns.repo, JOB_IDS[0])
+    ns.handle.enqueue_auto_analysis(
+        offer_id, JOB_IDS[0], {"title": "ML", "company": "Acme", "url": OFFER_URL}
+    )
+    _wait_until(lambda: len(ns.fetcher.calls) == 1)  # analysis mid-flight
+    assert ns.handle.queued_offer_ids() == frozenset({offer_id})
+    context, heartbeat = _heartbeat_ns(ns)
+    asyncio.run(heartbeat(context))
+    gate.set()
+    _wait_until(lambda: len(ns.bot.calls) == 1)
+    _time.sleep(0.15)
+
+    assert len(ns.fetcher.calls) == 1
+    assert len(ns.bot.calls) == 1
+    assert ns.handle.queued_offer_ids() == frozenset()
+
+
+def test_rescue_racing_the_post_200_schedule_analyses_the_offer_once(
+    paced_factory: Any,
+) -> None:
+    """beta10 S1 (verifier blocker): the heartbeat fires between the handler's
+    commit and its post-200 schedule → the rescue queues the row first; the
+    handler's "new" item behind it must be skipped: one fetch, one card."""
+    ns = paced_factory(
+        llm=FakeLlmClient(_extraction()),
+        fetcher=FakeFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL)),
+    )
+    offer_id = _seed_bridge_row(ns.repo, JOB_IDS[0])  # committed, not queued yet
+    context, heartbeat = _heartbeat_ns(ns)
+    asyncio.run(heartbeat(context))
+    ns.handle._schedule_auto_analysis(
+        offer_id, JOB_IDS[0], {"title": "ML", "company": "Acme", "url": OFFER_URL}
+    )
+    _wait_until(lambda: len(ns.bot.calls) == 1)
+    _wait_until(lambda: ns.handle.queued_offer_ids() == frozenset())
+    _time.sleep(0.15)
+
+    assert len(ns.fetcher.calls) == 1
+    assert len(ns.bot.calls) == 1
+
+
+def test_new_item_skips_an_offer_whose_fallback_card_was_delivered(
+    paced_factory: Any,
+) -> None:
+    """A fallback-marked row is not stranded: a stray queue item never
+    re-analyses (or re-cards) it."""
+    ns = paced_factory(
+        llm=FakeLlmClient(_extraction()),
+        fetcher=FakeFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL)),
+    )
+    offer_id = _seed_bridge_row(ns.repo, JOB_IDS[0])
+    ns.repo.mark_auto_fallback(offer_id)
+    ns.handle.enqueue_auto_analysis(
+        offer_id, JOB_IDS[0], {"title": "ML", "company": "Acme", "url": OFFER_URL}
+    )
+    _wait_until(lambda: ns.handle.queued_offer_ids() == frozenset())
+    _time.sleep(0.15)
+
+    assert ns.fetcher.calls == []
+    assert ns.bot.calls == []
+
+
 # --- Per-payload round summary (round-summary amendment D11) -------------------
 #
 # After the paced queue finishes a payload's batch of NEW jobs, ONE compact

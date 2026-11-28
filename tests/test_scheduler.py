@@ -583,3 +583,166 @@ def test_heartbeat_legacy_rows_without_ingest_source_fall_back_to_origen(
 
     jobs = {offer_id: job for offer_id, _jid, job, _k in bridge.enqueued}
     assert jobs[ij_id]["text"] == "Oferta completa inline para el reintento."
+
+
+# --- Stranded-offer rescue (beta10 S1) -------------------------------------------
+#
+# The paced auto-analysis queue lives in memory: a bot that is killed, crashes
+# or gets a payload before its loop exists leaves bridged offers in
+# ``pendiente_analisis`` with no attempt and no ``next_analyze_at``. Every
+# heartbeat (the first one runs at startup) re-drives them through the same
+# queue, kind="rescue".
+
+
+class RescueBridge(FakeBridge):
+    """An auto-analysis bridge whose queue already holds ``queued``."""
+
+    def __init__(
+        self, *, auto_analyze: bool = True, queued: frozenset[int] = frozenset()
+    ) -> None:
+        super().__init__()
+        self.auto_analyze = auto_analyze
+        self._queued = queued
+
+    def queued_offer_ids(self) -> frozenset[int]:
+        return self._queued
+
+
+def _seed_stranded(
+    repo: OfferRepository,
+    job_id: str,
+    *,
+    text: str | None = None,
+    source: Literal["link", "bridge-inline"] = "link",
+) -> int:
+    url = f"https://linkedin.com/jobs/view/{job_id}"
+    return repo.upsert_offer(
+        OfferInput(
+            job_id=job_id,
+            title=f"Role {job_id}",
+            company="Acme",
+            url=url,
+            text=text if text is not None else f"bridge: Test\n{url}",
+            source=source,
+        )
+    )
+
+
+def _rescue_context(
+    service: JobService, bridge: FakeBridge, bot: FakeBot | None = None
+) -> SimpleNamespace:
+    context = fake_context(service, 5, bot or FakeBot())
+    context.application.bot_data["bridge"] = bridge
+    return context
+
+
+def test_heartbeat_rescues_stranded_bridge_offers_oldest_first(
+    tmp_path: Path,
+) -> None:
+    conn = sqlite3.connect(tmp_path / "rescue.db", check_same_thread=False)
+    service = make_service(conn, RecordingFetcher(HEALTHY), lambda: NOW)
+    repo = OfferRepository(conn)
+    first = _seed_stranded(repo, "5001")
+    second = _seed_stranded(repo, "5002")
+    fallback = _seed_stranded(repo, "5003")
+    repo.mark_auto_fallback(fallback)  # already got its [Analizar] card
+    queued = _seed_stranded(repo, "5004")  # in the live queue right now
+    manual = _seed_stranded(repo, "5005", text="Pasted offer text")  # not bridged
+    old = _seed_stranded(repo, "5006")
+    conn.execute("UPDATE offers SET fecha_alta = '2026-08-01' WHERE id = ?", (old,))
+    conn.commit()
+    analysed = _seed_stranded(repo, "5007")
+    repo.set_estado(analysed, "analizada")
+    retrying = _seed_stranded(repo, "5008")
+    repo.record_analyze_failure(retrying, next_analyze_at="2999-01-01T00:00:00+00:00")
+    bridge = RescueBridge(queued=frozenset({queued}))
+
+    asyncio.run(heartbeat(_rescue_context(service, bridge)))
+
+    assert [(oid, kind) for oid, _jid, _job, kind in bridge.enqueued] == [
+        (first, "rescue"),
+        (second, "rescue"),
+    ]
+    _oid, job_id, job, _kind = bridge.enqueued[0]
+    assert job_id == "5001"
+    assert job == {
+        "url": "https://linkedin.com/jobs/view/5001",
+        "title": "Role 5001",
+        "company": "Acme",
+    }
+    del manual
+
+
+def test_heartbeat_rescue_does_nothing_during_an_ai_outage(tmp_path: Path) -> None:
+    from cva.ai_outage import STATE_KEY, AiOutage
+
+    conn = sqlite3.connect(tmp_path / "rescue2.db", check_same_thread=False)
+    service = make_service(conn, RecordingFetcher(HEALTHY), lambda: NOW)
+    repo = OfferRepository(conn)
+    _seed_stranded(repo, "5101")
+    repo.set_state(
+        STATE_KEY,
+        AiOutage(
+            kind="auth",
+            provider="openai_compatible",
+            since=NOW,
+            next_probe=NOW + timedelta(hours=1),
+        ).to_json(),
+    )
+    bridge = RescueBridge()
+
+    asyncio.run(heartbeat(_rescue_context(service, bridge)))
+
+    assert bridge.enqueued == []
+
+
+def test_heartbeat_rescue_does_nothing_while_paused(tmp_path: Path) -> None:
+    conn = sqlite3.connect(tmp_path / "rescue3.db", check_same_thread=False)
+    service = make_service(conn, RecordingFetcher(HEALTHY), lambda: NOW)
+    _seed_stranded(OfferRepository(conn), "5201")
+    service.set_paused(True)
+    bridge = RescueBridge()
+
+    asyncio.run(heartbeat(_rescue_context(service, bridge)))
+
+    assert bridge.enqueued == []
+
+
+def test_heartbeat_rescue_is_off_without_auto_analysis(tmp_path: Path) -> None:
+    """Manual mode: bridged offers wait for [Analizar] on purpose."""
+    conn = sqlite3.connect(tmp_path / "rescue4.db", check_same_thread=False)
+    service = make_service(conn, RecordingFetcher(HEALTHY), lambda: NOW)
+    _seed_stranded(OfferRepository(conn), "5301")
+    bridge = RescueBridge(auto_analyze=False)
+
+    asyncio.run(heartbeat(_rescue_context(service, bridge)))
+
+    assert bridge.enqueued == []
+
+
+def test_heartbeat_rescue_replays_inline_text_for_inline_rows(tmp_path: Path) -> None:
+    conn = sqlite3.connect(tmp_path / "rescue5.db", check_same_thread=False)
+    service = make_service(conn, RecordingFetcher(HEALTHY), lambda: NOW)
+    repo = OfferRepository(conn)
+    url = (
+        "https://www.infojobs.net/barcelona/ingeniero-ia/of-"
+        "0f8d7e6c5b4a39281706f5e4d3c2b1a0/"
+    )
+    inline = repo.upsert_offer(
+        OfferInput(
+            job_id="0f8d7e6c5b4a39281706f5e4d3c2b1a0",
+            title="Ingeniero IA",
+            company="Acme",
+            url=url,
+            text="Oferta completa inline.",
+            source="bridge-inline",
+        )
+    )
+    bridge = RescueBridge()
+
+    asyncio.run(heartbeat(_rescue_context(service, bridge)))
+
+    assert [(oid, kind) for oid, _jid, _job, kind in bridge.enqueued] == [
+        (inline, "rescue")
+    ]
+    assert bridge.enqueued[0][2]["text"] == "Oferta completa inline."

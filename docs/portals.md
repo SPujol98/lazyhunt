@@ -317,6 +317,17 @@ new counts are appended by the bridge to the `app_state` key
 `beacon_new_counts` (`{search: [[date, new], ...]}`, one row per day, pruned to
 14 days), so they only accumulate from the version that added the command on.
 
+An `error` failure also says why, when the extension could tell: the page did
+not load in time (`timeout`), the scan tab was closed (`tab_closed`), no
+internet connection (`offline`), the browser could not read the page
+(`blocked`), or `unknown`. The extension sends it as the optional `reason` of
+its scan report (`extension/scan_report.js`); the bot keeps the latest one per
+search in the `app_state` key `beacon_last_errors`
+(`{search: {at, status, reason}}`, pruned to 14 days, no schema change) and
+shows it only next to the failure it belongs to. Reports without a `reason`
+(older extensions) are accepted as before; an unknown code shows as
+`unknown`.
+
 ## Terms of use and volume
 
 The extension reads pages in your own logged-in browser tab, at the existing

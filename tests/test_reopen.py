@@ -139,6 +139,17 @@ def test_reopen_resets_estado_cleans_note_and_logs_event(tmp_path: Path) -> None
     assert last.note == "reabierta: volvió a aparecer en LinkedIn"
 
 
+def test_reopen_forgets_a_delivered_fallback_card(tmp_path: Path) -> None:
+    """A reopened offer is brand-new again: its old fallback-card mark must not
+    make the queue skip it (beta10 S1)."""
+    repo = _repo(tmp_path)
+    offer = _add(repo, "https://linkedin/111")
+    repo.mark_auto_fallback(offer)
+    _close(repo, offer)
+    repo.reopen_closed(offer, "LinkedIn")
+    assert repo.has_auto_fallback(offer) is False
+
+
 # --- bridge reopen path -------------------------------------------------------------
 
 LI = "https://www.linkedin.com/jobs/view/111"

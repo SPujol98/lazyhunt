@@ -14,8 +14,16 @@ venv/
 dist/
 build/
 
-# Secrets
+# Secrets (also stray copies people keep next to the code)
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*token*.json
+*credentials*.json
+*secret*
+!**/*secret*.py
 
 # Machine-specific/personal config layer (shared-config); see
 # config.local.toml.example for the tracked template.

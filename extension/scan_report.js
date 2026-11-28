@@ -27,6 +27,27 @@ export function classifyScanError(message) {
   return 'error';
 }
 
+// Why a scan failed (beta10 S2), sent as the optional `reason` of an `error`
+// report so the bot can show it in /searches. Codes set at the throw site
+// (`error.code`, e.g. every bounded timeout) win over the message, which may be
+// localized; Chrome's own errors are matched by their (English) text.
+export const SCAN_REASONS = ['timeout', 'tab_closed', 'offline', 'blocked', 'unknown'];
+const OFFLINE = /chrome-error:|showing error page|net::ERR_|ERR_INTERNET_DISCONNECTED|failed to fetch/i;
+const TAB_CLOSED = /no tab with id|tab was closed|tab .*(?:removed|discarded)|frame with id \d+ was removed/i;
+const BLOCKED = /cannot access contents of|cannot access a chrome|cannot be scripted/i;
+const TIMED_OUT = /timed out|timeout/i;
+
+export function classifyScanReason(error) {
+  const code = error && typeof error.code === 'string' ? error.code : '';
+  if (SCAN_REASONS.includes(code)) return code;
+  const text = String((error && error.message) || '');
+  if (OFFLINE.test(text)) return 'offline';
+  if (TAB_CLOSED.test(text)) return 'tab_closed';
+  if (BLOCKED.test(text)) return 'blocked';
+  if (TIMED_OUT.test(text)) return 'timeout';
+  return 'unknown';
+}
+
 // `outcome` is { jobs, noResults } for a completed scan (the raw cards parsed,
 // before any filtering; `noResults` says the page showed a genuine no-results
 // marker) or { error } for a failed one. A completed scan with zero cards and
@@ -45,7 +66,7 @@ export function buildScanReport(beacon, outcome, at) {
   let status = 'ok';
   if (failed) status = classifyScanError(outcome.error.message);
   else if (jobs.length === 0 && !(outcome && outcome.noResults)) status = 'empty_unconfirmed';
-  return {
+  const report = {
     beacon_id: String(beacon.id),
     beacon_name: String(beacon.name || beacon.id),
     at: new Date(at).toISOString(),
@@ -55,6 +76,8 @@ export function buildScanReport(beacon, outcome, at) {
       ? jobs.filter((j) => !String(j.company || '').trim()).length
       : 0,
   };
+  if (status === 'error') report.reason = classifyScanReason(outcome.error);
+  return report;
 }
 
 // The scan endpoint lives next to the configured bridge URL (".../bridge").

@@ -22,6 +22,8 @@ async function main() {
   const {
     buildScanReport,
     classifyScanError,
+    classifyScanReason,
+    SCAN_REASONS,
     scanReportUrl,
     hasNoResultsMarker,
     NO_RESULTS_SOURCE,
@@ -84,6 +86,45 @@ async function main() {
   check('classify too many requests', classifyScanError('Too Many Requests'), 'rate_limited');
   check('classify rate limit', classifyScanError('rate limit exceeded'), 'rate_limited');
   check('classify empty message', classifyScanError(undefined), 'error');
+
+  // beta10 S2: a failed scan says WHY (optional `reason`, only on `error`).
+  check('reason codes', SCAN_REASONS, ['timeout', 'tab_closed', 'offline', 'blocked', 'unknown']);
+  const timedOut = new Error('La página no terminó de cargar en 30 segundos');
+  timedOut.code = 'timeout';
+  check('coded timeout (localized message)', classifyScanReason(timedOut), 'timeout');
+  check('english timeout text', classifyScanReason(new Error('timed out after 20 seconds')), 'timeout');
+  check('offline error page', classifyScanReason(new Error('Frame with ID 0 is showing error page')), 'offline');
+  check('offline chrome-error url', classifyScanReason(new Error('Cannot access contents of url "chrome-error://chromewebdata/".')), 'offline');
+  check('offline net error', classifyScanReason(new Error('net::ERR_INTERNET_DISCONNECTED')), 'offline');
+  check('tab closed', classifyScanReason(new Error('No tab with id: 123.')), 'tab_closed');
+  check('frame removed', classifyScanReason(new Error('Frame with ID 0 was removed.')), 'tab_closed');
+  check('blocked page', classifyScanReason(new Error('Cannot access contents of the page. Extension manifest must request permission to access the respective host.')), 'blocked');
+  check('anything else', classifyScanReason(new Error('boom')), 'unknown');
+  check('no error object', classifyScanReason(undefined), 'unknown');
+  check('error report carries the reason', buildScanReport(beacon, { error: timedOut }, at), {
+    beacon_id: 'b1',
+    beacon_name: 'Barcelona AI',
+    at: '2025-10-18T12:00:00.000Z',
+    status: 'error',
+    jobs_found: 0,
+    empty_company: 0,
+    reason: 'timeout',
+  });
+  check('rate limited report has no reason', 'reason' in buildScanReport(beacon, { error: new Error('HTTP 429') }, at), false);
+  check('session expired report has no reason', 'reason' in failed, false);
+  check('ok report has no reason', 'reason' in buildScanReport(beacon, { jobs: [] }, at), false);
+
+  const cancelUrl = pathToFileURL(
+    path.resolve(__dirname, '..', '..', 'extension', 'core', 'cancel.js')
+  ).href;
+  const { bounded } = await import(cancelUrl);
+  try {
+    await bounded(new Promise(() => {}), { ms: 5, message: 'slow page' });
+    failures.push('bounded: expected a timeout');
+  } catch (error) {
+    check('bounded timeout keeps its message', error.message, 'slow page');
+    check('bounded timeout is coded', error.code, 'timeout');
+  }
 
   // The marker list is handed to the injected page function as a RegExp source.
   check('marker source is a string', typeof NO_RESULTS_SOURCE, 'string');

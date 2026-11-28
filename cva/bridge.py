@@ -38,6 +38,7 @@ import json
 import logging
 import sqlite3
 import threading
+from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
@@ -84,7 +85,7 @@ from cva.setup_mode import describe_load_error
 from cva.suggest import suggested_searches_payload
 from cva.title_filter import TitleFilter
 from cva.tracker import OfferInput, OfferRepository, RepositoryError, duplicate_note
-from cva.tracker.repo import OfferRow, ScanStatus
+from cva.tracker.repo import OfferRow, ScanReason, ScanStatus
 
 if TYPE_CHECKING:
     from cva.service import JobService
@@ -216,7 +217,10 @@ class _RoundTally:
 # One paced-queue item (notification-pacing D1): offer row id, job id, the
 # raw payload job (title/company context), the drain kind, and the payload's
 # round tally (None for manual/sweep enqueues — those never summarize).
-Item = tuple[int, str, dict[str, Any], Literal["new", "retry"], "_RoundTally | None"]
+# "rescue": an offer the in-memory queue lost (killed bot), re-driven by the
+# heartbeat (beta10 S1).
+QueueKind = Literal["new", "retry", "rescue"]
+Item = tuple[int, str, dict[str, Any], QueueKind, "_RoundTally | None"]
 
 
 async def _pacing_sleep(seconds: float) -> None:
@@ -357,6 +361,7 @@ def _validated(
 
 # One definition of the statuses: the ScanStatus model the history is stored with.
 _SCAN_STATUSES: Final[tuple[str, ...]] = get_args(ScanStatus)
+_SCAN_REASONS: Final[tuple[str, ...]] = get_args(ScanReason)
 _SCAN_STATUS_CHOICES: Final[str] = (
     f"{', '.join(_SCAN_STATUSES[:-1])} or {_SCAN_STATUSES[-1]}"
 )
@@ -430,7 +435,20 @@ def _validated_scan(payload: Any, *, now: datetime | None = None) -> dict[str, A
         "status": status,
         "jobs_found": jobs_found,
         "empty_company": empty_company,
+        "reason": _scan_reason(status, payload.get("reason")),
     }
+
+
+def _scan_reason(status: str, raw: Any) -> ScanReason | None:
+    """The optional ``reason`` of an ``error`` scan (beta10 S2).
+
+    Tolerant on purpose: absent (older extensions), not a string, or sent with
+    another status → ``None``; a code this bot does not know → ``unknown``.
+    A bad reason never rejects the scan itself.
+    """
+    if status != "error" or not isinstance(raw, str):
+        return None
+    return raw if raw in _SCAN_REASONS else "unknown"  # type: ignore[return-value]
 
 
 def _record_scan(
@@ -440,7 +458,15 @@ def _record_scan(
     lang: Lang = LEGACY_LANG,
 ) -> list[Claim]:
     """Store the scan and claim the health alerts it makes due (send them after)."""
-    repo.record_beacon_scan(**report)
+    scan = {key: value for key, value in report.items() if key != "reason"}
+    repo.record_beacon_scan(**scan)
+    if report["reason"] is not None:
+        repo.record_beacon_error(
+            beacon_name=report["beacon_name"],
+            at=report["at"],
+            status=report["status"],
+            reason=report["reason"],
+        )
     beacon_id = report["beacon_id"]
     return claims.claim(
         beacon_id, report["beacon_name"], repo.recent_beacon_scans(beacon_id), lang
@@ -1155,10 +1181,24 @@ class _Bridge:
         self._queue: asyncio.Queue[Item] | None = None
         self._worker: asyncio.Task[None] | None = None
         self._in_flight: int | None = None
+        # Offer ids queued or in flight (loop-side writes; read by the
+        # heartbeat's stranded-offer rescue so it never queues one twice).
+        self._pending: Counter[int] = Counter()
+        self._pending_lock = threading.Lock()
         # Set by shutdown(): puts that land afterwards defer instead of queueing.
         self._closing = False
         # The one-time code /connect issues for POST /pair (beta3-ux T1).
         self.pairing = OneTimeCode(ttl_seconds=PAIR_CODE_TTL_SECONDS)
+
+    @property
+    def auto_analyze(self) -> bool:
+        """True when bridged offers are analysed automatically (paced queue)."""
+        return self._auto_analyze
+
+    def queued_offer_ids(self) -> frozenset[int]:
+        """Offer ids waiting in the paced queue or being analysed right now."""
+        with self._pending_lock:
+            return frozenset(self._pending)
 
     @property
     def port(self) -> int:
@@ -1352,7 +1392,7 @@ class _Bridge:
         job_id: str,
         job: dict[str, Any],
         *,
-        kind: Literal["new", "retry"] = "new",
+        kind: QueueKind = "new",
         tally: _RoundTally | None = None,
     ) -> None:
         """Thread-safe, non-blocking enqueue (notification-pacing D1).
@@ -1379,6 +1419,8 @@ class _Bridge:
         if self._closing or self._queue is None:
             self._defer_retry(item[0], datetime.now(tz=UTC).isoformat())
             return
+        with self._pending_lock:
+            self._pending[item[0]] += 1
         self._queue.put_nowait(item)
 
     async def _drain_queue(self) -> None:
@@ -1398,6 +1440,7 @@ class _Bridge:
             except Exception as exc:  # noqa: BLE001 — the worker survives any item
                 _LOG.warning("bridge auto-analysis task failed: %s", exc)
             finally:
+                self._release(offer_id)
                 queue.task_done()
             if self._delay > 0 and not queue.empty():
                 await _pacing_sleep(self._delay)
@@ -1406,6 +1449,12 @@ class _Bridge:
                 # delay — the summary never lands before the batch's last
                 # job has fully drained.
                 await self._settle_round(tally)
+
+    def _release(self, offer_id: int) -> None:
+        with self._pending_lock:
+            self._pending[offer_id] -= 1
+            if self._pending[offer_id] <= 0:
+                del self._pending[offer_id]
 
     async def _process_item(
         self,
@@ -1429,6 +1478,13 @@ class _Bridge:
             # D-tree guard: resolved elsewhere (manual success cleared it /
             # final card already sent) — skip silently, never card again.
             _LOG.debug("bridge retry skipped (resolved): offer #%s", offer_id)
+            return
+        if kind != "retry" and not self._still_stranded(offer_id):
+            # Analysed, failed into retry-pending or fallback-carded since it
+            # was queued: a rescue and the handler's post-200 "new" item can
+            # both queue the same row (the heartbeat may fire between the
+            # commit and the schedule) — whichever runs second is skipped.
+            _LOG.debug("bridge %s skipped (resolved): offer #%s", kind, offer_id)
             return
         self._in_flight = offer_id
         try:
@@ -1486,6 +1542,20 @@ class _Bridge:
         except RepositoryError:
             return False
         return row.next_analyze_at is not None
+
+    def _still_stranded(self, offer_id: int) -> bool:
+        """True while auto-analysis has still not touched the row (no
+        attempt, no due time, no delivered fallback card)."""
+        try:
+            row = self._repo.get_offer(offer_id)
+        except RepositoryError:
+            return False
+        return (
+            row.estado == "pendiente_analisis"
+            and row.analyze_attempts == 0
+            and row.next_analyze_at is None
+            and not self._repo.has_auto_fallback(offer_id)
+        )
 
     async def shutdown(self, app: Any = None) -> None:
         """PTB post_shutdown hook (notification-pacing D9): cancel the worker

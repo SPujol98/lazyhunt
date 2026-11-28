@@ -211,3 +211,108 @@ def test_long_lists_are_split_under_the_telegram_limit(tmp_path: Path) -> None:
     assert all(len(r) < 4096 for r in replies)
     joined = "\n".join(replies)
     assert all(f"search-{n:02d}-" in joined for n in range(81))
+
+
+# --- the last failure's reason (beta10 S2) -------------------------------------
+
+ERRORS_KEY = "beacon_last_errors"
+
+
+def _scan_report(
+    srv: _Bridge, status: str, minute: int, day: str = "2026-10-18", **extra: Any
+) -> httpx.Response:
+    port = srv.httpd.server_address[1]
+    body = {
+        "beacon_id": "b1",
+        "beacon_name": "Barcelona AI",
+        "at": f"{day}T11:{minute:02d}:00.000Z",
+        "status": status,
+        "jobs_found": 0,
+        "empty_company": 0,
+        **extra,
+    }
+    return httpx.post(
+        f"http://127.0.0.1:{port}/scan-report",
+        headers={"X-CVA-Bridge-Secret": "s"},
+        json=body,
+    )
+
+
+def test_failed_scan_reason_is_kept_and_shown_in_the_overview(srv: _Bridge) -> None:
+    assert _scan_report(srv, "ok", 0).status_code == 200
+    assert _scan_report(srv, "error", 1, reason="timeout").status_code == 200
+    (row,) = srv.repo.search_overview()
+    assert row.last_failure == "error (2026-10-18)"
+    assert row.last_failure_reason == "timeout"
+    stored = json.loads(srv.repo.get_state(ERRORS_KEY) or "{}")
+    assert stored == {
+        "Barcelona AI": {
+            "at": "2026-10-18T11:01:00.000+00:00",
+            "status": "error",
+            "reason": "timeout",
+        }
+    }
+
+
+def test_a_later_failure_without_reason_never_shows_the_old_one(
+    srv: _Bridge,
+) -> None:
+    _scan_report(srv, "error", 1, reason="offline")
+    assert _scan_report(srv, "error", 2).status_code == 200  # older extension
+    (row,) = srv.repo.search_overview()
+    assert row.last_failure == "error (2026-10-18)"
+    assert row.last_failure_reason is None
+
+
+def test_unknown_or_malformed_reasons_never_reject_the_report(srv: _Bridge) -> None:
+    assert _scan_report(srv, "error", 1, reason="cosmic_rays").status_code == 200
+    assert srv.repo.search_overview()[0].last_failure_reason == "unknown"
+    assert _scan_report(srv, "error", 2, reason=42).status_code == 200
+    assert srv.repo.search_overview()[0].last_failure_reason is None
+    assert _scan_report(srv, "rate_limited", 3, reason="timeout").status_code == 200
+    assert srv.repo.search_overview()[0].last_failure_reason is None
+    assert len(srv.repo.recent_beacon_scans("b1")) == 3
+
+
+def test_stored_reasons_are_pruned_after_14_days(srv: _Bridge) -> None:
+    _scan_report(srv, "error", 1, reason="timeout")
+    srv.today = "2026-11-01"
+    port = srv.httpd.server_address[1]
+    httpx.post(
+        f"http://127.0.0.1:{port}/scan-report",
+        headers={"X-CVA-Bridge-Secret": "s"},
+        json={
+            "beacon_id": "b2",
+            "beacon_name": "Madrid AI",
+            "at": "2026-11-01T09:00:00.000Z",
+            "status": "error",
+            "jobs_found": 0,
+            "empty_company": 0,
+            "reason": "tab_closed",
+        },
+    )
+    stored = json.loads(srv.repo.get_state(ERRORS_KEY) or "{}")
+    assert list(stored) == ["Madrid AI"]
+
+
+@pytest.mark.parametrize(
+    ("lang", "expected"),
+    [
+        (
+            "en",
+            "last failure: error (2026-10-18) — the page did not load in time",
+        ),
+        (
+            "es",
+            "último fallo: error (2026-10-18) — la página no cargó a tiempo",
+        ),
+    ],
+)
+def test_command_shows_the_failure_reason_in_both_languages(
+    srv: _Bridge, lang: Lang, expected: str
+) -> None:
+    from cva.notifier import searches_overview_messages
+
+    _scan_report(srv, "error", 1, reason="timeout")
+    (text,) = searches_overview_messages(srv.repo.search_overview(), lang=lang)
+    assert expected in text

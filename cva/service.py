@@ -2279,6 +2279,10 @@ class JobService:
                     ),
                     new_job_keyboard(job_id, lang=self._lang),
                 )
+                # Delivered: the stranded-offer rescue must never re-drive it.
+                # An undelivered card (Telegram offline) leaves it rescuable.
+                with suppress(Exception):
+                    self._repo.mark_auto_fallback(offer_id)
             return BridgeJobOutcome(zone="pending", score=None)
         profile = self._profile_of(offer_id)
         profile_gate, gray_zone = self._gate_for(profile)
@@ -4071,6 +4075,18 @@ class JobService:
     def list_retry_pending(self, now_iso: str, max_attempts: int) -> list[OfferRow]:
         """Retry-pending offers due now (heartbeat sweep source, pacing D4)."""
         return self._repo.list_retry_pending(now_iso, max_attempts)
+
+    def list_stranded_offers(self) -> list[OfferRow]:
+        """Bridged offers auto-analysis never reached (heartbeat rescue source).
+
+        Empty while the bot is paused or the AI is down (the outage recovery
+        re-drives its own backlog). Bounded to offers first seen in the last
+        ``RESCUE_LOOKBACK``, oldest first.
+        """
+        if self.is_paused() or self.ai_outage() is not None:
+            return []
+        since = (self._now() - RESCUE_LOOKBACK).date().isoformat()
+        return self._repo.list_stranded_since(since)
 
     def beacons(self) -> list[BeaconRow]:
         """All beacons in id order (bot /beacons, CLI ``beacon list``)."""

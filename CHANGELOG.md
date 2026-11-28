@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.10] - 2026-11-28
+
+Tenth pre-release for testers: no offer left behind after a sleep or crash, and scan failures that say why.
+
+### Fixed
+
+- Offers the extension sent while the bot was being stopped, crashed or had just started no longer stay in `pendiente_analisis` forever: on start, and then every heartbeat, the bot analyses bridged offers from the last 3 days that were never analysed, oldest first and paced like new ones (nothing while `/pausa` is on or the AI is down; offers that already got their **Analyze** fallback card are left alone).
+
+### Added
+
+- `/searches` (`/busquedas`) now says why a scan failed: "last failure: error (date) — the page did not load in time", or the scan tab was closed, no internet connection, the browser could not read the page. Update the extension (it now sends the reason); older extensions keep working and show the failure without a reason.
+- `.gitignore` also ignores stray secret files kept next to the code (`*.key`, `*.pem`, `*token*.json`, `*credentials*.json`, `*secret*`, `.env.*`), so a `git add .` cannot pick them up.
+
 ## [2.0.0-beta.9] - 2026-11-26
 
 Ninth pre-release for testers: portals in one place, a working Analyze button and a tester report.
@@ -258,7 +271,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.9...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.10...HEAD
+[2.0.0-beta.10]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.9...v2.0.0-beta.10
 [2.0.0-beta.9]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.8...v2.0.0-beta.9
 [2.0.0-beta.8]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...v2.0.0-beta.8
 [2.0.0-beta.7]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.6...v2.0.0-beta.7

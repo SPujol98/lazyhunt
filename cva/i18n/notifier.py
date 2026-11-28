@@ -253,6 +253,12 @@ EN: Final[dict[str, str]] = {
         "• {name} · rounds {rounds} · found {found} · new {new}"
     ),
     "notifier.searches_failure": " · last failure: {failure}",
+    "notifier.searches_reason": "{failure} — {reason}",
+    "notifier.scan_reason.timeout": "the page did not load in time",
+    "notifier.scan_reason.tab_closed": "the scan tab was closed",
+    "notifier.scan_reason.offline": "no internet connection",
+    "notifier.scan_reason.blocked": "the browser could not read the page",
+    "notifier.scan_reason.unknown": "unknown error",
     "notifier.searches_little_data": (
         "Little data so far: the new-offer counts accumulate from this version on."
     ),
@@ -546,6 +552,12 @@ ES: Final[dict[str, str]] = {
         "• {name} · rondas {rounds} · encontradas {found} · nuevas {new}"
     ),
     "notifier.searches_failure": " · último fallo: {failure}",
+    "notifier.searches_reason": "{failure} — {reason}",
+    "notifier.scan_reason.timeout": "la página no cargó a tiempo",
+    "notifier.scan_reason.tab_closed": "se cerró la pestaña del escaneo",
+    "notifier.scan_reason.offline": "sin conexión a internet",
+    "notifier.scan_reason.blocked": "el navegador no pudo leer la página",
+    "notifier.scan_reason.unknown": "error desconocido",
     "notifier.searches_little_data": (
         "Pocos datos por ahora: los contadores de ofertas nuevas se acumulan "
         "desde esta versión."

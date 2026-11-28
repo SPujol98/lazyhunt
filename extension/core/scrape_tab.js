@@ -32,11 +32,13 @@ async function navigate(tabId, url) {
       resolve();
     };
     timer = setTimeout(() => {
-      reject(new Error(t(
+      const error = new Error(t(
         'sw_error_load_timeout',
         [String(PAGE_LOAD_TIMEOUT_MS / 1000)],
         `The page did not finish loading within ${PAGE_LOAD_TIMEOUT_MS / 1000} seconds`,
-      )));
+      ));
+      error.code = 'timeout'; // the message is localized: the report reads the code
+      reject(error);
     }, PAGE_LOAD_TIMEOUT_MS);
     chrome.tabs.onUpdated.addListener(listener);
   });

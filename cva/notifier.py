@@ -1550,7 +1550,15 @@ def searches_overview_messages(
             new=row.new,
         )
         if row.last_failure:
-            line += t("notifier.searches_failure", lang, failure=row.last_failure)
+            failure = row.last_failure
+            if row.last_failure_reason is not None:
+                failure = t(
+                    "notifier.searches_reason",
+                    lang,
+                    failure=failure,
+                    reason=t(f"notifier.scan_reason.{row.last_failure_reason}", lang),
+                )
+            line += t("notifier.searches_failure", lang, failure=failure)
         lines.append(line)
     lines.append("")
     if sum(row.rounds for row in rows) < _LITTLE_DATA_ROUNDS * len(rows):

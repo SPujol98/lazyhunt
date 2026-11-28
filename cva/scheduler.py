@@ -87,6 +87,7 @@ async def heartbeat(context: Any) -> SweepResult:
     )
     if bridge is not None and not paused and not ai_down:
         redrive_retry_pending(service, bridge)
+        rescue_stranded(service, bridge)
     if owner == 0:
         _LOG.warning(
             "heartbeat produced %d notifications but owner id is unset",
@@ -147,33 +148,59 @@ def redrive_retry_pending(service: "JobService", bridge: Any) -> None:
     The heartbeat's retry sweep (notification-pacing D4), also run right after
     an AI outage ends (``[🔄 Check now]`` / ``[▶️ Resume]``).
     """
-    from cva.ingest import job_id_from_url
-
     now_iso = datetime.now(tz=UTC).isoformat()
     for row in service.list_retry_pending(now_iso, service.analyze_retry_max):
-        if not row.url_oferta:
+        queued = _queued_job(row)
+        if queued is not None:
+            bridge.enqueue_auto_analysis(row.id, *queued, kind="retry")
+
+
+def rescue_stranded(service: "JobService", bridge: Any) -> None:
+    """Re-drive bridged offers the in-memory queue lost (beta10 S1).
+
+    A killed or crashed bot, or a payload that landed before the loop existed,
+    leaves offers ``pendiente_analisis`` with no attempt and no due time: no
+    sweep would ever see them. They join the same paced queue
+    (``kind="rescue"``), so the score gate and card rules are unchanged.
+    Skipped: manual mode (no auto-analysis), offers already queued or in
+    flight; the service returns nothing while paused or during an AI outage.
+    """
+    if not getattr(bridge, "auto_analyze", False):
+        return
+    queued_ids = bridge.queued_offer_ids()
+    for row in service.list_stranded_offers():
+        if row.id in queued_ids:
             continue
-        # Registry-derived job id (infojobs-source): the InfoJobs
-        # canonical tail is "of-<id>", so the tail fallback alone would
-        # file the retry under the wrong id; LinkedIn shapes are
-        # unaffected (the registry returns the same numeric id).
-        job_id = (
-            job_id_from_url(row.url_oferta)
-            or row.url_oferta.rstrip("/").rsplit("/", 1)[-1]
-        )
-        job: dict[str, Any] = {
-            "url": row.url_oferta,
-            "title": row.posicion,
-            "company": row.empresa,
-        }
-        if _retry_inline(row):
-            # Inline durability (infojobs-source D7): shutdown-deferred
-            # inline rows re-analyze without the dead server fetch — the
-            # stored text IS the analysis text. Link-ingested rows (any
-            # portal) and LinkedIn rows keep the note→refetch lifecycle
-            # (no "text" key).
-            job["text"] = row.source_data
-        bridge.enqueue_auto_analysis(row.id, job_id, job, kind="retry")
+        queued = _queued_job(row)
+        if queued is not None:
+            bridge.enqueue_auto_analysis(row.id, *queued, kind="rescue")
+
+
+def _queued_job(row: OfferRow) -> tuple[str, dict[str, Any]] | None:
+    """``(job_id, job)`` the bridge queue analyses for a stored row."""
+    from cva.ingest import job_id_from_url
+
+    if not row.url_oferta:
+        return None
+    # Registry-derived job id (infojobs-source): the InfoJobs canonical tail is
+    # "of-<id>", so the tail fallback alone would file the retry under the
+    # wrong id; LinkedIn shapes are unaffected (the registry returns the same
+    # numeric id).
+    job_id = (
+        job_id_from_url(row.url_oferta) or row.url_oferta.rstrip("/").rsplit("/", 1)[-1]
+    )
+    job: dict[str, Any] = {
+        "url": row.url_oferta,
+        "title": row.posicion,
+        "company": row.empresa,
+    }
+    if _retry_inline(row):
+        # Inline durability (infojobs-source D7): shutdown-deferred inline
+        # rows re-analyze without the dead server fetch — the stored text IS
+        # the analysis text. Link-ingested rows (any portal) and LinkedIn rows
+        # keep the note→refetch lifecycle (no "text" key).
+        job["text"] = row.source_data
+    return job_id, job
 
 
 async def _ai_outage_step(

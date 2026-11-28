@@ -1163,6 +1163,64 @@ def test_exhausted_attempts_clears_latch_then_sends_one_final_card(
     assert row.next_analyze_at is None  # sweep never lists it again
 
 
+class _FailingNotify(_RecordingNotify):
+    """Telegram unreachable: every send raises after being recorded."""
+
+    async def __call__(self, text: str, keyboard: Any) -> None:
+        await super().__call__(text, keyboard)
+        raise ConnectionError("telegram unreachable")
+
+
+def test_final_fallback_card_is_recorded_so_the_offer_is_never_rescued(
+    tmp_path: Path,
+) -> None:
+    """beta10 S1: a delivered fallback card is remembered; the stranded-offer
+    rescue never re-drives (and never re-cards) that offer."""
+    fetcher = _WallFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL))
+    service, _repo, offer_id = _bridged(tmp_path, FakeLlmClient(_extraction()), fetcher)
+    service._analyze_retry_max = 0
+    assert [row.id for row in service.list_stranded_offers()] == [offer_id]
+
+    asyncio.run(
+        service.analyze_new_bridge_job(
+            offer_id,
+            url=OFFER_URL,
+            title="ML Engineer",
+            company="Acme",
+            notify=_RecordingNotify(),
+            min_score=None,
+        )
+    )
+
+    assert service.list_stranded_offers() == []
+
+
+def test_undelivered_fallback_card_leaves_the_offer_rescuable(
+    tmp_path: Path,
+) -> None:
+    """beta10 S1: the fallback card never reached Telegram (offline): the
+    owner has no card, so the rescue may re-drive the offer later."""
+    fetcher = _WallFetcher(FetchResponse(200, JSONLD_BODY, OFFER_URL))
+    service, _repo, offer_id = _bridged(tmp_path, FakeLlmClient(_extraction()), fetcher)
+    service._analyze_retry_max = 0
+    notify = _FailingNotify()
+
+    with pytest.raises(ConnectionError):
+        asyncio.run(
+            service.analyze_new_bridge_job(
+                offer_id,
+                url=OFFER_URL,
+                title="ML Engineer",
+                company="Acme",
+                notify=notify,
+                min_score=None,
+            )
+        )
+
+    assert len(notify.calls) == 1
+    assert [row.id for row in service.list_stranded_offers()] == [offer_id]
+
+
 def test_exhausted_attempt_warning_never_shows_a_fraction_above_the_budget(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, get_args
 
 from pydantic import BaseModel, field_validator
 
@@ -35,6 +35,14 @@ PAUSED_STATE_KEY: Final[str] = "paused"
 # day, only the last ``SEARCH_WINDOW_DAYS`` days (appended by the bridge).
 BEACON_NEW_COUNTS_KEY: Final[str] = "beacon_new_counts"
 SEARCH_WINDOW_DAYS: Final[int] = 14
+# app_state key: JSON ``{offer_id: iso_date}`` of the bridged offers whose final
+# fallback [Analizar] card was delivered (pruned to ``SEARCH_WINDOW_DAYS``), so
+# the stranded-offer rescue never re-drives them.
+AUTO_FALLBACK_KEY: Final[str] = "auto_fallback_cards"
+# app_state key: JSON ``{beacon_name: {"at", "status", "reason"}}``, the latest
+# failed scan that said why (the extension's ``reason``), pruned to
+# ``SEARCH_WINDOW_DAYS``. No schema migration: ``beacon_scans`` stays as is.
+BEACON_LAST_ERRORS_KEY: Final[str] = "beacon_last_errors"
 # Post-send estados the owner can record from /outcome (all already valid in
 # the offers.estado CHECK).
 OUTCOME_ESTADOS: Final[tuple[str, ...]] = (
@@ -665,6 +673,10 @@ _FAILED_SCANS: Final[frozenset[str]] = frozenset(
     {"rate_limited", "session_expired", "error"}
 )
 
+# Why an ``error`` scan failed, as the extension classifies it
+# (extension/scan_report.js ``SCAN_REASONS``); anything else is ``unknown``.
+ScanReason = Literal["timeout", "tab_closed", "offline", "blocked", "unknown"]
+
 
 class BeaconScanRow(BaseModel):
     """One scan of a beacon as reported by the extension (health history)."""
@@ -685,6 +697,7 @@ class SearchOverviewRow(BaseModel):
     found: int
     new: int
     last_failure: str | None = None
+    last_failure_reason: ScanReason | None = None
 
 
 def _window_start(today: str) -> str:
@@ -1105,6 +1118,30 @@ class OfferRepository:
             days.append((today, new))
         self.set_state(BEACON_NEW_COUNTS_KEY, json.dumps(counts))
 
+    def _last_errors(self) -> dict[str, dict[str, str]]:
+        """Stored per-search failure reasons inside the window (corrupt -> empty)."""
+        start = _window_start(self._clock())
+        try:
+            raw = json.loads(self.get_state(BEACON_LAST_ERRORS_KEY) or "{}")
+            return {
+                str(name): {k: str(v) for k, v in entry.items()}
+                for name, entry in raw.items()
+                if str(entry.get("at", ""))[:10] >= start
+            }
+        except (ValueError, TypeError, AttributeError):
+            return {}
+
+    def record_beacon_error(
+        self, *, beacon_name: str, at: str, status: str, reason: ScanReason
+    ) -> None:
+        """Keep the latest failure reason of a search; prune old ones.
+
+        Read-modify-write: the caller holds the bridge lock.
+        """
+        errors = self._last_errors()
+        errors[beacon_name.strip()] = {"at": at, "status": status, "reason": reason}
+        self.set_state(BEACON_LAST_ERRORS_KEY, json.dumps(errors))
+
     def search_overview(self) -> list[SearchOverviewRow]:
         """Every search with scans or new offers in the window, zero-new first."""
         start = _window_start(self._clock())
@@ -1116,22 +1153,33 @@ class OfferRepository:
         ).fetchall()
         stats: dict[str, list[Any]] = {}
         for name, at, status, found in rows:
-            entry = stats.setdefault(name, [0, 0, None])
+            entry = stats.setdefault(name, [0, 0, None, None])
             entry[0] += 1
             entry[1] += found
             if status in _FAILED_SCANS:
                 entry[2] = f"{status} ({at[:10]})"
+                entry[3] = at
+        errors = self._last_errors()
         names = set(stats) | set(new)
-        out = [
-            SearchOverviewRow(
-                name=n,
-                rounds=stats.get(n, [0, 0, None])[0],
-                found=stats.get(n, [0, 0, None])[1],
-                new=new.get(n, 0),
-                last_failure=stats.get(n, [0, 0, None])[2],
+        out = []
+        for n in names:
+            rounds, found, failure, failed_at = stats.get(n, [0, 0, None, None])
+            # The reason belongs to THAT failure only: a later failure an
+            # older extension reported without one shows none.
+            error = errors.get(n, {})
+            reason = error.get("reason") if failed_at == error.get("at") else None
+            if reason not in get_args(ScanReason):
+                reason = None  # a hand-edited or corrupt value: show none
+            out.append(
+                SearchOverviewRow(
+                    name=n,
+                    rounds=rounds,
+                    found=found,
+                    new=new.get(n, 0),
+                    last_failure=failure,
+                    last_failure_reason=reason,  # type: ignore[arg-type]
+                )
             )
-            for n in names
-        ]
         return sorted(out, key=lambda r: (r.new, r.found, r.name))
 
     # --- Gmail proposals (v22) ---------------------------------------------
@@ -1375,6 +1423,7 @@ class OfferRepository:
             (NOTE_SEPARATOR.join(entries) or None, offer_id),
         )
         self._conn.commit()
+        self.clear_auto_fallback(offer_id)  # brand-new again: analysable
         self.add_event(
             offer_id, "note", note=f"reabierta: volvió a aparecer en {portal}"
         )
@@ -2297,6 +2346,57 @@ class OfferRepository:
             (day_iso,),
         ).fetchall()
         return [_row_to_offer(row) for row in rows]
+
+    def _auto_fallbacks(self) -> dict[str, str]:
+        """Stored fallback-card marks inside the window (corrupt -> empty)."""
+        start = _window_start(self._clock())
+        try:
+            raw = json.loads(self.get_state(AUTO_FALLBACK_KEY) or "{}")
+            return {str(k): str(v) for k, v in raw.items() if str(v) >= start}
+        except (ValueError, TypeError, AttributeError):
+            return {}
+
+    def mark_auto_fallback(self, offer_id: int) -> None:
+        """Remember that the offer's final fallback card was delivered."""
+        marks = self._auto_fallbacks()
+        marks[str(offer_id)] = self._clock()[:10]
+        self.set_state(AUTO_FALLBACK_KEY, json.dumps(marks))
+
+    def has_auto_fallback(self, offer_id: int) -> bool:
+        """True when the offer's final fallback card was delivered."""
+        return str(offer_id) in self._auto_fallbacks()
+
+    def clear_auto_fallback(self, offer_id: int) -> None:
+        """Forget a delivered fallback card (the offer was reopened)."""
+        marks = self._auto_fallbacks()
+        if marks.pop(str(offer_id), None) is not None:
+            self.set_state(AUTO_FALLBACK_KEY, json.dumps(marks))
+
+    def list_stranded_since(self, day_iso: str) -> list[OfferRow]:
+        """Bridged offers first seen on/after ``day_iso`` that auto-analysis
+        never touched: ``pendiente_analisis``, no attempt, no due time, still
+        the bridge's own row (inline text, or the unfetched ``bridge:`` note)
+        and no delivered fallback card. Oldest first.
+
+        A row only looks like this while it waits in the bridge's in-memory
+        queue, or after that queue was lost (killed bot, payload before the
+        loop existed, a fallback card Telegram never received).
+        """
+        marked = self._auto_fallbacks()
+        rows = self._conn.execute(
+            "SELECT * FROM offers WHERE estado = 'pendiente_analisis' "
+            "AND analyze_attempts = 0 AND next_analyze_at IS NULL "
+            "AND url_oferta IS NOT NULL "
+            "AND (ingest_source = 'bridge-inline' OR source_data LIKE 'bridge: %') "
+            "AND substr(COALESCE(fecha_alta, fecha_update), 1, 10) >= ? "
+            "ORDER BY id",
+            (day_iso,),
+        ).fetchall()
+        return [
+            offer
+            for offer in (_row_to_offer(row) for row in rows)
+            if str(offer.id) not in marked
+        ]
 
     def list_retry_pending(self, now_iso: str, max_attempts: int) -> list[OfferRow]:
         """Retry-pending rows due now: not sent, ≤ max attempts, next <= now.

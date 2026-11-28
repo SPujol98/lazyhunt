@@ -42,7 +42,7 @@ export function throwIfCancelled() {
 }
 
 // `promise`, unless the round is cancelled first (RoundCancelled) or `ms`
-// elapses first (an Error with `message`). `ms` 0 = no timeout;
+// elapses first (an Error with `message` and code `timeout`). `ms` 0 = no timeout;
 // `cancellable` false = only the timeout (cleanup steps such as closing the
 // tab must still run after a cancel).
 export function bounded(promise, { ms = 0, message = '', cancellable = true } = {}) {
@@ -51,7 +51,11 @@ export function bounded(promise, { ms = 0, message = '', cancellable = true } = 
   let wake = null;
   const stop = new Promise((_resolve, reject) => {
     if (ms > 0) {
-      timer = setTimeout(() => reject(new Error(message || `timed out after ${ms / 1000} seconds`)), ms);
+      timer = setTimeout(() => {
+        const error = new Error(message || `timed out after ${ms / 1000} seconds`);
+        error.code = 'timeout'; // the scan report's reason (scan_report.js)
+        reject(error);
+      }, ms);
     }
     if (current) {
       wake = () => reject(new RoundCancelled());
