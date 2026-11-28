@@ -6,13 +6,16 @@ bridge-card notification.
 """
 
 import asyncio
+import dataclasses
 from pathlib import Path
 from typing import Any
 
+import pytest
 from telegram import InlineKeyboardMarkup
 
 import bot
 from cva.fetch import FetchResponse
+from cva.ingest import sources
 from cva.notifier import cv_keyboard
 from cva.tracker import OfferInput, OfferRow
 from tests.test_bot import FakeContext, FakeFetcher, FakeQuery, FakeUpdate, make_service
@@ -38,6 +41,18 @@ def _offer(
     )
 
 
+@pytest.fixture
+def paid_portals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flag portals ``search_elsewhere`` (the public build has no paid portal,
+    so the tests flag registered ones through the public registry)."""
+    for pid in ("linkedin", "infojobs", "indeed"):
+        monkeypatch.setitem(
+            sources.SOURCES,
+            pid,
+            dataclasses.replace(sources.SOURCES[pid], search_elsewhere=True),
+        )
+
+
 def _rows(markup: InlineKeyboardMarkup) -> list[list[dict[str, Any]]]:
     return [[button.to_dict() for button in row] for row in markup.inline_keyboard]
 
@@ -46,7 +61,9 @@ def _search_row(markup: InlineKeyboardMarkup) -> list[tuple[str, str | None]]:
     return [(b.text, b.url) for b in markup.inline_keyboard[-1]]
 
 
-def test_existing_rows_are_unchanged_and_the_search_row_goes_last() -> None:
+def test_existing_rows_are_unchanged_and_the_search_row_goes_last(
+    paid_portals: None,
+) -> None:
     plain = cv_keyboard(OFFER_ID)
     with_row = cv_keyboard(OFFER_ID, offer=_offer())
     assert _rows(with_row)[:-1] == _rows(plain)
@@ -59,7 +76,44 @@ def test_existing_rows_are_unchanged_and_the_search_row_goes_last() -> None:
     )
 
 
-def test_link_set_searches_title_and_company_url_encoded() -> None:
+def test_unflagged_portals_and_pasted_offers_get_no_row() -> None:
+    plain = cv_keyboard(OFFER_ID)
+    offers = [
+        _offer(),  # Indeed
+        _offer(origen="linkedin", url="https://www.linkedin.com/jobs/view/1/"),
+        _offer(origen="infojobs", url="https://www.infojobs.net/x/of-i123"),
+        _offer(origen="paste", url=None),
+        _offer(origen="link", url="https://unknown.example/job/1"),
+        _offer(origen=None, url=None),
+    ]
+    for offer in offers:
+        assert _rows(cv_keyboard(OFFER_ID, offer=offer)) == _rows(plain)
+        no_cv = cv_keyboard(OFFER_ID, cv_needed=False, offer=offer)
+        assert _rows(no_cv) == _rows(cv_keyboard(OFFER_ID, cv_needed=False))
+
+
+def test_flagged_portal_offer_gets_the_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        sources.SOURCES,
+        "indeed",
+        dataclasses.replace(sources.SOURCES["indeed"], search_elsewhere=True),
+    )
+    plain = cv_keyboard(OFFER_ID, ui_lang="en")
+    markup = cv_keyboard(OFFER_ID, offer=_offer(), ui_lang="en")
+    assert _rows(markup)[:-1] == _rows(plain)
+    assert [t for t, _ in _search_row(markup)] == [
+        "🔎 On LinkedIn",
+        "🔎 On Google",
+        "🔎 On InfoJobs",
+    ]
+    # Resolved from the URL host when the stored origen is missing.
+    by_url = _offer(origen=None)
+    assert len(_search_row(cv_keyboard(OFFER_ID, offer=by_url))) == 3
+
+
+def test_link_set_searches_title_and_company_url_encoded(paid_portals: None) -> None:
     row = _search_row(cv_keyboard(OFFER_ID, offer=_offer(), ui_lang="en"))
     assert row == [
         (
@@ -83,14 +137,14 @@ def test_link_set_searches_title_and_company_url_encoded() -> None:
     ]
 
 
-def test_labels_follow_the_ui_language() -> None:
+def test_labels_follow_the_ui_language(paid_portals: None) -> None:
     labels = [
         t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=_offer(), ui_lang="es"))
     ]
     assert labels == ["🔎 En LinkedIn", "🔎 En Google", "🔎 En InfoJobs"]
 
 
-def test_unknown_company_drops_the_company_term() -> None:
+def test_unknown_company_drops_the_company_term(paid_portals: None) -> None:
     for company in (None, "", "   "):
         row = _search_row(cv_keyboard(OFFER_ID, offer=_offer(company=company)))
         urls = [u for _, u in row]
@@ -102,7 +156,7 @@ def test_unknown_company_drops_the_company_term() -> None:
         assert urls[2].endswith("?keyword=ML+Engineer")
 
 
-def test_company_only_offer_still_gets_the_row() -> None:
+def test_company_only_offer_still_gets_the_row(paid_portals: None) -> None:
     urls = [u for _, u in _search_row(cv_keyboard(OFFER_ID, offer=_offer(title=None)))]
     assert urls[0] == "https://www.linkedin.com/jobs/search/?keywords=Acme+%26+Co"
 
@@ -114,7 +168,7 @@ def test_no_title_and_no_company_means_no_row() -> None:
         assert _rows(markup) == _rows(plain)
 
 
-def test_the_offers_own_portal_is_skipped() -> None:
+def test_the_offers_own_portal_is_skipped(paid_portals: None) -> None:
     linkedin = _offer(origen="linkedin", url="https://www.linkedin.com/jobs/view/1/")
     labels = [
         t for t, _ in _search_row(cv_keyboard(OFFER_ID, offer=linkedin, ui_lang="en"))
@@ -133,7 +187,7 @@ def test_the_offers_own_portal_is_skipped() -> None:
     assert row[2][1] == "https://es.indeed.com/jobs?q=ML+Engineer+Acme+%26+Co"
 
 
-def test_very_long_terms_are_capped() -> None:
+def test_very_long_terms_are_capped(paid_portals: None) -> None:
     markup = cv_keyboard(OFFER_ID, offer=_offer(title="A" * 2000, company="B" * 2000))
     assert all(len(u or "") < 1024 for _, u in _search_row(markup))
 
@@ -144,7 +198,7 @@ def test_very_long_terms_are_capped() -> None:
 OFFER_URL = "https://www.linkedin.com/jobs/view/4459804598/"
 
 
-def test_lang_toggle_keeps_the_search_row(tmp_path: Path) -> None:
+def test_lang_toggle_keeps_the_search_row(tmp_path: Path, paid_portals: None) -> None:
     service, _llm = make_service(
         tmp_path, FakeFetcher(FetchResponse(200, "", OFFER_URL))
     )
@@ -181,7 +235,9 @@ def test_lang_toggle_for_a_missing_offer_still_edits_the_keyboard(
     assert all(b.callback_data for row in markup.inline_keyboard for b in row)
 
 
-def test_analyze_card_carries_the_search_row(tmp_path: Path) -> None:
+def test_analyze_card_carries_the_search_row(
+    tmp_path: Path, paid_portals: None
+) -> None:
     from tests.test_bot import JSONLD_BODY, FakeMessage
 
     service, _llm = make_service(
@@ -203,7 +259,9 @@ def test_analyze_card_carries_the_search_row(tmp_path: Path) -> None:
     ]
 
 
-def test_bridge_card_from_the_service_carries_the_search_row(tmp_path: Path) -> None:
+def test_bridge_card_from_the_service_carries_the_search_row(
+    tmp_path: Path, paid_portals: None
+) -> None:
     from tests.test_auto_triage import (
         JSONLD_BODY,
         _bridged,

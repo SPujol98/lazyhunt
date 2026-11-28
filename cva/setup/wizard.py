@@ -902,7 +902,7 @@ _MD_PURPOSE: Final[dict[str, str]] = {
 }
 
 _PROFILE_README: Final[str] = """\
-# Your lazyhunt profile
+# Your LazyHunt profile
 
 Created by `uv run cli.py init`. Everything here describes you, so it is
 personal data: keep this directory out of version control.

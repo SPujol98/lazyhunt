@@ -65,6 +65,9 @@ class SourceSpec:
     # False for portals where the owner applies with the portal's own profile
     # (no CV is uploaded): cards drop the Generate-CV action and its toggles.
     cv_needed: bool = True
+    # True for portals that ask the candidate to pay before applying: only
+    # their cards carry the "search elsewhere" row, to apply on another site.
+    search_elsewhere: bool = False
 
 
 # LinkedIn job-id URL shapes (single source of truth, moved verbatim from

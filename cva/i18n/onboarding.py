@@ -104,12 +104,12 @@ EN: Final[dict[str, str]] = {
         "Now your base CVs: the bot sends this CV, adapted, for each offer; "
         "one per position type × language (the list below). For each one, "
         "upload your own PDF (📎 → File, at most {mb} MB and {pages} pages), "
-        "create one with lazyhunt from your answers, or leave it for later. "
+        "create one with LazyHunt from your answers, or leave it for later. "
         "Tap a line to work on that one."
     ),
     "onboarding.cv.upload_hint": "📎 Send the PDF now as a file (📎 → File).",
     "onboarding.btn.cv_upload": "📎 Upload my PDF",
-    "onboarding.btn.cv_create": "✨ Create one with lazyhunt",
+    "onboarding.btn.cv_create": "✨ Create one with LazyHunt",
     "onboarding.btn.cv_later": "Not now ⏭",
     "onboarding.btn.cv_more": "➕ Create another version",
     "onboarding.btn.cv_create_now": "✨ Create one now",
@@ -140,7 +140,7 @@ EN: Final[dict[str, str]] = {
     ),
     "onboarding.cv.created_mark": "✨ {template}",
     "onboarding.cv.created_saved": (
-        "CVs created with lazyhunt: {slots}. They are a starting point: add "
+        "CVs created with LazyHunt: {slots}. They are a starting point: add "
         "projects and achievements later and replace them with /setup cvs."
     ),
     "onboarding.cv.skip_warning": (
@@ -424,12 +424,12 @@ ES: Final[dict[str, str]] = {
         "Ahora tus CV base: el bot envía este CV, adaptado, en cada oferta; "
         "uno por tipo de puesto × idioma (la lista de abajo). Para cada uno, "
         "sube tu PDF (📎 → Archivo, de {mb} MB y {pages} páginas como máximo), "
-        "créalo con lazyhunt a partir de tus respuestas o déjalo para más tarde. "
+        "créalo con LazyHunt a partir de tus respuestas o déjalo para más tarde. "
         "Pulsa una línea para trabajar en ese."
     ),
     "onboarding.cv.upload_hint": "📎 Envía ahora el PDF como archivo (📎 → Archivo).",
     "onboarding.btn.cv_upload": "📎 Subir mi PDF",
-    "onboarding.btn.cv_create": "✨ Crear uno con lazyhunt",
+    "onboarding.btn.cv_create": "✨ Crear uno con LazyHunt",
     "onboarding.btn.cv_later": "Ahora no ⏭",
     "onboarding.btn.cv_more": "➕ Crear otra versión",
     "onboarding.btn.cv_create_now": "✨ Crear uno ahora",
@@ -460,7 +460,7 @@ ES: Final[dict[str, str]] = {
     ),
     "onboarding.cv.created_mark": "✨ {template}",
     "onboarding.cv.created_saved": (
-        "CV creados con lazyhunt: {slots}. Son un punto de partida: añade "
+        "CV creados con LazyHunt: {slots}. Son un punto de partida: añade "
         "proyectos y logros más adelante y sustitúyelos con /configurar cvs."
     ),
     "onboarding.cv.skip_warning": (

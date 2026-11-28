@@ -896,7 +896,9 @@ def search_elsewhere_rows(
 ) -> list[list[InlineKeyboardButton]]:
     """The card's "🔎 Search elsewhere" row (URL buttons, no callback data):
     the offer's title + company searched on other sites, its own portal
-    skipped. No row without an offer or with neither title nor company."""
+    skipped. Only for portals flagged ``search_elsewhere`` (those that ask to
+    pay before applying); no row without an offer or with neither title nor
+    company."""
     if offer is None:
         return []
     links = search_links(

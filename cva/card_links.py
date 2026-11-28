@@ -1,8 +1,9 @@
 """ "Search elsewhere" links for an offer card: pure URL builders, no I/O.
 
-The analysis card ends with a row of URL buttons that search the same offer
-(title + company) on other sites, so an offer seen on one portal can be
-applied to elsewhere. Built from the stored tracker fields only:
+The analysis card of an offer from a portal that asks to pay before applying
+(``SourceSpec.search_elsewhere``) ends with a row of URL buttons that search
+the same offer (title + company) on other sites, so it can be applied to
+elsewhere. Other offers get no row. Built from the stored tracker fields only:
 
 - LinkedIn jobs search (skipped for LinkedIn offers);
 - a Google search for ``"<title>" "<company>"`` plus a careers hint;
@@ -47,11 +48,14 @@ def search_links(
     source: str | None = None,
     url: str | None = None,
 ) -> list[SearchLink]:
-    """Links searching the offer elsewhere; empty when title and company are."""
+    """Links searching the offer elsewhere; empty unless the offer's portal is
+    flagged ``search_elsewhere`` or when title and company are empty."""
     title_term, company_term = _term(title), _term(company)
     if not title_term and not company_term:
         return []
     origin = _origin(source, url)
+    if origin is None or not SOURCES[origin].search_elsewhere:
+        return []
     keywords = " ".join(t for t in (title_term, company_term) if t)
     quoted = " ".join(f'"{t}"' for t in (title_term, company_term) if t)
     links: list[SearchLink] = []

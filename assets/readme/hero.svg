@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-labelledby="t d">
-  <title id="t">lazyhunt</title>
-  <desc id="d">A relaxed sloth lies in a hammock at dusk, watching job offers drift past through binoculars. Next to it: lazyhunt, the job hunt that does the scrolling for you.</desc>
+  <title id="t">LazyHunt</title>
+  <desc id="d">A relaxed sloth lies in a hammock at dusk, watching job offers drift past through binoculars. Next to it: LazyHunt, the job hunt that does the scrolling for you.</desc>
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1B1830"/>
@@ -133,7 +133,7 @@
     </g>
 
     <!-- title block -->
-    <text x="672" y="196" class="ttl">lazyhunt</text>
+    <text x="672" y="196" class="ttl">LazyHunt</text>
     <text x="676" y="240" class="tag">The job hunt that does the scrolling.</text>
     <text x="676" y="272" class="tag" style="fill:#FBEBD0">You stay in the hammock.</text>
     <text x="676" y="318" class="sub">Self-hosted · runs in your own browser tab · Telegram-first</text>

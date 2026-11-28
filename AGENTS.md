@@ -1,7 +1,7 @@
 # Instructions for coding agents
 
 This file is for AI coding assistants (Claude Code, Codex, Cursor, Copilot and
-others) working in a lazyhunt clone, usually on behalf of a job seeker who is
+others) working in a LazyHunt clone, usually on behalf of a job seeker who is
 setting it up. Read it before you change anything.
 
 ## The user's profile is theirs to fill in, through the bot
@@ -10,7 +10,7 @@ Everything about the user (facts, base CVs, voice, salary, preferences) lives
 in `profiles/<name>/`. The bot only trusts what the user told it.
 
 - **Do not create, write or edit files under `profiles/` on the user's
-  behalf**, even when they ask you to "set up lazyhunt" or paste their CV.
+  behalf**, even when they ask you to "set up LazyHunt" or paste their CV.
   A profile you fill in yourself skips the bot's checks, and the bot ends up
   claiming things the user never confirmed.
 - **Send the user to `/setup` (`/configurar` in Spanish) in their Telegram

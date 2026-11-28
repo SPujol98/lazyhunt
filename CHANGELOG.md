@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [2.0.0-beta.11] - 2026-11-28
+
+Eleventh pre-release for testers: the LazyHunt name and quieter cards.
+
+### Changed
+
+- The product name is written LazyHunt in the docs, the bot, the extension and the CLI help; the command, package and repository stay lowercase (`lazyhunt`).
+- The 🔎 search-elsewhere buttons now appear only on offers from portals that ask you to pay before applying, instead of on every card.
+
 ## [2.0.0-beta.10] - 2026-11-28
 
 Tenth pre-release for testers: no offer left behind after a sleep or crash, and scan failures that say why.
@@ -271,7 +280,8 @@ First public release.
 - Optional read-only Gmail status proposals for application replies.
 - `cli.py init` interactive setup wizard.
 
-[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.10...HEAD
+[Unreleased]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.11...HEAD
+[2.0.0-beta.11]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.10...v2.0.0-beta.11
 [2.0.0-beta.10]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.9...v2.0.0-beta.10
 [2.0.0-beta.9]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.8...v2.0.0-beta.9
 [2.0.0-beta.8]: https://github.com/SPujol98/lazyhunt/compare/v2.0.0-beta.7...v2.0.0-beta.8

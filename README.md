@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/hero.svg" alt="lazyhunt. A relaxed sloth lies in a hammock at dusk, watching job offers with match scores drift past through binoculars. The job hunt that does the scrolling. You stay in the hammock." width="100%">
+  <img src="assets/readme/hero.svg" alt="LazyHunt. A relaxed sloth lies in a hammock at dusk, watching job offers with match scores drift past through binoculars. The job hunt that does the scrolling. You stay in the hammock." width="100%">
 </p>
 
 <p align="center">
@@ -38,17 +38,17 @@
 > [!IMPORTANT]
 > **Read this before enabling anything.**
 > - **Portals.** The extension reads pages in your own logged-in browser tab, at low volume, only for the portals you enable. Some portals (notably LinkedIn) prohibit automated access or browser extensions in their terms, and your account could be restricted. Every portal is **off by default**: enable only those whose terms you have read and accept, and never redistribute collected listings. **You are responsible for compliance.**
-> - **Claude Code.** lazyhunt never logs you in to Claude and never reads or stores Claude credentials. It runs the official, unmodified `claude` CLI that you installed and authenticated yourself. This is an independent project, not made, endorsed or sponsored by Anthropic; check Anthropic's terms and your plan's usage limits.
+> - **Claude Code.** LazyHunt never logs you in to Claude and never reads or stores Claude credentials. It runs the official, unmodified `claude` CLI that you installed and authenticated yourself. This is an independent project, not made, endorsed or sponsored by Anthropic; check Anthropic's terms and your plan's usage limits.
 > - **Gmail** (optional) is read-only, through an OAuth client you create in your own Google Cloud project. Message bodies are never stored and nothing is sent to the author.
-> - **Your responsibility.** lazyhunt is a personal tool provided as is, with no warranty (see the [license](LICENSE)). You choose what it searches, what it sends to your AI provider and what you send to employers; review every score, CV and letter before you use it.
+> - **Your responsibility.** LazyHunt is a personal tool provided as is, with no warranty (see the [license](LICENSE)). You choose what it searches, what it sends to your AI provider and what you send to employers; review every score, CV and letter before you use it.
 
-## Why lazyhunt exists
+## Why LazyHunt exists
 
-I built lazyhunt to automate my own job search. Opening the same portals every day, scrolling the same lists and rewriting the same CV is exactly the kind of work a lazy person wants a machine to do, so I taught one to do it, with one rule it is not allowed to bend: it may only say about me what I can back up. It started as a tool for one person looking for work in Spain, and that still shows in a few places (see [limitations](#project-status-and-limitations)). Now it is yours to point at your own search.
+I built LazyHunt to automate my own job search. Opening the same portals every day, scrolling the same lists and rewriting the same CV is exactly the kind of work a lazy person wants a machine to do, so I taught one to do it, with one rule it is not allowed to bend: it may only say about me what I can back up. It started as a tool for one person looking for work in Spain, and that still shows in a few places (see [limitations](#project-status-and-limitations)). Now it is yours to point at your own search.
 
 ## What this is
 
-lazyhunt is two small pieces that live on your computer and talk to each other:
+LazyHunt is two small pieces that live on your computer and talk to each other:
 
 - **A browser extension** (Chrome, Brave or another Chromium-based browser) that, on a schedule, opens the saved searches you defined on the portals you enabled, in your own logged-in session, and picks out offers it has not seen before.
 - **A Python bot** that receives those offers over a private, loopback-only connection, judges each one with the AI provider you configure, and talks to you through **Telegram**, the only interface.
@@ -73,7 +73,7 @@ There is no server, no account and no shared backend. Everything the bot knows a
 From a fresh clone to your first scored offer takes about 20 minutes. Follow the steps in order: install, create your Telegram bot, run the setup wizard, start the bot and claim it, answer `/setup` in Telegram, load the extension, get your first offer. How to use the bot day to day comes last, once everything is set up. You do not write any profile file by hand: a short terminal wizard sets up the bot, and the bot itself then asks about you in Telegram (about 10 minutes). Every step below is also in the longer [getting-started guide](docs/getting-started.md).
 
 > [!IMPORTANT]
-> Don't let your coding assistant fill in your profile: use `/setup`. If you set lazyhunt up with Claude Code, Codex or another coding agent, it reads `AGENTS.md`, which tells it to leave `profiles/` to the bot.
+> Don't let your coding assistant fill in your profile: use `/setup`. If you set LazyHunt up with Claude Code, Codex or another coding agent, it reads `AGENTS.md`, which tells it to leave `profiles/` to the bot.
 
 ### What you need
 
@@ -91,7 +91,7 @@ From a fresh clone to your first scored offer takes about 20 minutes. Follow the
 
 **Which AI?** Any of them follows the same instructions, so scoring, CVs and letters work with all. One difference: the cover letter's **web research of company facts** works only with Claude Code and Codex CLI, because they can browse the web; API models have no browsing tool, so with them that research is reported as not available instead of guessed. You pick the provider in the setup wizard, and can change it any time by running it again. Details and costs: [docs/providers.md](docs/providers.md).
 
-**Operating systems.** Linux, macOS and Windows. CI runs the test suite on all three; lazyhunt is developed on Linux, so macOS and Windows get less day-to-day use. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
+**Operating systems.** Linux, macOS and Windows. CI runs the test suite on all three; LazyHunt is developed on Linux, so macOS and Windows get less day-to-day use. Commands below are written for a Unix shell; where a guide uses a Unix-only command, the Windows (PowerShell) equivalent is noted: `sha256sum <file>` is `Get-FileHash <file>`, and `chmod 600 <file>` can be skipped, because files under your user folder are private to your account by default.
 
 **Installing uv.** If `uv --version` fails, install it with the official one-liner ([other methods](https://docs.astral.sh/uv/getting-started/installation/)), then open a new terminal:
 
@@ -105,7 +105,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-You do not need to install Python yourself: lazyhunt pins Python 3.12 (`>=3.12,<3.13` in `pyproject.toml`), and `uv sync` downloads that version if your system does not have it.
+You do not need to install Python yourself: LazyHunt pins Python 3.12 (`>=3.12,<3.13` in `pyproject.toml`), and `uv sync` downloads that version if your system does not have it.
 
 ### 1. Install
 
@@ -167,7 +167,7 @@ It first checks the bot token with Telegram. If Telegram rejects it, the bot pri
 **The first time**, the terminal shows a one-time code (and a `t.me` link that sends it for you):
 
 ```text
-lazyhunt has no owner yet. To become its owner, send this message to your bot in Telegram:
+LazyHunt has no owner yet. To become its owner, send this message to your bot in Telegram:
 
     /start ABCD-EFGH
 ```
@@ -226,24 +226,24 @@ You do not have to wait for the schedule:
 A card arrives with the score, the verdict, what you match and what you do not, and buttons for the next steps. After that, rounds run on their own every **60 minutes** by default (adjustable in **Options › Schedule and bot**; the extension warns below 30).
 
 <p align="center">
-  <img src="assets/readme/screenshots/telegram-card.png" alt="A lazyhunt offer card in Telegram: offer 42 scores 82 out of 100 with the verdict apply, the core role, the suggested base CV, the main fit backed by claims, one soft wall about Kubernetes, the judge's rationale and the keyword detail, followed by the buttons Generate CV, Language, Variant, Research salary, Cover letter, Mark as sent and Discard." width="420"><br>
+  <img src="assets/readme/screenshots/telegram-card.png" alt="A LazyHunt offer card in Telegram: offer 42 scores 82 out of 100 with the verdict apply, the core role, the suggested base CV, the main fit backed by claims, one soft wall about Kubernetes, the judge's rationale and the keyword detail, followed by the buttons Generate CV, Language, Variant, Research salary, Cover letter, Mark as sent and Discard." width="420"><br>
   <sub>An offer card. (Illustration of a real bot message, demo data.)</sub>
 </p>
 
 ### 8. Day to day
 
-Everything is set up. From here on, this is how you use lazyhunt.
+Everything is set up. From here on, this is how you use LazyHunt.
 
 **The offer card.** On an offer card (button names are shown in English here; with `ui_language = "es"` the bot shows the Spanish name in brackets):
 
 - **📄 Generate CV** (*Generar CV*) builds a one-page PDF. Switch the language (ES/EN/CA) and the variant on the card first if you like, or type `/cv 42 BACKEND en`.
 - **✉️ Cover letter** (*Carta de presentación*) keeps your approved base letter word for word and writes only the parts that change per offer (why this company, why this role). It researches the company on the web and shows every fact with its source URL, so you can check it. Details: [docs/cover_letters.md](docs/cover_letters.md).
 - **✅ Use this one** (*Usar esta*) saves the letter on the offer and also sends it as a one-page PDF (same font as your CVs, next to the offer's CV), for portals that want the letter as a file; `/basecover` (`/cartabase`) sends the generic letter as a PDF too.
-- **✨ Adapt to this offer** (*Adaptar a esta oferta*) appears under a delivered CV only when lazyhunt created that base CV in `/setup` (not for an uploaded PDF or your own hand-made PDFs). It proposes a few small changes starting from the base CV: reorder items, feature up to 3 of your skills in the headline, and swap a word for the offer's wording for something already on your CV. A word that is not an approved synonym yet is marked 🆕 *new synonym* and is your call: pressing **✅ Use this CV** saves it to `synonyms.json`, so it applies on its own next time and also helps match offers (never a tool, technology, company, title, degree or number). Nothing is invented and nothing is final until you press **✅ Use this CV** (*Usar este CV*); **↩️ Remove change N** drops one change and **Discard** keeps the base CV. The adapted PDF is a separate file (`…_adapted_<id>.pdf`) next to the base one; **🔄 Redo CV** still sends the base. Details: [docs/onboarding.md](docs/onboarding.md#adapting-a-created-cv-to-an-offer).
+- **✨ Adapt to this offer** (*Adaptar a esta oferta*) appears under a delivered CV only when LazyHunt created that base CV in `/setup` (not for an uploaded PDF or your own hand-made PDFs). It proposes a few small changes starting from the base CV: reorder items, feature up to 3 of your skills in the headline, and swap a word for the offer's wording for something already on your CV. A word that is not an approved synonym yet is marked 🆕 *new synonym* and is your call: pressing **✅ Use this CV** saves it to `synonyms.json`, so it applies on its own next time and also helps match offers (never a tool, technology, company, title, degree or number). Nothing is invented and nothing is final until you press **✅ Use this CV** (*Usar este CV*); **↩️ Remove change N** drops one change and **Discard** keeps the base CV. The adapted PDF is a separate file (`…_adapted_<id>.pdf`) next to the base one; **🔄 Redo CV** still sends the base. Details: [docs/onboarding.md](docs/onboarding.md#adapting-a-created-cv-to-an-offer).
 - **✅ Mark as sent** (*Marcar enviada*, or `/sent 42`) records that you applied.
 - **🔎 On LinkedIn / On Google / On InfoJobs** (*En …*), the card's last row, open a search for the same offer (title + company) on another site, so you can apply there instead; the offer's own portal is left out (an InfoJobs offer gets Indeed instead).
 
-**Base CVs.** `/cvs` lists your base CVs (position × language) and what each is made of; its buttons send the PDF and, for the ones lazyhunt created, change the template or rebuild them. `/setup cvs` (`/configurar cvs`) adds the ones you skipped.
+**Base CVs.** `/cvs` lists your base CVs (position × language) and what each is made of; its buttons send the PDF and, for the ones LazyHunt created, change the template or rebuild them. `/setup cvs` (`/configurar cvs`) adds the ones you skipped.
 
 **Tracking.**
 
@@ -400,7 +400,7 @@ Everything that describes you or your search is yours to change, and none of it 
 - **Spend ten minutes on `judge/anchors.md`.** A few real offers with the score *you* would give them teach the judge your taste faster than anything else.
 - **Record outcomes.** Every interview or rejection you log with `/outcome` is a chance to calibrate the score.
 - **Start with one or two portals** and a couple of searches, check the cards for a few days, then widen.
-- **Read every CV and letter before sending it.** lazyhunt drafts; you decide.
+- **Read every CV and letter before sending it.** LazyHunt drafts; you decide.
 
 ## Troubleshooting
 
@@ -497,7 +497,7 @@ With `match_mode = "hybrid"`, when the AI judge is temporarily unavailable (HTTP
 <br>
 
 - **Bot:** the terminal you started it in, or your service's log: `journalctl --user -u lazyhunt` (Linux), `data/bot.log` (macOS and Windows, with the setups in [docs/running.md](docs/running.md)).
-- **Extension:** `chrome://extensions` › lazyhunt › **service worker** opens its console.
+- **Extension:** `chrome://extensions` › LazyHunt › **service worker** opens its console.
 
 </details>
 
@@ -509,14 +509,14 @@ git pull
 uv sync
 ```
 
-Then restart the bot ([docs/running.md](docs/running.md) has the command for each setup): database migrations run on their own when it starts. Finally, open `chrome://extensions` and press the reload button on the lazyhunt card, so the browser picks up the new extension code. Your `.env`, `config.local.toml`, `data/` and `profiles/me/` are gitignored, so an update never touches them.
+Then restart the bot ([docs/running.md](docs/running.md) has the command for each setup): database migrations run on their own when it starts. Finally, open `chrome://extensions` and press the reload button on the LazyHunt card, so the browser picks up the new extension code. Your `.env`, `config.local.toml`, `data/` and `profiles/me/` are gitignored, so an update never touches them.
 
 ## Uninstalling
 
 1. Stop the bot, and remove its service if you set one up ([docs/running.md](docs/running.md) has the command for each system).
-2. Remove the extension: `chrome://extensions` › lazyhunt › **Remove**.
+2. Remove the extension: `chrome://extensions` › LazyHunt › **Remove**.
 3. Keep what you want from the lazyhunt folder (your profile in `profiles/me/`, the database `data/app.db`), then delete the folder.
-4. Revoke what you granted: the Telegram token with BotFather (`/revoke`, or `/deletebot` to delete the bot), the Gmail app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) if you enabled Gmail, and any API key you created for lazyhunt. Claude Code is your own install; lazyhunt stored nothing of it.
+4. Revoke what you granted: the Telegram token with BotFather (`/revoke`, or `/deletebot` to delete the bot), the Gmail app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) if you enabled Gmail, and any API key you created for LazyHunt. Claude Code is your own install; LazyHunt stored nothing of it.
 
 ## Privacy and security
 
@@ -525,13 +525,13 @@ Then restart the bot ([docs/running.md](docs/running.md) has the command for eac
 - **Only you can talk to the bot.** It answers your numeric Telegram id and nobody else, over long polling (no webhook, no public endpoint).
 - **Secrets** (`CVA_TELEGRAM_TOKEN`, `CVA_BRIDGE_SECRET`, API keys) are read from the environment only; values placed in TOML files are ignored.
 - **No accidental API billing.** The `claude` child process does not inherit `ANTHROPIC_API_KEY` unless you set `claude_code_pass_api_key = true`.
-- **Revoking access:** delete the Gmail token file and remove the app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions); revoke the Telegram token with BotFather (`/revoke`); disable portals in the extension's Options, which also drops the browser permission; `claude auth logout` logs the CLI out (lazyhunt stores nothing of it).
+- **Revoking access:** delete the Gmail token file and remove the app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions); revoke the Telegram token with BotFather (`/revoke`); disable portals in the extension's Options, which also drops the browser permission; `claude auth logout` logs the CLI out (LazyHunt stores nothing of it).
 
 Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
 ## Project status and limitations
 
-lazyhunt is an early release (`v2.0.0-beta.10`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
+LazyHunt is an early release (`v2.0.0-beta.11`, a pre-release for testers; see the [changelog](CHANGELOG.md)) and was built first for one person's job search in Spain.
 
 - Location rules ship for Catalonia and Spain; other regions need their own data.
 - Portal adapters depend on each site's page structure and can break when a site changes.
@@ -602,8 +602,8 @@ Issues and pull requests are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has the
 
 ## License
 
-[Apache-2.0](LICENSE) © lazyhunt contributors.
+[Apache-2.0](LICENSE) © LazyHunt contributors.
 
 <p align="center">
-  <img src="assets/readme/mascot.svg" alt="The lazyhunt sloth hangs from a branch by one arm, holding a small card with a green check mark. Go stretch your legs. The next round runs without you." width="440">
+  <img src="assets/readme/mascot.svg" alt="The LazyHunt sloth hangs from a branch by one arm, holding a small card with a green check mark. Go stretch your legs. The next round runs without you." width="440">
 </p>

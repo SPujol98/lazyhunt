@@ -152,7 +152,7 @@ EN: Final[dict[str, str]] = {
     "commands.cmd.cvs.menu": "Your base CVs: view, change template, rebuild",
     "commands.cmd.cvs.explanation": (
         "Lists your base CVs (position × language) and what each is made of; "
-        "buttons send the PDF and, for the ones lazyhunt created, change the "
+        "buttons send the PDF and, for the ones LazyHunt created, change the "
         "template or rebuild them from your answers."
     ),
     "commands.cmd.cvs.example": "/cvs",
@@ -385,7 +385,7 @@ ES: Final[dict[str, str]] = {
     "commands.cmd.cvs.menu": "Tus CV base: ver, cambiar plantilla, rehacer",
     "commands.cmd.cvs.explanation": (
         "Lista tus CV base (puesto × idioma) y de qué se componen; los botones "
-        "envían el PDF y, en los que creó lazyhunt, cambian la plantilla o los "
+        "envían el PDF y, en los que creó LazyHunt, cambian la plantilla o los "
         "rehacen desde tus respuestas."
     ),
     "commands.cmd.cvs.example": "/cvs",

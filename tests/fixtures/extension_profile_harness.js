@@ -89,7 +89,7 @@ async function helpers() {
   check('no base cvs is an empty list', m.parseProfile({ sections: {} }).base_cvs, []);
   const english = (_key, _subs, fallback) => fallback;
   check('base cv lines', cvs.map((c) => m.baseCvLine(c, english)), [
-    'AI · ES — created with lazyhunt · Modern template · 5 sections',
+    'AI · ES — created with LazyHunt · Modern template · 5 sections',
     'AI · EN — uploaded PDF · not adaptable',
     'X_EN ·  — your own PDF',
   ]);

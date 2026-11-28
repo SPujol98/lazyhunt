@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-lazyhunt needs new job offers from portals such as InfoJobs, Indeed or
+LazyHunt needs new job offers from portals such as InfoJobs, Indeed or
 LinkedIn. The obvious design is a server-side scraper: a headless browser or
 an HTTP client that fetches search pages on a schedule. In practice:
 

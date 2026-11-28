@@ -184,7 +184,7 @@
     "message": "Vigila búsquedas de empleo en los portales que actives y envía las ofertas nuevas a tu bot local."
   },
   "extName": {
-    "message": "lazyhunt"
+    "message": "LazyHunt"
   },
   "filterEnabled": {
     "message": "Filtro activado para este perfil"
@@ -252,7 +252,7 @@
     }
   },
   "importWrongFormat": {
-    "message": "Este archivo no es una configuración de lazyhunt."
+    "message": "Este archivo no es una configuración de LazyHunt."
   },
   "intervalLabel": {
     "message": "Minutos entre rondas"
@@ -312,7 +312,7 @@
     "message": "Los escaneos están en pausa. Reanúdalos desde la ventana de la barra de herramientas."
   },
   "optionsTitle": {
-    "message": "Opciones de lazyhunt"
+    "message": "Opciones de LazyHunt"
   },
   "popupBeaconsHeading": {
     "message": "Búsquedas vigiladas"
@@ -1170,7 +1170,7 @@
     "message": "Ninguno todavía."
   },
   "profileBaseCvCreated": {
-    "message": "creado con lazyhunt"
+    "message": "creado con LazyHunt"
   },
   "profileBaseCvUploaded": {
     "message": "PDF subido · no adaptable"

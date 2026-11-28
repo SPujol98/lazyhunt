@@ -371,7 +371,7 @@ def test_create_one_renders_a_template_stored_like_an_upload(tmp_path: Path) -> 
     d.press("skip_all_yes")
     assert d.step == "summary"
     d.press("confirm")
-    assert "AI · ES" in d.replies[-1] and "lazyhunt" in d.replies[-1]
+    assert "AI · ES" in d.replies[-1] and "LazyHunt" in d.replies[-1]
     pdf = verified_base_pdf("AI_ES", profile / "cv_base_pdfs")  # manifest sha256
     text = _pdf_text(pdf)
     assert "José Pérez" in text and "Python" in text and "Backend Developer" in text

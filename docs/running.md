@@ -1,7 +1,7 @@
 # Keeping the bot running
 
 `uv run bot.py` runs the bot until you close the terminal. That is all you need
-to try lazyhunt; to have it working all day, start it in the background or
+to try LazyHunt; to have it working all day, start it in the background or
 let your operating system start it when you log in. Pick one option below.
 
 All of them assume the repository is in a folder called `lazyhunt` in your

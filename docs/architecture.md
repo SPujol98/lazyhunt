@@ -1,6 +1,6 @@
 # Architecture
 
-lazyhunt is one Python process (the Telegram bot) plus a browser extension,
+LazyHunt is one Python process (the Telegram bot) plus a browser extension,
 both on your own machine. There is no server, no account and no shared
 backend: data stays in a local SQLite file and leaves the machine only for
 the AI provider you configured, Telegram and, if enabled, Gmail.

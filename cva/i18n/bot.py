@@ -52,7 +52,7 @@ EN: Final[dict[str, str]] = {
         "it must be the token @BotFather gave you."
     ),
     "bot.claim.terminal": (
-        "lazyhunt has no owner yet. To become its owner, send this message to "
+        "LazyHunt has no owner yet. To become its owner, send this message to "
         "your bot in Telegram:\n\n    /start {code}\n\n"
         "The code works once, for 30 minutes (restart the bot for a new one). "
         "Only you can see it here: do not share it."
@@ -81,7 +81,7 @@ EN: Final[dict[str, str]] = {
     "bot.cvs.header": "📄 Your base CVs",
     "bot.cvs.empty": "📄 No base CVs yet: {setup} cvs adds them.",
     "bot.cvs.empty_legacy": "📄 No base CVs yet.",
-    "bot.cvs.origin.lazyhunt": "created with lazyhunt · {template} template",
+    "bot.cvs.origin.lazyhunt": "created with LazyHunt · {template} template",
     "bot.cvs.origin.uploaded": "uploaded PDF · not adaptable",
     "bot.cvs.origin.own": "your own PDF",
     "bot.cvs.section.profile": "Profile",
@@ -92,7 +92,7 @@ EN: Final[dict[str, str]] = {
     "bot.cvs.stale": "⚠️ Your answers changed since it was made: 🔄 rebuilds it.",
     "bot.cvs.create_hint": (
         "An uploaded PDF cannot be adapted: {setup} cvs can create one with "
-        "lazyhunt instead."
+        "LazyHunt instead."
     ),
     "bot.cvs.legend": ("📄 View PDF · 🎨 Change template · 🔄 Rebuild from my answers"),
     "bot.cvs.legend_own": "📄 sends the PDF.",
@@ -101,7 +101,7 @@ EN: Final[dict[str, str]] = {
     "bot.cvs.done.rebuild": "✅ {slot} rebuilt from your answers.",
     "bot.cvs.err.missing": "⚠️ That base CV is not there any more: send /cvs again.",
     "bot.cvs.err.not_created": (
-        "⚠️ Only a CV lazyhunt created can be redrawn; this one is your own PDF."
+        "⚠️ Only a CV LazyHunt created can be redrawn; this one is your own PDF."
     ),
     "bot.cvs.err.no_slot": (
         "⚠️ That position or language is no longer in your profile: nothing changed."
@@ -341,7 +341,7 @@ ES: Final[dict[str, str]] = {
         ".env: debe ser el token que te dio @BotFather."
     ),
     "bot.claim.terminal": (
-        "lazyhunt aún no tiene dueño. Para ser su dueño, envía este mensaje a "
+        "LazyHunt aún no tiene dueño. Para ser su dueño, envía este mensaje a "
         "tu bot en Telegram:\n\n    /start {code}\n\n"
         "El código sirve una sola vez, durante 30 minutos (reinicia el bot "
         "para obtener otro). Solo tú lo ves aquí: no lo compartas."
@@ -370,7 +370,7 @@ ES: Final[dict[str, str]] = {
     "bot.cvs.header": "📄 Tus CV base",
     "bot.cvs.empty": "📄 Aún no hay CV base: {setup} cvs los añade.",
     "bot.cvs.empty_legacy": "📄 Aún no hay CV base.",
-    "bot.cvs.origin.lazyhunt": "creado con lazyhunt · plantilla {template}",
+    "bot.cvs.origin.lazyhunt": "creado con LazyHunt · plantilla {template}",
     "bot.cvs.origin.uploaded": "PDF subido · no adaptable",
     "bot.cvs.origin.own": "tu propio PDF",
     "bot.cvs.section.profile": "Perfil",
@@ -380,7 +380,7 @@ ES: Final[dict[str, str]] = {
     "bot.cvs.section.languages": "Idiomas",
     "bot.cvs.stale": "⚠️ Tus respuestas cambiaron desde que se hizo: 🔄 lo rehace.",
     "bot.cvs.create_hint": (
-        "Un PDF subido no se puede adaptar: {setup} cvs puede crear uno con lazyhunt."
+        "Un PDF subido no se puede adaptar: {setup} cvs puede crear uno con LazyHunt."
     ),
     "bot.cvs.legend": (
         "📄 Ver PDF · 🎨 Cambiar plantilla · 🔄 Rehacer desde mis respuestas"
@@ -391,7 +391,7 @@ ES: Final[dict[str, str]] = {
     "bot.cvs.done.rebuild": "✅ {slot} rehecho desde tus respuestas.",
     "bot.cvs.err.missing": "⚠️ Ese CV base ya no está: envía /cvs otra vez.",
     "bot.cvs.err.not_created": (
-        "⚠️ Solo se puede redibujar un CV creado con lazyhunt; este es tu propio PDF."
+        "⚠️ Solo se puede redibujar un CV creado con LazyHunt; este es tu propio PDF."
     ),
     "bot.cvs.err.no_slot": (
         "⚠️ Ese puesto o idioma ya no está en tu perfil: no ha cambiado nada."

@@ -80,7 +80,7 @@ EN: Final[dict[str, str]] = {
         "This adapted CV is no longer available; press «✨ Adapt to this offer» again."
     ),
     "tailor.bot.not_adaptable": (
-        "This base CV cannot be adapted: only CVs lazyhunt created can (see /cvs)."
+        "This base CV cannot be adapted: only CVs LazyHunt created can (see /cvs)."
     ),
     "tailor.bot.unsafe": (
         "The adapted CV would contain words that are not in your profile, so it "
@@ -177,7 +177,7 @@ ES: Final[dict[str, str]] = {
         "otra vez."
     ),
     "tailor.bot.not_adaptable": (
-        "Este CV base no se puede adaptar: solo los CVs creados con lazyhunt "
+        "Este CV base no se puede adaptar: solo los CVs creados con LazyHunt "
         "(mira /cvs)."
     ),
     "tailor.bot.unsafe": (

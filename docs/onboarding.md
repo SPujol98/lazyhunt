@@ -141,7 +141,7 @@ enabled in **Options › Portals**.
     the one your minimum salary is in.
 11. Languages an offer may be written in
 12. Base CVs: one per position type × language. For each one, upload
-    your PDF, create one with lazyhunt from your answers, or leave it for
+    your PDF, create one with LazyHunt from your answers, or leave it for
     later; optionally a base cover letter (see below)
 13. Summary, then Confirm or Edit
 
@@ -258,7 +258,7 @@ adapted, for each offer; one per position type × language. For the slot
 marked 👈 it offers three buttons:
 
 - **📎 Upload my PDF**: send your own PDF as a file (the rules below).
-- **✨ Create one with lazyhunt**: pick one of three templates (Classic:
+- **✨ Create one with LazyHunt**: pick one of three templates (Classic:
   centred header and ruled sections; Modern: the name in blue, coloured
   headings; Compact: smaller type, the most content on one page). The PDF is
   built only from your answers (name, contact, target position, a profile
@@ -331,7 +331,7 @@ are the `<ROLE>_<LANG>` keys of `cv_base_pdfs/manifest.json`, for example
 
 ### What a created CV is made of (`<SLOT>.source.json`)
 
-A CV lazyhunt creates is also kept as its structured source,
+A CV LazyHunt creates is also kept as its structured source,
 `cv_base_pdfs/<SLOT>.source.json` (for example `AI_ES.source.json`), next to
 the PDF: the slot, template and language, the header (name, target position,
 contact line) and the sections (profile, experience, education, skills,
@@ -352,12 +352,12 @@ hand-made PDFs have no source.
 the Confirm reply points to it) lists every base CV in one message: position
 × language and where it comes from.
 
-- **created with lazyhunt · <template> template**, with its sections and
+- **created with LazyHunt · <template> template**, with its sections and
   how many items each has (for example `Profile 1 · Experience 1 · Skills 5`).
   When an answer changed since it was made and a claim it used is gone, it
   says so: 🔄 rebuilds it.
 - **uploaded PDF · not adaptable**, in a profile that also has created CVs;
-  `/setup cvs` can create one with lazyhunt instead.
+  `/setup cvs` can create one with LazyHunt instead.
 - **your own PDF** when no base CV has a source (hand-made PDFs, the legacy
   layout): listed plainly, nothing else changes.
 
@@ -372,7 +372,7 @@ the manifest `sha256` all or nothing (a failure puts the three files back).
 
 After **📄 Generate CV** sends the base PDF, the card shows one more button,
 **✨ Adapt to this offer** (*Adaptar a esta oferta*), only when that base CV
-was created with lazyhunt and its source is current (see above). Uploaded
+was created with LazyHunt and its source is current (see above). Uploaded
 PDFs, hand-made PDFs and the legacy layout never show it: there the card is
 exactly as before.
 

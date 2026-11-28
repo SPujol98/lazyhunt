@@ -1,4 +1,4 @@
-# Contributing to lazyhunt
+# Contributing to LazyHunt
 
 Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. Security issues go through the private process in [SECURITY.md](SECURITY.md), never public issues.
 

@@ -1489,12 +1489,11 @@ def test_gray_zone_borderline_card_payload(tmp_path: Path) -> None:
     assert "https://linkedin.com/jobs/view/4459804598" in text
     assert all(mark not in text for mark in ("✓", "~", "✗", "«"))
     assert keyboard.inline_keyboard[0][0].callback_data == f"cv:{offer_id}:AI:es"
-    # The callback rows end with sent/discard; the URL search row follows.
-    assert [b.callback_data for b in keyboard.inline_keyboard[-2]] == [
+    # The card ends with sent/discard: a LinkedIn offer gets no search row.
+    assert [b.callback_data for b in keyboard.inline_keyboard[-1]] == [
         f"sent:{offer_id}",
         f"discard:{offer_id}",
     ]
-    assert all(b.url for b in keyboard.inline_keyboard[-1])
     row = repo.get_offer(offer_id)
     assert row.estado == "analizada"
     assert row.analyze_attempts == 0

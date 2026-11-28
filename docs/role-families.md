@@ -6,12 +6,12 @@ Each family has its own CV variants, title filter, score threshold,
 cover-letter emphasis and search keywords. You define them in one file of your
 profile, with no code change.
 
-If you declare nothing, lazyhunt keeps the two built-in families, `ai` and
+If you declare nothing, LazyHunt keeps the two built-in families, `ai` and
 `backend`, exactly as they always worked. Read on only if you want your own.
 
 ## What a family controls
 
-| Part of lazyhunt | What the family decides |
+| Part of LazyHunt | What the family decides |
 | --- | --- |
 | Routing | Which family an offer belongs to (by title words) |
 | Title filter | Which titles the cheap pre-filter lets through |

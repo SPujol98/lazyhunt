@@ -234,7 +234,7 @@ const MODE_NAMES = {
 };
 // Base CV origin / template (cva/onboarding/cv_catalog.py) -> [locale key, English].
 const ORIGIN_NAMES = {
-  lazyhunt: ['profileBaseCvCreated', 'created with lazyhunt'],
+  lazyhunt: ['profileBaseCvCreated', 'created with LazyHunt'],
   uploaded: ['profileBaseCvUploaded', 'uploaded PDF · not adaptable'],
   own: ['profileBaseCvOwn', 'your own PDF'],
 };

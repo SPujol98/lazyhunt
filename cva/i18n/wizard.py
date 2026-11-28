@@ -13,11 +13,11 @@ EN: Final[dict[str, str]] = {
     "wizard.lang_prompt": "  Language / Idioma ({choices}) [{default}]: ",
     "wizard.lang_retry": "  Please choose one of / Elige una de: {choices}.",
     "wizard.lang_intro": (
-        "lazyhunt setup / Configuración de lazyhunt. "
+        "LazyHunt setup / Configuración de LazyHunt. "
         "en = English, es = español, auto = your system language / el idioma "
         "del sistema."
     ),
-    "wizard.intro1": "lazyhunt setup. Every step can be skipped with Enter, and nothing is",
+    "wizard.intro1": "LazyHunt setup. Every step can be skipped with Enter, and nothing is",
     "wizard.intro2": "written until you confirm the summary at the end. Safe to re-run.",
     "wizard.step": "Step {n}/{total} - {title}",
     "wizard.title.language": "Bot language",
@@ -33,7 +33,7 @@ EN: Final[dict[str, str]] = {
     "wizard.keeping": "  Keeping the existing {key}.",
     # --- prerequisites -------------------------------------------------------
     "wizard.python_ok": "  Python {version}: OK",
-    "wizard.python_old": "  Python {version}: lazyhunt needs Python 3.12 or newer.",
+    "wizard.python_old": "  Python {version}: LazyHunt needs Python 3.12 or newer.",
     "wizard.uv_missing": (
         "  uv was not found on PATH: install it from https://docs.astral.sh/uv/"
     ),
@@ -190,7 +190,7 @@ EN: Final[dict[str, str]] = {
     ),
     # --- profile -----------------------------------------------------------------------
     "wizard.profile_intro": (
-        "  Everything lazyhunt knows about you (claims, base CVs, voice, "
+        "  Everything LazyHunt knows about you (claims, base CVs, voice, "
         "preferences) lives in one directory. It holds personal data: keep it out "
         "of version control (profiles/* is already gitignored, except the demo)."
     ),
@@ -212,7 +212,7 @@ EN: Final[dict[str, str]] = {
         "  [1] a skeleton with the demo's layout and clearly marked placeholders"
     ),
     "wizard.kind_demo": (
-        "  [2] a copy of the fictional demo profile, to try lazyhunt first"
+        "  [2] a copy of the fictional demo profile, to try LazyHunt first"
     ),
     "wizard.kind_empty": (
         "  [3] an empty profile: start the bot and answer its guided /setup "
@@ -298,12 +298,12 @@ ES: Final[dict[str, str]] = {
     "wizard.lang_prompt": "  Language / Idioma ({choices}) [{default}]: ",
     "wizard.lang_retry": "  Please choose one of / Elige una de: {choices}.",
     "wizard.lang_intro": (
-        "lazyhunt setup / Configuración de lazyhunt. "
+        "LazyHunt setup / Configuración de LazyHunt. "
         "en = English, es = español, auto = your system language / el idioma "
         "del sistema."
     ),
     "wizard.intro1": (
-        "Configuración de lazyhunt. Cada paso se puede saltar con Intro y no se"
+        "Configuración de LazyHunt. Cada paso se puede saltar con Intro y no se"
     ),
     "wizard.intro2": (
         "escribe nada hasta que confirmes el resumen final. Puedes repetirla."
@@ -322,7 +322,7 @@ ES: Final[dict[str, str]] = {
     "wizard.keeping": "  Se mantiene el {key} actual.",
     "wizard.python_ok": "  Python {version}: OK",
     "wizard.python_old": (
-        "  Python {version}: lazyhunt necesita Python 3.12 o posterior."
+        "  Python {version}: LazyHunt necesita Python 3.12 o posterior."
     ),
     "wizard.uv_missing": (
         "  No se encontró uv en el PATH: instálalo desde https://docs.astral.sh/uv/"
@@ -483,7 +483,7 @@ ES: Final[dict[str, str]] = {
         "  Generado un secreto aleatorio nuevo; se guardará en .env como {key}."
     ),
     "wizard.profile_intro": (
-        "  Todo lo que lazyhunt sabe de ti (datos verificados, CV base, tu voz, "
+        "  Todo lo que LazyHunt sabe de ti (datos verificados, CV base, tu voz, "
         "preferencias) vive en una carpeta. Contiene datos personales: déjala "
         "fuera del control de versiones (profiles/* ya está en .gitignore, "
         "salvo la demo)."
@@ -506,7 +506,7 @@ ES: Final[dict[str, str]] = {
         "  [1] un esqueleto con la estructura de la demo y huecos bien marcados"
     ),
     "wizard.kind_demo": (
-        "  [2] una copia del perfil demo ficticio, para probar lazyhunt primero"
+        "  [2] una copia del perfil demo ficticio, para probar LazyHunt primero"
     ),
     "wizard.kind_empty": (
         "  [3] un perfil vacío: arranca el bot y responde su /configurar guiado "

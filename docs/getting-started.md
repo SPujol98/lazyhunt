@@ -20,7 +20,7 @@ Read these three points; they are also in the README.
   and your account could be restricted. Every portal is off by default;
   enable only those whose terms you have read and accept, and never
   redistribute collected listings. You are responsible for compliance.
-- **Claude Code.** lazyhunt does not use API keys by default and never logs
+- **Claude Code.** LazyHunt does not use API keys by default and never logs
   you in to Claude. It runs the official, unmodified `claude` CLI that you
   installed and authenticated yourself, and never reads or stores its
   credentials. This is an independent project, not made, endorsed or
@@ -40,7 +40,7 @@ Read these three points; they are also in the README.
 | A Telegram account | |
 | Chrome or another Chromium browser | |
 
-lazyhunt runs on Linux, macOS and Windows (CI runs the tests on all three). To install uv,
+LazyHunt runs on Linux, macOS and Windows (CI runs the tests on all three). To install uv,
 use the official one-liner ([other methods](https://docs.astral.sh/uv/getting-started/installation/)),
 then open a new terminal:
 
@@ -246,13 +246,13 @@ After that, rounds run on their own every 60 minutes by default.
 
 ## 9. Day to day
 
-Everything is set up; from here on, this is how you use lazyhunt. Each
+Everything is set up; from here on, this is how you use LazyHunt. Each
 command has a Spanish name too (shown with `ui_language = "es"`); both work.
 
 - **Offer cards.** Each new offer arrives as a card with its score, verdict
   and buttons: **Generate CV** (switch **Language** and **Variant** first if
   you like), **Cover letter**, **Research salary**, **Mark as sent** and
-  **Discard**. Under a CV that lazyhunt created in `/setup`, **Adapt to this
+  **Discard**. Under a CV that LazyHunt created in `/setup`, **Adapt to this
   offer** proposes small, reviewable changes. The
   [README](../README.md#8-day-to-day) explains every button.
 - **Base CVs.** `/cvs` lists them and sends, re-templates or rebuilds them;
@@ -278,7 +278,7 @@ command has a Spanish name too (shown with `ui_language = "es"`); both work.
   [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 - Portals: disable them in the extension's Options, which also drops the
   browser permission.
-- Claude Code: lazyhunt stores nothing; `claude auth logout` logs the CLI
+- Claude Code: LazyHunt stores nothing; `claude auth logout` logs the CLI
   out.
 
 ## Next

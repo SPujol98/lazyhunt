@@ -11,12 +11,12 @@ oferta) y al final, en [El día a día](#10-el-día-a-día), cómo se usa.
 
 > [!IMPORTANT]
 > No dejes que tu asistente de programación rellene tu perfil: usa
-> `/configurar`. Si instalas lazyhunt con Claude Code, Codex u otro agente,
+> `/configurar`. Si instalas LazyHunt con Claude Code, Codex u otro agente,
 > este lee `AGENTS.md`, que le indica dejar `profiles/` en manos del bot.
 
 ## 1. Qué es y qué esperar de una beta
 
-lazyhunt es un asistente de búsqueda de empleo que se ejecuta en tu ordenador:
+LazyHunt es un asistente de búsqueda de empleo que se ejecuta en tu ordenador:
 una extensión del navegador vigila los portales que elijas, un bot de Python
 puntúa cada oferta nueva contra tu perfil y te lo cuenta todo por Telegram.
 Nunca se inventa experiencia que no tienes.
@@ -172,7 +172,7 @@ uv run lazyhunt bot
 `t.me` que lo envía por ti):
 
 ```text
-lazyhunt aún no tiene dueño. Para ser su dueño, envía este mensaje a tu bot en Telegram:
+LazyHunt aún no tiene dueño. Para ser su dueño, envía este mensaje a tu bot en Telegram:
 
     /start ABCD-EFGH
 ```
@@ -282,7 +282,7 @@ cada 60 minutos (se cambia en **Frecuencia y bot**).
 
 ## 10. El día a día
 
-Ya está todo configurado; a partir de aquí, así se usa lazyhunt. Cada
+Ya está todo configurado; a partir de aquí, así se usa LazyHunt. Cada
 comando tiene nombre en español y en inglés; funcionan los dos.
 
 **La tarjeta en Telegram** trae la puntuación de 0 a 100, el veredicto
@@ -296,9 +296,10 @@ y estos botones:
   **✅ Usar esta** la guarda y te la envía también en PDF.
 - **💶 Investigar salario**, **✅ Marcar enviada** (o `/sent <id>`) y
   **🗑 Descartar**.
-- La última fila, **🔎 En LinkedIn / En Google / En InfoJobs**, busca la
-  misma oferta (puesto + empresa) en otro sitio, por si prefieres
-  presentarte allí.
+- En las ofertas de portales que piden pagar antes de postular, la última
+  fila, **🔎 En LinkedIn / En Google / En InfoJobs**, busca la misma oferta
+  (puesto + empresa) en otro sitio, por si prefieres presentarte allí. Las
+  demás tarjetas no la llevan.
 
 Los avisos **⚠️** de la tarjeta te señalan lo que choca con tus preferencias,
 por ejemplo *⚠️ Modalidad presencial; aceptas: remoto* o un *Salario por
@@ -309,7 +310,7 @@ debajo de tu mínimo*. No descartan la oferta: decides tú.
 **Pausar**.
 
 **Tus CV base.** `/cvs` los lista (puesto × idioma) y, con sus botones,
-te envía el PDF y, en los que creó lazyhunt, cambia la plantilla o los
+te envía el PDF y, en los que creó LazyHunt, cambia la plantilla o los
 rehace con tus respuestas. `/configurar cvs` añade los que te saltaste.
 
 **El seguimiento.** `/estado` (o `/status`) lista tus 10 últimas ofertas y
@@ -399,7 +400,7 @@ Límites de cada portal: [portals.md](portals.md).
 - **Bot:** el terminal donde lo arrancaste, `journalctl --user -u lazyhunt`
   (servicio de Linux) o `data/bot.log` (macOS y Windows con
   [running.md](running.md)).
-- **Extensión:** `chrome://extensions` › lazyhunt › **service worker** abre su
+- **Extensión:** `chrome://extensions` › LazyHunt › **service worker** abre su
   consola.
 
 Más casos: [Troubleshooting](../README.md#troubleshooting) del README.
@@ -407,13 +408,13 @@ Más casos: [Troubleshooting](../README.md#troubleshooting) del README.
 ## 12. Actualizar, desinstalar y privacidad
 
 **Actualizar:** `git pull` y `uv sync` en la carpeta `lazyhunt`, reinicia el
-bot y pulsa el botón de recargar de lazyhunt en `chrome://extensions`. Tu
+bot y pulsa el botón de recargar de LazyHunt en `chrome://extensions`. Tu
 `.env`, `config.local.toml`, `data/` y `profiles/me/` no se tocan.
 
 **Desinstalar:** para el bot (y su servicio si lo creaste), quita la extensión
 en `chrome://extensions`, guarda lo que quieras de `profiles/me/` y
 `data/app.db` y borra la carpeta. Revoca el token con BotFather (`/revoke`, o
-`/deletebot`) y cualquier clave de API que creaste para lazyhunt.
+`/deletebot`) y cualquier clave de API que creaste para LazyHunt.
 
 **Privacidad:** todo vive en tu ordenador; el puente solo escucha en
 `127.0.0.1` y exige el secreto. Salen de tu equipo el texto de las ofertas y

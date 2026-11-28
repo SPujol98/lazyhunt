@@ -50,7 +50,7 @@ function tr(key, subs, english) {
 
 function localizeStatic() {
   document.documentElement.lang = tr('htmlLang', null, 'en');
-  document.title = tr('optionsTitle', null, 'lazyhunt options');
+  document.title = tr('optionsTitle', null, 'LazyHunt options');
   for (const node of document.querySelectorAll('[data-i18n]')) {
     node.textContent = tr(node.getAttribute('data-i18n'), null, node.textContent);
   }
@@ -1059,7 +1059,7 @@ async function importConfig(text) {
     return;
   }
   if (!isObject(config) || config.format !== CONFIG_FORMAT) {
-    toast(tr('importWrongFormat', null, 'This is not an lazyhunt configuration file.'), 'error');
+    toast(tr('importWrongFormat', null, 'This is not a LazyHunt configuration file.'), 'error');
     return;
   }
   const current = await chrome.storage.local.get([

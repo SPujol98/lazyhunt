@@ -23,7 +23,7 @@ problem.
 
 The default provider (`llm_provider = "claude_code"`) runs the official,
 unmodified `claude` CLI that the user installed and logged in to, as a child
-process in headless mode (`claude -p`). lazyhunt never logs the user in,
+process in headless mode (`claude -p`). LazyHunt never logs the user in,
 never reads or stores the CLI's credentials, and the child process does not
 inherit `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` unless the user sets
 `claude_code_pass_api_key = true`, so it never silently switches to API

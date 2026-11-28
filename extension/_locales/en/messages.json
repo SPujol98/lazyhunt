@@ -184,7 +184,7 @@
     "message": "Watches job searches on the portals you enable and sends new offers to your local bot."
   },
   "extName": {
-    "message": "lazyhunt"
+    "message": "LazyHunt"
   },
   "filterEnabled": {
     "message": "Filter enabled for this profile"
@@ -252,7 +252,7 @@
     }
   },
   "importWrongFormat": {
-    "message": "This is not an lazyhunt configuration file."
+    "message": "This is not a LazyHunt configuration file."
   },
   "intervalLabel": {
     "message": "Minutes between rounds"
@@ -312,7 +312,7 @@
     "message": "Scans are paused. Resume them from the toolbar popup."
   },
   "optionsTitle": {
-    "message": "lazyhunt options"
+    "message": "LazyHunt options"
   },
   "popupBeaconsHeading": {
     "message": "Searches being watched"
@@ -1170,7 +1170,7 @@
     "message": "None yet."
   },
   "profileBaseCvCreated": {
-    "message": "created with lazyhunt"
+    "message": "created with LazyHunt"
   },
   "profileBaseCvUploaded": {
     "message": "uploaded PDF · not adaptable"

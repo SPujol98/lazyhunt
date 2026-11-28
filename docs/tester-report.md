@@ -5,7 +5,7 @@ opened in your lazyhunt folder. Tell it:
 
 > Read `docs/tester-report.md` and follow it.
 
-It gathers how your lazyhunt is set up and how it has been working, and writes
+It gathers how your LazyHunt is set up and how it has been working, and writes
 everything to one file, `tester-report.md`, in the lazyhunt folder. You then
 read it, add your own notes, and send it to the maintainer.
 
@@ -13,7 +13,7 @@ read it, add your own notes, and send it to the maintainer.
 
 ## Instructions for the assistant
 
-You are preparing a diagnostic report for the lazyhunt maintainer. Work
+You are preparing a diagnostic report for the LazyHunt maintainer. Work
 **read-only**: do not change any file, setting, database row or profile except
 creating `tester-report.md` at the repository root. Write the report in the
 language the user speaks to you.
@@ -35,7 +35,7 @@ under "Left out".
 
 - Operating system and version, Python version (`uv run python --version`),
   browser the user says they use.
-- lazyhunt version: `git describe --tags --always` and `git status --short`
+- LazyHunt version: `git describe --tags --always` and `git status --short`
   (only say whether there are local changes, not their content).
 - Is the bot running right now? (Ask the user if you cannot tell.)
 
